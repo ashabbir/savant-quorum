@@ -1,0 +1,56 @@
+import { useState } from 'react'
+import { ChatMode } from '../services/chatMode'
+
+interface ChatModeSelectorProps {
+  onSelect: (mode: ChatMode) => void
+  defaultMode?: ChatMode
+}
+
+export default function ChatModeSelector({ onSelect, defaultMode = 'collaborate' }: ChatModeSelectorProps) {
+  const [selected, setSelected] = useState<ChatMode>(defaultMode)
+
+  const handleChange = (mode: ChatMode) => {
+    setSelected(mode)
+    onSelect(mode)
+  }
+
+  return (
+    <div className="chat-mode-selector" style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.05em' }}>CHOOSE_CHAT_MODE</div>
+
+      <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', cursor: 'pointer' }}>
+        <input
+          type="radio"
+          name="chatMode"
+          value="collaborate"
+          checked={selected === 'collaborate'}
+          onChange={() => handleChange('collaborate')}
+          aria-label="Collaborate mode"
+        />
+        <div>
+          <div style={{ fontWeight: 500 }}>Collaborate</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+            Moderator decides how many agents respond and gives final summary
+          </div>
+        </div>
+      </label>
+
+      <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', cursor: 'pointer' }}>
+        <input
+          type="radio"
+          name="chatMode"
+          value="debate"
+          checked={selected === 'debate'}
+          onChange={() => handleChange('debate')}
+          aria-label="Debate mode"
+        />
+        <div>
+          <div style={{ fontWeight: 500 }}>Debate</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+            3 agents debate across 3 rounds with moderator evaluation. Best answer wins.
+          </div>
+        </div>
+      </label>
+    </div>
+  )
+}

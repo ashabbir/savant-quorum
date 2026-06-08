@@ -1,0 +1,39 @@
+/// <reference types="vite/client" />
+
+declare const APP_VERSION: string;
+
+interface Window {
+  ipcRenderer: {
+    on: (channel: string, listener: (event: any, ...args: any[]) => void) => void
+    off: (channel: string, listener: (event: any, ...args: any[]) => void) => void
+    send: (channel: string, ...args: any[]) => void
+    invoke: (channel: string, ...args: any[]) => Promise<any>
+  }
+  agents: {
+    run: (provider: string, model: string, prompt: string) => Promise<string>
+  }
+  sessions: {
+    list: () => Promise<any[]>
+    load: (id: string) => Promise<any>
+    save: (data: { id: string, title: string, messages: any[], thinking: any[], summary?: string }) => Promise<boolean>
+    delete: (id: string) => Promise<boolean>
+  }
+  system: {
+    getUser: () => Promise<string>
+    getSettings: () => Promise<Record<string, any>>
+    saveSetting: (key: string, value: any) => Promise<boolean>
+    listProviders: (gatewayUrl?: string) => Promise<{
+      source: 'gateway' | 'terminal'
+      providers: Array<{
+        id: string
+        label: string
+        defaultModel?: string
+        models: string[]
+        source: 'gateway' | 'terminal'
+        installed: boolean
+      }>
+    }>
+    getDbStatus: () => Promise<string>
+    callMcpTool: (serverName: string, toolName: string, args: any) => Promise<any>
+  }
+}
