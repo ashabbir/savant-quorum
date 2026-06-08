@@ -1,0 +1,168 @@
+@import './styles/fonts.css';
+@import './styles/tailwind.css';
+@import './styles/theme.css';
+
+/* Fallback/Extra global styles if needed */
+:root {
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-heading: 'Orbitron', sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--cp-bg-0);
+  color: var(--foreground);
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+}
+
+.chat-markdown {
+  color: inherit;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.62;
+}
+
+.chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown p {
+  margin: 0 0 0.55rem;
+  color: inherit;
+  font: inherit;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  margin: 0.75rem 0 0.35rem;
+  color: var(--foreground);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.chat-markdown h1 {
+  font-size: 1.18rem;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+  padding-bottom: 0.25rem;
+}
+
+.chat-markdown h2 {
+  font-size: 1.08rem;
+}
+
+.chat-markdown h3,
+.chat-markdown h4 {
+  font-size: 1rem;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0.35rem 0 0.65rem;
+  padding-left: 1.15rem;
+}
+
+.chat-markdown li {
+  margin: 0.16rem 0;
+  padding-left: 0.1rem;
+}
+
+.chat-markdown li > p {
+  display: inline;
+  margin: 0;
+}
+
+.chat-markdown strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.chat-markdown em {
+  color: rgba(200, 216, 232, 0.88);
+}
+
+.chat-markdown a {
+  color: var(--cp-cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-markdown blockquote {
+  margin: 0.6rem 0;
+  padding: 0.45rem 0.75rem;
+  border-left: 2px solid rgba(0, 229, 255, 0.42);
+  background: rgba(0, 229, 255, 0.06);
+  color: rgba(200, 216, 232, 0.88);
+}
+
+.chat-markdown code {
+  font-family: 'JetBrains Mono', 'Share Tech Mono', monospace;
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.chat-markdown :not(pre) > code {
+  padding: 0.08rem 0.28rem;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: rgba(0, 229, 255, 0.08);
+  color: rgba(222, 246, 255, 0.96);
+}
+
+.chat-markdown table {
+  width: 100%;
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', 'Share Tech Mono', monospace;
+  font-size: 0.82rem;
+}
+
+.chat-markdown th,
+.chat-markdown td {
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  padding: 0.38rem 0.5rem;
+  text-align: left;
+}
+
+.chat-markdown th {
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.chat-markdown .mermaid {
+  margin: 0.65rem 0;
+  padding: 0.65rem;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  background: rgba(5, 10, 18, 0.72);
+}
+
+.chat-markdown .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  font-family: 'JetBrains Mono', 'Share Tech Mono', monospace !important;
+  font-size: 13px !important;
+}
+
+.chat-markdown .mermaid svg text,
+.chat-markdown .mermaid svg span {
+  font-family: 'JetBrains Mono', 'Share Tech Mono', monospace !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.chat-markdown--whisper {
+  font-size: 0.92rem;
+}
