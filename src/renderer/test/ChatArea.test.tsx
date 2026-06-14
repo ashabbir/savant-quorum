@@ -42,10 +42,10 @@ describe('ChatArea Component', () => {
 
   it('allows typing and sending a message', () => {
     const onSendMock = vi.fn()
-    render(<ChatArea messages={[]} onSend={onSendMock} />)
+    const { container } = render(<ChatArea messages={[]} onSend={onSendMock} />)
 
     const input = screen.getByPlaceholderText(/transmit message/i)
-    const sendButton = screen.getByRole('button') // The send button
+    const sendButton = container.querySelector('.chat-send-button') as HTMLButtonElement
 
     fireEvent.change(input, { target: { value: 'New directive' } })
     expect(input).toHaveValue('New directive')
@@ -59,7 +59,7 @@ describe('ChatArea Component', () => {
 
   it('allows typing while isLoading is true (Human-in-the-loop)', () => {
     const onSendMock = vi.fn()
-    render(<ChatArea messages={[]} onSend={onSendMock} isLoading={true} />)
+    const { container } = render(<ChatArea messages={[]} onSend={onSendMock} isLoading={true} />)
 
     const input = screen.getByPlaceholderText(/transmit additional intel/i)
     expect(input).toBeInTheDocument()
@@ -67,7 +67,7 @@ describe('ChatArea Component', () => {
     fireEvent.change(input, { target: { value: 'Urgent update' } })
     expect(input).toHaveValue('Urgent update')
     
-    const sendButton = screen.getByRole('button')
+    const sendButton = container.querySelector('.chat-send-button') as HTMLButtonElement
     expect(sendButton).not.toBeDisabled()
     
     fireEvent.click(sendButton)

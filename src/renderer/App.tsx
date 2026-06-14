@@ -9,6 +9,9 @@ import StartupScreen from './components/StartupScreen';
 import { LoginScreen } from "./components/LoginScreen";
 import { clearStoredApiKey, getStoredApiKey, setStoredApiKey } from "./services/auth";
 import mermaid from "mermaid";
+import { sanitizeMermaidCode } from "./utils/mermaidSanitizer";
+import { Toaster } from "./components/ui/sonner";
+import { toast } from "sonner";
 
 export interface Thinking {
   id: string
@@ -42,6 +45,7 @@ export default function App() {
   const [thinking, setThinking] = useState<Thinking[]>([])
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("IDLE")
+  const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [sessionSummary, setSessionSummary] = useState<string>("");
   const midRunBuffer = useRef<string[]>([]);
@@ -58,6 +62,50 @@ export default function App() {
   ]);
 
   const [sessionFolders, setSessionFolders] = useState<Record<string, string | null>>({});
+  const [sessionMetadata, setSessionMetadata] = useState<Record<string, any>>({ allowDeepSearch: false, files: [] });
+
+  const messagesRef = useRef<Message[]>([]);
+  const thinkingRef = useRef<Thinking[]>([]);
+  const sessionMetadataRef = useRef<Record<string, any>>({ allowDeepSearch: false, files: [] });
+  const currentSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
+  useEffect(() => { sessionMetadataRef.current = sessionMetadata; }, [sessionMetadata]);
+  useEffect(() => { currentSessionIdRef.current = currentSessionId; }, [currentSessionId]);
+
+  const updateSessionMetadata = (newMeta: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
+    if (typeof newMeta === 'function') {
+      setSessionMetadata(prev => {
+        const next = newMeta(prev);
+        sessionMetadataRef.current = next;
+        return next;
+      });
+    } else {
+      sessionMetadataRef.current = newMeta;
+      setSessionMetadata(newMeta);
+    }
+  };
+
+  useEffect(() => {
+    const handleToastEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      toast(customEvent.detail || "");
+    };
+    window.addEventListener('toast', handleToastEvent);
+    return () => window.removeEventListener('toast', handleToastEvent);
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isLoading) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isLoading]);
 
   const loadSessionList = async () => {
     const list = await window.sessions.list()
@@ -69,7 +117,10 @@ export default function App() {
     setCurrentSessionId(newId)
     setMessages([])
     setThinking([])
+    messagesRef.current = []
+    thinkingRef.current = []
     setSessionSummary("")
+    updateSessionMetadata({ allowDeepSearch: false, files: [] })
     setSessionTitle(title || "New Quorum")
     addThinking('System', 'INITIALIZING_QUORUM_HEURISTICS...'); 
     addThinking('System', '----------------------------'); 
@@ -81,31 +132,88 @@ export default function App() {
     const data = await window.sessions.load(id)
     if (data) {
       setCurrentSessionId(id)
-      setMessages(data.messages || [])
-      setThinking(data.thinking || [])
+      const msgs = data.messages || [];
+      const thinks = data.thinking || [];
+      setMessages(msgs)
+      setThinking(thinks)
+      messagesRef.current = msgs
+      thinkingRef.current = thinks
       setSessionSummary(data.summary || "")
       setSessionTitle(data.title || 'Untitled Quorum')
+      if (data.metadata) {
+        try {
+          const parsed = JSON.parse(data.metadata);
+          if (!parsed.files) parsed.files = [];
+          updateSessionMetadata(parsed);
+        } catch {
+          updateSessionMetadata({ allowDeepSearch: false, files: [] });
+        }
+      } else {
+        updateSessionMetadata({ allowDeepSearch: false, files: [] });
+      }
     }
   }
 
-  const saveCurrentSession = async (updatedMessages?: Message[], updatedThinking?: Thinking[], updatedSummary?: string) => {
+  const saveCurrentSession = async (updatedMessages?: Message[], updatedThinking?: Thinking[], updatedSummary?: string, updatedMetadata?: Record<string, any>) => {
     if (!currentSessionId) return
     
     let newTitle = sessionTitle
-    const firstUserMsg = (updatedMessages || messages).find(m => m.role === 'user')
+    const firstUserMsg = (updatedMessages || messagesRef.current).find(m => m.role === 'user')
     if ((newTitle === 'New Session' || newTitle === 'New Quorum') && firstUserMsg) {
       newTitle = firstUserMsg.content.substring(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '')
       setSessionTitle(newTitle)
     }
 
+    const metaToSave = updatedMetadata !== undefined ? updatedMetadata : sessionMetadataRef.current;
     await window.sessions.save({
       id: currentSessionId,
       title: newTitle,
-      messages: updatedMessages || messages,
-      thinking: updatedThinking || thinking,
-      summary: updatedSummary !== undefined ? updatedSummary : sessionSummary
+      messages: updatedMessages || messagesRef.current,
+      thinking: updatedThinking || thinkingRef.current,
+      summary: updatedSummary !== undefined ? updatedSummary : sessionSummary,
+      metadata: JSON.stringify(metaToSave)
     })
     loadSessionList()
+  }
+
+  const saveSessionDirectly = async (sessionId: string, msgs: Message[], thinks: Thinking[]) => {
+    if (!sessionId) return;
+    
+    let title = sessionTitle;
+    if (sessionId === currentSessionIdRef.current) {
+      title = sessionTitle;
+    } else {
+      const existing = sessions.find(s => s.id === sessionId);
+      if (existing) title = existing.title;
+    }
+
+    const firstUserMsg = msgs.find(m => m.role === 'user');
+    if ((title === 'New Session' || title === 'New Quorum') && firstUserMsg) {
+      title = firstUserMsg.content.substring(0, 30) + (firstUserMsg.content.length > 30 ? '...' : '');
+    }
+
+    let metadataStr = null;
+    if (sessionId === currentSessionIdRef.current) {
+      metadataStr = JSON.stringify(sessionMetadataRef.current);
+    } else {
+      try {
+        const data = await window.sessions.load(sessionId);
+        if (data && data.metadata) {
+          metadataStr = data.metadata;
+        }
+      } catch (e) {}
+    }
+
+    await window.sessions.save({
+      id: sessionId,
+      title,
+      messages: msgs,
+      thinking: thinks,
+      summary: sessionId === currentSessionIdRef.current ? sessionSummary : "", 
+      metadata: metadataStr
+    });
+    
+    loadSessionList();
   }
 
   const deleteSession = async (id: string) => {
@@ -299,21 +407,23 @@ export default function App() {
     if (messages.length > 0 || thinking.length > 0) {
       saveCurrentSession()
     }
-  }, [messages, thinking, sessionTitle])
+  }, [messages, thinking, sessionTitle, sessionMetadata])
 
   const addThinking = (agent: string, thought: string, type: Thinking['type'] = 'thought') => {
-    setThinking(prev => [{
+    const newThink = {
       id: Math.random().toString(36).substr(2, 9),
       agent,
       thought,
       type,
       timestamp: Date.now()
-    }, ...prev])
+    }
+    thinkingRef.current = [newThink, ...thinkingRef.current]
+    setThinking(prev => [newThink, ...prev])
   }
 
-  const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string) => {
+  const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string, attachments?: { name: string; content: string }[]) => {
     const id = Math.random().toString(36).substr(2, 9)
-    setMessages(prev => [...prev, {
+    const newMsg = {
       id,
       role,
       content,
@@ -321,8 +431,11 @@ export default function App() {
       to,
       provider,
       model,
+      attachments,
       timestamp: Date.now()
-    }])
+    }
+    messagesRef.current = [...messagesRef.current, newMsg]
+    setMessages(prev => [...prev, newMsg])
   }
 
   const cleanResponse = (text: string) => {
@@ -446,6 +559,85 @@ export default function App() {
     throw new Error(`ALL_PROVIDERS_EXHAUSTED: ${lastError?.message || 'Unknown'}`);
   }
 
+  const validateAndCorrectMermaid = async (
+    rawResponse: string,
+    agentLabel: string,
+    originalPrompt: string,
+    timeoutMs: number = 90000
+  ): Promise<{ response: string; provider?: string; model?: string }> => {
+    let response = cleanResponse(rawResponse);
+    let validationAttempts = 0;
+    const maxValidationAttempts = 3;
+    let hasErrors = true;
+    let finalProvider: string | undefined;
+    let finalModel: string | undefined;
+
+    while (hasErrors && validationAttempts < maxValidationAttempts) {
+      const mermaidBlockRegex = /```\s*mermaid[\s\S]*?```/gi;
+      const mermaidBlocks = response.match(mermaidBlockRegex);
+      if (!mermaidBlocks) {
+        hasErrors = false;
+        break;
+      }
+
+      addThinking(agentLabel, `NEURAL_OUTPUT_VALIDATION (Attempt ${validationAttempts + 1}/${maxValidationAttempts})...`);
+      let currentErrors: { block: string; error: string }[] = [];
+      let updatedResponse = response;
+
+      for (const block of mermaidBlocks) {
+        const code = block.replace(/```\s*mermaid/i, '').replace(/```$/, '').trim();
+        const sanitizedCode = sanitizeMermaidCode(code);
+        const sanitizedBlock = `\`\`\`mermaid\n${sanitizedCode}\n\`\`\``;
+        
+        updatedResponse = updatedResponse.replace(block, sanitizedBlock);
+
+        try {
+          await mermaid.parse(sanitizedCode);
+        } catch (e: any) {
+          currentErrors.push({ block: sanitizedBlock, error: e.message });
+        }
+      }
+
+      response = updatedResponse;
+
+      if (currentErrors.length > 0) {
+        validationAttempts++;
+        addThinking(agentLabel, `VALIDATION_FAILED: ${currentErrors.length} errors detected.`, 'error');
+        
+        if (validationAttempts < maxValidationAttempts) {
+          const correctionPrompt = `
+            You are ${agentLabel}. Your previous output contained Mermaid syntax errors.
+            
+            ERRORS_DETECTED:
+            ${currentErrors.map(err => `- Error: ${err.error}\n  In Block:\n  ${err.block}`).join('\n\n')}
+            
+            TASK: Fix the Mermaid syntax errors and provide the FULL response again.
+            - IMPORTANT: For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
+            - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
+            - Return the entire response with fixed diagrams.
+          `;
+          try {
+            const { content: correctedRaw, provider: corrProvider, model: corrModel } = await runWithFallback(correctionPrompt, agentLabel, timeoutMs);
+            response = cleanResponse(correctedRaw);
+            finalProvider = corrProvider;
+            finalModel = corrModel;
+          } catch (e: any) {
+            addThinking(agentLabel, `CORRECTION_ATTEMPT_FAILED: ${e.message}`, 'error');
+            break;
+          }
+        } else {
+          addThinking(agentLabel, 'MAX_VALIDATION_ATTEMPTS_REACHED. Delivering best-effort output.', 'error');
+          hasErrors = false;
+        }
+      } else {
+        addThinking(agentLabel, 'NEURAL_OUTPUT_VALIDATED: 0 errors');
+        hasErrors = false;
+      }
+    }
+
+    return { response, provider: finalProvider, model: finalModel };
+  };
+
   const handleSummarize = async () => {
     if (!currentSessionId || isLoading) return;
     setIsLoading(true);
@@ -481,8 +673,128 @@ export default function App() {
     }
   };
 
+  const handleUploadFile = async (name: string, content: string): Promise<string> => {
+    // 1. Add file to session files list in sessionMetadata with loading: true using functional state update
+    let alreadyExists = false;
+    
+    updateSessionMetadata(prev => {
+      const currentFiles = prev.files || [];
+      if (currentFiles.some((f: any) => f.name === name)) {
+        alreadyExists = true;
+        return prev;
+      }
+      const updatedFiles = [...currentFiles, { name, content, summary: "Generating summary...", loading: true }];
+      const nextMeta = { ...prev, files: updatedFiles };
+      saveCurrentSession(undefined, undefined, undefined, nextMeta);
+      return nextMeta;
+    });
+
+    if (alreadyExists) {
+      const existing = (sessionMetadataRef.current.files || []).find((f: any) => f.name === name);
+      return existing?.summary || "";
+    }
+
+    addThinking('System', `Summarizing document: ${name}...`);
+    const summaryPrompt = `
+      You are an AI assistant. Analyze and summarize the following document.
+      Provide a clear, concise summary followed by key bullet points.
+      Document name: ${name}
+      
+      Document content:
+      ${content}
+    `;
+    let fileSummary = "";
+    try {
+      const { content: summaryResult } = await runWithFallback(summaryPrompt, 'System');
+      fileSummary = summaryResult;
+      addThinking('System', `Document summarized successfully: ${name}`, 'worker_end');
+      
+      // Update session files with the summary
+      updateSessionMetadata(prev => {
+        const files = (prev.files || []).map((f: any) => 
+          f.name === name ? { ...f, summary: fileSummary, loading: false } : f
+        );
+        const nextMeta = { ...prev, files };
+        saveCurrentSession(undefined, undefined, undefined, nextMeta);
+        return nextMeta;
+      });
+
+      addMessage('system', `File **${name}** is uploaded.\n\n**Agent Summary:**\n${fileSummary}`);
+    } catch (e: any) {
+      addThinking('System', `Failed to summarize document: ${e.message}`, 'error');
+      fileSummary = `Error generating summary: ${e.message}`;
+      updateSessionMetadata(prev => {
+        const files = (prev.files || []).map((f: any) => 
+          f.name === name ? { ...f, summary: fileSummary, loading: false } : f
+        );
+        const nextMeta = { ...prev, files };
+        saveCurrentSession(undefined, undefined, undefined, nextMeta);
+        return nextMeta;
+      });
+      addMessage('system', `File **${name}** is uploaded (Summary generation failed: ${e.message}).`);
+    }
+
+    return fileSummary;
+  };
+
+  const handleDeleteSessionFile = (fileName: string) => {
+    updateSessionMetadata(prev => {
+      const files = (prev.files || []).filter((f: any) => f.name !== fileName);
+      const nextMeta = { ...prev, files };
+      saveCurrentSession(undefined, undefined, undefined, nextMeta);
+      return nextMeta;
+    });
+    addMessage('system', `File **${fileName}** removed from session files.`);
+  };
+
   const handleSend = async (text: string) => {
     if (!text.trim()) return
+
+    const sessionForThisRun = currentSessionId;
+    if (!sessionForThisRun) return;
+
+    let runMessages = [...messagesRef.current];
+    let runThinking = [...thinkingRef.current];
+
+    const addThinking = (agent: string, thought: string, type: Thinking['type'] = 'thought') => {
+      const newThink = {
+        id: Math.random().toString(36).substr(2, 9),
+        agent,
+        thought,
+        type,
+        timestamp: Date.now()
+      };
+      runThinking = [newThink, ...runThinking];
+      
+      if (currentSessionIdRef.current === sessionForThisRun) {
+        thinkingRef.current = [newThink, ...thinkingRef.current];
+        setThinking(thinkingRef.current);
+      }
+      
+      saveSessionDirectly(sessionForThisRun, runMessages, runThinking);
+    };
+
+    const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string) => {
+      const id = Math.random().toString(36).substr(2, 9);
+      const newMsg: Message = {
+        id,
+        role,
+        content,
+        from,
+        to,
+        provider,
+        model,
+        timestamp: Date.now()
+      };
+      runMessages = [...runMessages, newMsg];
+      
+      if (currentSessionIdRef.current === sessionForThisRun) {
+        messagesRef.current = [...messagesRef.current, newMsg];
+        setMessages(messagesRef.current);
+      }
+      
+      saveSessionDirectly(sessionForThisRun, runMessages, runThinking);
+    };
 
     if (isLoading) {
       addMessage('user', text)
@@ -494,13 +806,146 @@ export default function App() {
       return
     }
 
+    setRunningSessionId(sessionForThisRun);
+
+    const sessionFiles = sessionMetadata.files || [];
+    const filesContext = sessionFiles.length > 0
+      ? `\n\nSESSION_UPLOADED_FILES_CONTEXT:\n${sessionFiles.map((att: any) => `[UPLOADED_FILE: ${att.name}]\nSummary: ${att.summary || att.content.substring(0, 1000)}`).join('\n\n')}`
+      : "";
+
     const userQuery = text
     const chatHistory = messages
       .filter(m => m.role !== 'internal' && m.role !== 'error' && m.role !== 'system')
-      .slice(-10)
+      .slice(sessionSummary ? -3 : -10)
       .map(m => `${m.role.toUpperCase()}: ${m.content}`)
       .join('\n\n');
-    const historyContext = chatHistory ? `\n\nPREVIOUS_DISCUSSION_CONTEXT:\n${chatHistory}` : ""
+    const historyContext = 
+      (sessionSummary ? `\n\nSESSION_SUMMARY_OF_PAST_CONTEXT:\n${sessionSummary}\n` : "") +
+      (chatHistory ? `\n\nRECENT_NEW_MESSAGES_CONTEXT:\n${chatHistory}` : "") + 
+      filesContext;
+
+    const agentRoster = getAgentRoster();
+    const currentChain = settings["provider:chain"] || [];
+    const activeProvIdx = preferredProviderIndexRef.current;
+    const fallbackWarning = activeProvIdx > 0 && currentChain[activeProvIdx]
+      ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
+      : "";
+
+    // Direct Agent Execution Check
+    let directAgentMatch = null;
+    const firstWordMatch = userQuery.trim().match(/^@([a-zA-Z0-9_-]+)\s+([\s\S]+)$/);
+    if (firstWordMatch) {
+      const targetId = firstWordMatch[1].toLowerCase();
+      const agent = agentRoster.find(a => 
+        a.id.toLowerCase() === targetId || 
+        a.name.toLowerCase() === targetId ||
+        a.name.toLowerCase().replace(/\s+/g, '-') === targetId
+      );
+      if (agent) {
+        directAgentMatch = { agent, cleanQuery: firstWordMatch[2].trim() };
+      }
+    }
+
+    if (directAgentMatch) {
+      const { agent, cleanQuery } = directAgentMatch;
+        addMessage('user', userQuery);
+        setIsLoading(true);
+        setStatusText(`DIRECT: ${agent.name.toUpperCase()}...`);
+        addThinking(agent.name, `DIRECT_AGENT_EXECUTION_TRIGGERED: Bypassing Moderator.`);
+
+        try {
+          const agentLabel = agent.name;
+          addThinking(agentLabel, `RESOLVING_ABILITIES: ${agent.persona}...`);
+          
+          let resolvedInstructions = "";
+          if (typeof window.system?.callMcpTool === 'function') {
+            try {
+              const res = await window.system.callMcpTool('savant-abilities', 'resolve_abilities', { 
+                persona: agent.persona, 
+                tags: agent.tags || [] 
+              });
+              resolvedInstructions = res.content?.[0]?.text || "";
+              if (resolvedInstructions) {
+                addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response');
+              }
+            } catch (e: any) {
+              addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
+            }
+          }
+
+          const allowDeepSearch = sessionMetadata.allowDeepSearch === true;
+
+          const prompt = `
+            ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
+            ${agent.prompt ? `Standing instruction: ${agent.prompt}` : ""}
+            ${fallbackWarning}
+
+            Directive from operator: ${cleanQuery}${filesContext}
+            ${historyContext}
+
+            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
+
+            CORE MANDATE: Communicate ONLY FACTS. 
+            - Mark every verified fact with a superscript marker like Fact[1].
+            - Explain how/where each fact was verified.
+            - Answer with focused Markdown. Stay inside your persona and only solve the task.
+          `;
+
+          const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, 90000);
+          const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, 90000);
+          const finalResponse = validationResult.response;
+          const finalAgentProvider = validationResult.provider || agentProvider;
+          const finalAgentModel = validationResult.model || agentModel;
+
+          addMessage(agent.id as any, finalResponse, agentLabel, undefined, finalAgentProvider, finalAgentModel);
+          addThinking(agentLabel, `DIRECT_EXECUTION_COMPLETE`, 'worker_end');
+
+          // Update the persistent summary after direct run
+          const directSummaryPrompt = `
+            You are the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
+            ${fallbackWarning}
+            
+            CURRENT_SESSION_SUMMARY:
+            "${sessionSummary || "No previous summary available."}"
+            
+            NEW_INTEL_FROM_THIS_RUN:
+            ${JSON.stringify([{ agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: finalResponse }])}
+            
+            USER_DIRECTIVE: "${cleanQuery}"
+            
+            TASK: 
+            Compare the NEW_INTEL_FROM_THIS_RUN against the CURRENT_SESSION_SUMMARY.
+            If the new run does not contain any significantly new information, decisions, actions, or details compared to what is already covered in the CURRENT_SESSION_SUMMARY, reply with EXACTLY the word "NO_CHANGE" (case-sensitive, no markdown, no spaces).
+            Otherwise, provide an updated, cohesive SESSION_SUMMARY that merges the new facts/findings.
+            - Integrate new achievements, decisions, and findings from the latest run.
+            - DO NOT blindly add text; perform an intelligent merge.
+            - If new info contradicts or modifies previous summary points, update them accordingly.
+            - Use concise, technical bullet points. Keep it professional.
+            - Return ONLY the updated summary text.
+          `;
+          try {
+            const summaryResult = await runWithFallback(directSummaryPrompt, 'Moderator');
+            const updatedSummary = summaryResult.content.trim();
+            if (updatedSummary === "NO_CHANGE") {
+              addThinking('Moderator', 'NEURAL_SUMMARY_UNCHANGED: No significant state changes detected in this turn.');
+            } else {
+              setSessionSummary(updatedSummary);
+              saveCurrentSession(undefined, undefined, updatedSummary);
+              addThinking('Moderator', 'NEURAL_SUMMARY_UPDATED');
+            }
+          } catch (sumErr) {
+            console.error("Post-run direct agent summarization failed:", sumErr);
+          }
+        } catch (e: any) {
+          addThinking(agent.name, `DIRECT_EXECUTION_FAILED: ${e.message}`, 'error');
+          addMessage('error', `Direct agent execution failed: ${e.message}`);
+        } finally {
+          setIsLoading(false);
+          setStatusText('IDLE');
+          setRunningSessionId(null);
+        }
+        return;
+      }
 
     addMessage('user', userQuery)
     setIsLoading(true); 
@@ -512,7 +957,6 @@ export default function App() {
     let allAddedInfo = "";
     let isFinalized = false;
     let hasCrossChecked = false;
-    const agentRoster = getAgentRoster();
     const agentRosterPrompt = formatAgentRosterForPrompt(agentRoster);
 
     try {
@@ -540,13 +984,17 @@ export default function App() {
 
         const moderatorDecisionPrompt = `
           You are the MASTER_CONTROL_MODERATOR in a high-security cyber-environment.
+          
+          ROLE DESCRIPTION:
+          You are the Gatekeeper. You must first analyze the user request to find the ask intent, formulate a clear reasoning goal, and figure out the best agents for the job.
+
           ${historyContext}
           ${turnContext}
           ${midRunContext}
           ${fallbackWarning}
           CURRENT_SESSION_SUMMARY: "${sessionSummary || "No previous summary available."}"
           
-          User directive: "${userQuery}"
+          User directive: "${userQuery}${filesContext}"
           Current Reasoning Turn: ${currentTurn} of ${maxTurns}
           Available agents:
           ${agentRosterPrompt}
@@ -559,6 +1007,8 @@ export default function App() {
           - If this is Turn 2, you MUST prioritize "action": "finalize" unless the agents have provided critically contradicting information that makes a decision impossible.
           - If agents AGREE or provide complementary info, merge their findings and finalize.
           - If you are NOT SURE about any agent claim, you MUST QUESTION that agent directly if you decide to engage for one more turn (only if absolutely necessary).
+          - Limit agent exploration: Do NOT allow agents to perform deep search / deep exploration unless you explicitly prompt them to (default should be false).
+          - Control agent-to-agent validation: Specify target cross_checks explicitly so agents don't engage in excessive all-to-all cross-checks.
 
           AMBIGUITY & UNCERTAINTY:
           - If the user's request or agent responses are AMBIGUOUS, you MUST ask the agents (or user) for more questions/clarification.
@@ -570,15 +1020,21 @@ export default function App() {
           Decide which configured agents can materially help. Select by agent id only.
           Output ONLY valid JSON.
           {
-            "thought": "...",
+            "thought": "description of intent and reasoning path",
+            "intent": "identified user ask intent",
+            "goal": "reasoning goal of this swarm run",
             "action": "engage" | "finalize",
             "engage": ["agent_id"],
             "queries": { 
               "agent_id": {
                 "task": "specific task for that agent. Instruct agent to identify and mark facts with [FACT:index]",
-                "context_strategy": "full" | "summary"
+                "context_strategy": "full" | "summary",
+                "allow_deep_search": true | false
               }
             },
+            "cross_checks": [
+              { "from": "agent_id", "to": "agent_id", "reason": "why they are validating this output" }
+            ],
             "direct_response": "... (FACTS ONLY. Mark with Fact[index]. EXPLAIN results, do not just summarize.)"
           }
         `
@@ -589,7 +1045,11 @@ export default function App() {
         if (currentTurn === 1) {
           addMessage(
             'moderator-whisper' as any,
-            `I've received your directive: "${userQuery.substring(0, 50)}${userQuery.length > 50 ? '...' : ''}". I am analyzing the state and looking at the roster to determine the best approach.`
+            `I've received your directive: "${userQuery.substring(0, 50)}${userQuery.length > 50 ? '...' : ''}". I am analyzing the state and looking at the roster to determine the best approach.`,
+            undefined,
+            undefined,
+            modProvider,
+            modModel
           );
         }
 
@@ -622,7 +1082,11 @@ export default function App() {
         if (decision.action === 'finalize' || (decision.engage || []).length === 0) {
           isFinalized = true;
           if (decision.direct_response && currentTurn === 1) {
-             addMessage('moderator', decision.direct_response, undefined, undefined, modProvider, modModel);
+             const validationResult = await validateAndCorrectMermaid(decision.direct_response, 'Moderator', moderatorDecisionPrompt, 90000);
+             const finalDirResponse = validationResult.response;
+             const finalModProvider = validationResult.provider || modProvider;
+             const finalModModel = validationResult.model || modModel;
+             addMessage('moderator', finalDirResponse, undefined, undefined, finalModProvider, finalModModel);
           }
           break;
         }
@@ -631,14 +1095,20 @@ export default function App() {
         setStatusText(`TURN_${currentTurn}: ${agentsToEngage.length} AGENTS`);
         addMessage(
           'moderator-whisper' as any,
-          `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`
+          `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`,
+          undefined,
+          undefined,
+          modProvider,
+          modModel
         );
 
         // ── SUPERVISED PARALLEL AGENT EXECUTION ──
         const agentPromises = agentsToEngage.map(async (agent) => {
           const queryData = decision.queries && (decision.queries[agent.id] || decision.queries[agent.name] || decision.queries[agent.persona]);
-          const query = typeof queryData === 'string' ? queryData : (queryData?.task || userQuery);
+          const promptQuery = filesContext ? `${userQuery}${filesContext}` : userQuery;
+          const query = typeof queryData === 'string' ? queryData : (queryData?.task || promptQuery);
           const strategy = typeof queryData === 'object' ? queryData.context_strategy : 'full';
+          const allowDeepSearch = (typeof queryData === 'object' && queryData.allow_deep_search === true) || sessionMetadata.allowDeepSearch === true;
           const agentLabel = agent.name || agent.id;
 
           // Start Ability Resolution and Context Setup in parallel
@@ -679,9 +1149,9 @@ export default function App() {
           const resolvedInstructions = (await mcpPromise).content?.[0]?.text || "";
           addThinking(agentLabel, `ANALYZING_QUERY (strategy: ${strategy}): ${query.substring(0, 30)}...`)
           
-          const effectiveContext = strategy === 'summary' 
+          const effectiveContext = (strategy === 'summary' 
             ? `\n\nCURRENT_SESSION_SUMMARY:\n${sessionSummary || "No previous summary."}\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
-            : `${historyContext}\n\n${turnContext}`;
+            : `${historyContext}\n\n${turnContext}`) + filesContext;
 
           const prompt = `
             ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
@@ -692,6 +1162,8 @@ export default function App() {
             ${effectiveContext}
             ${midRunContext}
 
+            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
+
             CORE MANDATE: Communicate ONLY FACTS. 
             - Mark every verified fact with a superscript marker like Fact[1].
             - Explain how/where each fact was verified.
@@ -700,8 +1172,13 @@ export default function App() {
 
           try {
             const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, 90000);
-            const response = cleanResponse(responseRaw)
-            addMessage('agent-whisper' as any, response, agentLabel, undefined, agentProvider, agentModel)
+            
+            const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, 90000);
+            const response = validationResult.response;
+            const finalAgentProvider = validationResult.provider || agentProvider;
+            const finalAgentModel = validationResult.model || agentModel;
+
+            addMessage('agent-whisper' as any, response, agentLabel, undefined, finalAgentProvider, finalAgentModel)
             return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: response, status: 'complete' as const };
           } catch (e: any) {
             addThinking(agentLabel, `FAILURE_SIGNAL: ${e.message}`, 'error');
@@ -735,30 +1212,36 @@ export default function App() {
 
         const turnResults = await watchSwarm(agentPromises, agentsToEngage.map(a => a.name || a.id));
 
-        // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK ──
-        if (turnResults.length > 1 && !hasCrossChecked) {
-          addThinking('Moderator', 'INITIATING_NEURAL_CROSS_CHECK...')
+        // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY MODERATOR) ──
+        const crossCheckRequests = decision.cross_checks || [];
+        if (crossCheckRequests.length > 0 && !hasCrossChecked) {
+          addThinking('Moderator', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
           setStatusText(`TURN_${currentTurn}: CROSS-CHECK`);
           hasCrossChecked = true;
 
-          const allCrossCheckPromises = turnResults.flatMap((res) => {
-            if (res.status !== 'complete') return [];
-            const others = turnResults.filter(r => r.agentId !== res.agentId && r.status === 'complete');
-            return others.map(async (other) => {
-               const checkPrompt = `
-                 You are ${other.agentName}, performing a neural cross-check on ${res.agentName}'s work.
-                 ${res.agentName}'s Output: "${res.content}"
-                 Original Task: "${userQuery}"
-                 TASK: Review for accuracy/consistency with your persona (${other.persona}). Brief feedback ONLY.
-               `;
-               try {
-                 const { content: feedback } = await runWithFallback(checkPrompt, other.agentName, 45000); // 45s for checks
-                 addMessage('agent-whisper' as any, `CROSS-CHECK feedback on ${res.agentName}: ${feedback}`, other.agentName);
-                 return { from: other.agentId, on: res.agentId, feedback };
-               } catch (e) {
-                 return { from: other.agentId, on: res.agentId, feedback: "Cross-check failed." };
-               }
-            });
+          const allCrossCheckPromises = crossCheckRequests.map(async (req: any) => {
+            const fromAgentRes = turnResults.find(r => (r.agentId === req.from || r.agentName.toLowerCase() === String(req.from).toLowerCase()) && r.status === 'complete');
+            const toAgentRes = turnResults.find(r => (r.agentId === req.to || r.agentName.toLowerCase() === String(req.to).toLowerCase()) && r.status === 'complete');
+
+            if (!fromAgentRes || !toAgentRes) {
+              return { from: req.from, on: req.to, feedback: "Skipped (agent not active or failed)" };
+            }
+
+            const checkPrompt = `
+              You are ${fromAgentRes.agentName}, performing a neural cross-check on ${toAgentRes.agentName}'s work.
+              ${toAgentRes.agentName}'s Output: "${toAgentRes.content}"
+              Original Task: "${userQuery}"
+              Context/Reason for check: ${req.reason || "Review for consistency"}
+              TASK: Review for accuracy/consistency with your persona (${fromAgentRes.persona}). Brief feedback ONLY.
+            `;
+
+            try {
+              const { content: feedback, provider: checkProvider, model: checkModel } = await runWithFallback(checkPrompt, fromAgentRes.agentName, 45000);
+              addMessage('agent-whisper' as any, `CROSS-CHECK feedback on ${toAgentRes.agentName}: ${feedback}`, fromAgentRes.agentName, undefined, checkProvider, checkModel);
+              return { from: req.from, on: req.to, feedback };
+            } catch (e: any) {
+              return { from: req.from, on: req.to, feedback: `Cross-check failed: ${e.message}` };
+            }
           });
 
           const crossCheckResults = await Promise.all(allCrossCheckPromises);
@@ -803,7 +1286,10 @@ export default function App() {
           
           USER_DIRECTIVE: "${userQuery}"
           
-          TASK: Provide an updated, cohesive SESSION_SUMMARY. 
+          TASK: 
+          Compare the NEW_INTEL_FROM_THIS_RUN against the CURRENT_SESSION_SUMMARY.
+          If the new run does not contain any significantly new information, decisions, actions, or details compared to what is already covered in the CURRENT_SESSION_SUMMARY, reply with EXACTLY the word "NO_CHANGE" (case-sensitive, no markdown, no spaces).
+          Otherwise, provide an updated, cohesive SESSION_SUMMARY that merges the new facts/findings.
           - Integrate new achievements, decisions, and findings from the latest run.
           - DO NOT blindly add text; perform an intelligent merge.
           - If new info contradicts or modifies previous summary points, update them accordingly.
@@ -811,16 +1297,13 @@ export default function App() {
           - Return ONLY the updated summary text.
         `;
         
-        const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Moderator');
-        setSessionSummary(updatedSummary);
-        saveCurrentSession(undefined, undefined, updatedSummary);
-        addThinking('Moderator', 'NEURAL_SUMMARY_UPDATED')
+        addThinking('Moderator', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
 
         const finalPrompt = `
           You are the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
 
           USER'S ORIGINAL REQUEST: "${userQuery}"
-          UPDATED SESSION SUMMARY: ${updatedSummary}
+          PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
           LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
           ${fallbackWarning}
 
@@ -868,74 +1351,143 @@ export default function App() {
           - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
           - Do NOT summarize — EXPLAIN. The difference is critical.
         `;
-        const { content: finalResponseRaw, provider: finalProvider, model: finalModel } = await runWithFallback(finalPrompt, 'Moderator')
-        let finalResponse = cleanResponse(finalResponseRaw)
 
-        // ── SELF-CORRECTION: MERMAID VALIDATION LOOP ──
-        let validationAttempts = 0;
-        const maxValidationAttempts = 3;
-        let hasErrors = true;
+        const [summaryResult, finalResult] = await Promise.all([
+          runWithFallback(summaryPrompt, 'Moderator'),
+          runWithFallback(finalPrompt, 'Moderator')
+        ]);
 
-        while (hasErrors && validationAttempts < maxValidationAttempts) {
-          const mermaidBlocks = finalResponse.match(/```mermaid([\s\S]*?)```/g);
-          if (!mermaidBlocks) {
-            hasErrors = false;
-            break;
-          }
-
-          addThinking('Moderator', `NEURAL_OUTPUT_VALIDATION (Attempt ${validationAttempts + 1}/${maxValidationAttempts})...`);
-          let currentErrors = [];
-          
-          for (const block of mermaidBlocks) {
-            const code = block.replace(/```mermaid/, '').replace(/```/, '').trim();
-            try {
-              await mermaid.parse(code);
-            } catch (e: any) {
-              currentErrors.push({ block, error: e.message });
-            }
-          }
-
-          if (currentErrors.length > 0) {
-            validationAttempts++;
-            addThinking('Moderator', `VALIDATION_FAILED: ${currentErrors.length} errors detected.`, 'error');
-            
-            if (validationAttempts < maxValidationAttempts) {
-              const correctionPrompt = `
-                You are the MASTER_CONTROL_MODERATOR. Your previous final report contained Mermaid syntax errors.
-                
-                ERRORS_DETECTED:
-                ${currentErrors.map(err => `- Error: ${err.error}\n  In Block:\n  ${err.block}`).join('\n\n')}
-                
-                TASK: Fix the Mermaid syntax errors and provide the FULL FINAL REPORT again. 
-                - IMPORTANT: For all node labels containing special characters, HTML, or parentheses, use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
-                - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
-                - Return the entire report with fixed diagrams.
-              `;
-              const { content: correctedRaw } = await runWithFallback(correctionPrompt, 'Moderator');
-              finalResponse = cleanResponse(correctedRaw);
-            } else {
-              addThinking('Moderator', 'MAX_VALIDATION_ATTEMPTS_REACHED. Delivering best-effort output.', 'error');
-              hasErrors = false;
-            }
-          } else {
-            addThinking('Moderator', 'NEURAL_OUTPUT_VALIDATED: 0 errors');
-            hasErrors = false;
-          }
+        const updatedSummary = summaryResult.content.trim();
+        if (updatedSummary === "NO_CHANGE") {
+          addThinking('Moderator', 'NEURAL_SUMMARY_UNCHANGED: No significant state changes detected in this turn.');
+        } else {
+          setSessionSummary(updatedSummary);
+          saveCurrentSession(undefined, undefined, updatedSummary);
+          addThinking('Moderator', 'NEURAL_SUMMARY_UPDATED');
         }
 
-        addMessage('moderator', finalResponse, undefined, undefined, finalProvider, finalModel); 
+        const finalResponseRaw = finalResult.content;
+        let finalProvider = finalResult.provider;
+        let finalModel = finalResult.model;
+
+        const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Moderator', finalPrompt, 90000);
+        const finalResponse = validationResult.response;
+        finalProvider = validationResult.provider || finalProvider;
+        finalModel = validationResult.model || finalModel;
+
+        addMessage('moderator', finalResponse, undefined, undefined, finalProvider, finalModel);
       }
     } catch (error: any) {
       addMessage('error', `CRITICAL_EXCEPTION: ${error.message}`)
     } finally {
       setIsLoading(false); 
-      setStatusText('IDLE')
+      setStatusText('IDLE');
+      setRunningSessionId(null);
     }
   }
 
   const handleDeleteMessage = (id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }
+
+  const handleExport = () => {
+    if (messages.length === 0) return;
+
+    const normalizedTitle = (sessionTitle || 'Quorum_Export')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savant Quorum - ${sessionTitle}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cp-bg: #080b12;
+            --cp-cyan: #00e5ff;
+            --cp-border: rgba(0, 229, 255, 0.2);
+            --foreground: #e0e0e0;
+            --cp-purple: #b624ff;
+        }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: var(--cp-bg);
+            color: var(--foreground);
+            line-height: 1.6;
+            padding: 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .header {
+            border-bottom: 1px solid var(--cp-border);
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+        }
+        h1 { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
+        .session-title { opacity: 0.6; font-size: 0.9rem; }
+        .message { margin-bottom: 20px; padding: 15px; border: 1px solid var(--cp-border); background: rgba(255,255,255,0.02); }
+        .message.user { border-left: 4px solid var(--cp-cyan); }
+        .message.bot { border-left: 4px solid var(--cp-purple); }
+        .message-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.8rem; font-family: 'Share Tech Mono', monospace; opacity: 0.7; }
+        .role { color: var(--cp-cyan); font-weight: bold; }
+        pre { background: #1a1a1a; padding: 15px; border-radius: 4px; overflow-x: auto; border: 1px solid #333; }
+        code { font-family: 'Share Tech Mono', monospace; color: var(--cp-cyan); }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+        th { background-color: #1a1a1a; color: var(--cp-cyan); }
+        .mermaid { background: white !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>// SAVANT_QUORUM_SESSION_EXPORT</h1>
+        <div class="session-title">${sessionTitle}</div>
+    </div>
+    <div id="messages"></div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        const messages = [
+            ${messages.filter(m => m.role !== 'system' && m.role !== 'internal' && m.role !== 'error').map(m => `
+            {
+                role: "${m.role}",
+                content: \`${m.content.replace(/`/g, '\\`').replace(/\${/g, '\\${')}\`,
+                timestamp: "${new Date(m.timestamp).toLocaleString()}"
+            }`).join(',')}
+        ];
+        
+        const container = document.getElementById('messages');
+        messages.forEach(m => {
+            const isUser = m.role === 'user';
+            const div = document.createElement('div');
+            div.className = 'message ' + (isUser ? 'user' : 'bot');
+            div.innerHTML = \`
+                <div class="message-header">
+                    <span class="role">\${m.role.toUpperCase()}</span>
+                    <span class="timestamp">\${m.timestamp}</span>
+                </div>
+                <div class="message-content">\${marked.parse(m.content)}</div>
+            \`;
+            container.appendChild(div);
+        });
+    </script>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${normalizedTitle}-${Date.now()}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleAddFolder = () => {
     setFolders(prev => {
@@ -1006,6 +1558,7 @@ export default function App() {
         currentChatName={sessionTitle}
         onCreateChat={startNewSession}
         onRenameChat={renameSession}
+        onExport={handleExport}
         folders={folders}
         chats={chatItems}
       />
@@ -1031,8 +1584,33 @@ export default function App() {
               messages={messages} 
               sessionTitle={sessionTitle}
               onSend={handleSend} 
+              onUploadFile={handleUploadFile}
+              sessionFiles={sessionMetadata.files || []}
+              onDeleteSessionFile={handleDeleteSessionFile}
+              agents={getAgentRoster()}
               onDeleteMessage={handleDeleteMessage}
-              isLoading={isLoading}
+              isLoading={isLoading && currentSessionId === runningSessionId}
+              statusText={statusText}
+              onSummarize={handleSummarize}
+              onClearSession={startNewSession}
+              onEditMessage={(id, newContent) => {
+                const msgIdx = messages.findIndex(m => m.id === id);
+                if (msgIdx !== -1) {
+                  // Roll back the conversation context to this message, and re-send the edited text
+                  const updated = messages.slice(0, msgIdx);
+                  setMessages(updated);
+                  handleSend(newContent);
+                }
+              }}
+              onUpdateMessage={(id, newContent) => {
+                setMessages(prev => prev.map(m => m.id === id ? { ...m, content: newContent } : m));
+              }}
+              allowDeepSearch={sessionMetadata.allowDeepSearch || false}
+              onToggleDeepSearch={(enabled) => {
+                const updatedMeta = { ...sessionMetadataRef.current, allowDeepSearch: enabled };
+                updateSessionMetadata(updatedMeta);
+                saveCurrentSession(undefined, undefined, undefined, updatedMeta);
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -1052,10 +1630,15 @@ export default function App() {
           statusText={statusText} 
           sessionSummary={sessionSummary}
           onSummarize={handleSummarize}
+          settings={settings}
+          sessionFiles={sessionMetadata.files || []}
+          onUploadFile={handleUploadFile}
+          onDeleteSessionFile={handleDeleteSessionFile}
         />
       </div>
 
       <BottomBar sessionTitle={sessionTitle} />
+      <Toaster />
     </div>
   );
 }
