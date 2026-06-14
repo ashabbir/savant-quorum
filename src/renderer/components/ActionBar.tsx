@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, Settings2 } from "lucide-react";
+import { Plus, Edit2, Settings2, Download } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { SessionModal } from "./SessionModal";
 import { validateSessionName, sanitizeSessionName } from "../services/sessionService";
@@ -8,11 +8,12 @@ interface ActionBarProps {
   currentChatName: string;
   onCreateChat: (name: string) => void;
   onRenameChat: (name: string) => void;
+  onExport?: () => void;
   folders?: Array<{ id: string; name: string }>;
   chats?: Array<{ id: string; name: string }>;
 }
 
-export function ActionBar({ currentChatName, onCreateChat, onRenameChat, folders = [], chats = [] }: ActionBarProps) {
+export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExport, folders = [], chats = [] }: ActionBarProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
@@ -143,6 +144,20 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, folders
         title="Session Configuration"
       >
         <Settings2 size={11} />
+      </button>
+
+      {/* export button */}
+      <button
+        onClick={onExport}
+        style={{
+          background: "var(--cp-bg-3)",
+          border: "1px solid rgba(0,229,255,0.3)",
+          color: "var(--cp-cyan)",
+        }}
+        className="flex items-center gap-1 px-2 py-0.5 text-xs hover:border-[var(--cp-cyan)] transition-all"
+        title="Export Session as HTML"
+      >
+        <Download size={11} />
       </button>
 
       {/* divider */}

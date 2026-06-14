@@ -1,11 +1,12 @@
-import { useState, useRef } from "react";
-import { Activity, GitBranch, FileText, Upload, Sparkles, Search, ListChecks, Terminal, RefreshCcw, Timer, Cpu, Zap } from "lucide-react";
-import { AreaChart, Area, LineChart, Line, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Cell, PieChart, Pie, Tooltip as RechartsTooltip } from "recharts";
+import { useState, useRef, useEffect } from "react";
+import { Activity, GitBranch, FileText, Upload, Sparkles, Search, ListChecks, Terminal, RefreshCcw, Timer, Cpu, Zap, AlertTriangle, X } from "lucide-react";
+import { AreaChart, Area, LineChart, Line, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Cell, PieChart, Pie, Tooltip as RechartsTooltip, RadialBarChart, RadialBar, Treemap } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Thinking } from "../App";
 import { Message } from "./ChatArea";
 import { ChatMarkdown } from "./ChatMarkdown";
+import * as d3 from "d3";
 
 const TABS = [
   { id: "pulse", icon: Activity, label: "pulse" },
@@ -23,6 +24,10 @@ interface RightPanelProps {
   statusText: string;
   sessionSummary: string;
   onSummarize: () => void;
+  settings?: Record<string, any>;
+  sessionFiles?: { name: string; content: string; summary?: string; loading?: boolean }[];
+  onUploadFile?: (name: string, content: string) => Promise<string>;
+  onDeleteSessionFile?: (name: string) => void;
 }
 
 const pulseData = Array.from({ length: 20 }, (_, i) => ({
@@ -76,9 +81,10 @@ function NavIcon({
   );
 }
 
-export function RightPanel({ thinking, messages, statusText, sessionSummary, onSummarize }: RightPanelProps) {
+export function RightPanel({
+  thinking, messages, statusText, sessionSummary, onSummarize, settings, sessionFiles = [], onUploadFile, onDeleteSessionFile
+}: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   // ── PULSE ANALYTICS DATA CALCULATION ──
   
@@ -86,7 +92,7 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
   const getMessageEngagement = () => {
     const counts: Record<string, number> = {};
     messages.forEach(m => {
-      let role = m.role;
+      let role: string = m.role;
       if (role === 'agent-whisper' && m.from) role = m.from;
       if (role === 'moderator-whisper') role = 'moderator';
       if (role === 'whisper') role = 'moderator';
@@ -130,56 +136,806 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
 
   // 4. Fact Network (InfraNodus style)
   const getFactNetwork = () => {
-    const factRegex = /fact\[\d+\]/i;
-    const words: Record<string, number> = {};
-    const cooccurrence: Record<string, Record<string, number>> = {};
-    const stopWords = new Set(['the', 'and', 'for', 'this', 'that', 'with', 'from', 'your', 'was', 'has', 'been', 'which', 'their', 'they', 'have', 'using', 'will', 'through', 'about', 'would', 'could', 'should', 'each', 'into', 'also', 'some', 'more', 'than', 'when', 'where', 'there', 'what']);
+    const factRegex = /fact\s*\[\d+\]|\[fact:\d+\]/i;
+    const words: Record<string, { count: number; type: 'agent' | 'fact' | 'concept' | 'crosscheck' }> = {};
+    const cooccurrence: Record<string, Record<string, { weight: number; type: 'communication' | 'semantic' | 'crosscheck' }>> = {};
+
+    // Helper to register node
+    const addNode = (text: string, type: 'agent' | 'fact' | 'concept' | 'crosscheck', increment = 1) => {
+      const key = text.trim();
+      if (!key) return;
+      if (!words[key]) {
+        words[key] = { count: 0, type };
+      }
+      words[key].count += increment;
+    };
+
+    // Helper to register edge
+    const addEdge = (source: string, target: string, type: 'communication' | 'semantic' | 'crosscheck', weight = 1) => {
+      const s = source.trim();
+      const t = target.trim();
+      if (!s || !t || s === t) return;
+      const [a, b] = [s, t].sort();
+      if (!cooccurrence[a]) cooccurrence[a] = {};
+      if (!cooccurrence[a][b]) {
+        cooccurrence[a][b] = { weight: 0, type };
+      }
+      cooccurrence[a][b].weight += weight;
+      if (type === 'crosscheck') {
+        cooccurrence[a][b].type = 'crosscheck';
+      }
+    };
+
+    // Pre-register all possible agents to ensure they have correct type
+    const agentsList = ['YOU', 'Moderator', 'Engineer', 'Architect', 'Security', 'CrossCheck'];
+    agentsList.forEach(agent => {
+      addNode(agent, 'agent', 0);
+    });
+
+    // Comprehensive standard English stop words
+    const stopWords = new Set([
+      'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'arent', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by', 'cant', 'cannot', 'could', 'couldnt', 'did', 'didnt', 'do', 'does', 'doesnt', 'doing', 'dont', 'down', 'during', 'each', 'few', 'for', 'from', 'further', 'had', 'hadnt', 'has', 'hasnt', 'have', 'havent', 'having', 'he', 'hed', 'hell', 'hes', 'her', 'here', 'heres', 'hers', 'herself', 'him', 'himself', 'his', 'how', 'hows', 'i', 'id', 'ill', 'im', 'ive', 'if', 'in', 'into', 'is', 'isnt', 'it', 'its', 'itself', 'lets', 'me', 'more', 'most', 'mustnt', 'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', 'shant', 'she', 'shed', 'shell', 'shes', 'should', 'shouldnt', 'so', 'some', 'such', 'than', 'that', 'thats', 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'theres', 'these', 'they', 'theyd', 'theyll', 'theyre', 'theyve', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very', 'was', 'wasnt', 'we', 'wed', 'well', 'were', 'weve', 'werent', 'what', 'whats', 'when', 'whens', 'where', 'wheres', 'which', 'while', 'who', 'whos', 'whom', 'why', 'whys', 'with', 'wont', 'would', 'wouldnt', 'you', 'youd', 'youll', 'youre', 'youve', 'your', 'yours', 'yourself', 'yourselves', 'will', 'your', 'using', 'through', 'would', 'could', 'should', 'also'
+    ]);
     
-    messages.forEach(m => {
-      if (['moderator', 'ai', 'agent-whisper', 'moderator-whisper'].includes(m.role)) {
-        const content = m.content.toLowerCase();
-        const sentences = content.split(/[.!?\n]/);
-        sentences.forEach(s => {
-          if (factRegex.test(s)) {
-            const clean = s.replace(/fact\[\d+\]/g, '').replace(/[^a-z\s]/g, ' ');
-            const tokens = Array.from(new Set(clean.split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w))));
-            
-            tokens.forEach((w, i) => {
-              words[w] = (words[w] || 0) + 1;
-              tokens.slice(i + 1).forEach(w2 => {
-                const [a, b] = [w, w2].sort();
-                if (!cooccurrence[a]) cooccurrence[a] = {};
-                cooccurrence[a][b] = (cooccurrence[a][b] || 0) + 1;
-              });
+    // Keywords from MCP calls / tool execution / system logs to exclude
+    const mcpKeywords = new Set([
+      'mcp', 'call', 'response', 'tool', 'exec', 'shell', 'run', 'args', 'stdout', 'stderr', 'status', 'result', 'npm', 'node', 'vite', 'sqlite', 'database', 'query', 'sql', 'select', 'table', 'error', 'failed', 'success', 'pending', 'method', 'params', 'project', 'code', 'file', 'directory', 'path', 'folder', 'line', 'lines', 'index', 'import', 'export', 'const', 'function', 'return', 'class', 'type', 'fact', 'facts', 'savant', 'quorum', 'agent', 'moderator', 'engineer', 'architect', 'security', 'system', 'confirmed', 'verified', 'analysis', 'confirmed via'
+    ]);
+
+    const extractFromText = (text: string, forceFactOnly: boolean, senderAgent: string) => {
+      if (!text) return;
+      const content = text.toLowerCase();
+      
+      const lines = content.split('\n');
+      const cleanLines = lines.filter(line => {
+        const l = line.trim();
+        return !l.startsWith('{') && !l.startsWith('}') && !l.includes('"toolName"') && !l.includes('"commandLine"') && !l.startsWith('➜') && !l.startsWith('>');
+      });
+      
+      const cleanContent = cleanLines.join(' ');
+      const sentences = cleanContent.split(/[.!?]/);
+      
+      sentences.forEach(s => {
+        if (!forceFactOnly || factRegex.test(s)) {
+          const clean = s.replace(/fact\s*\[\d+\]|\[fact:\d+\]/gi, '').replace(/[^a-z\s]/g, ' ');
+          const tokens = Array.from(new Set(clean.split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w) && !mcpKeywords.has(w))));
+          
+          tokens.forEach((w, i) => {
+            addNode(w, 'concept', 1);
+            addEdge(senderAgent, w, 'semantic', 1);
+            tokens.slice(i + 1).forEach(w2 => {
+              addEdge(w, w2, 'semantic', 0.5);
             });
-          }
+          });
+        }
+      });
+    };
+
+    // Whispers list
+    const allWhispers: { id: string; from: string; to: string; content: string; timestamp: Date | number }[] = [];
+    messages.forEach((m, idx) => {
+      if (m.role === 'agent-whisper' && m.from) {
+        allWhispers.push({
+          id: m.id || `w-${idx}`,
+          from: m.from,
+          to: 'Moderator',
+          content: m.content,
+          timestamp: m.timestamp
+        });
+      } else if (m.role === 'moderator-whisper') {
+        allWhispers.push({
+          id: m.id || `w-${idx}`,
+          from: 'Moderator',
+          to: m.to || 'Swarm/User',
+          content: m.content,
+          timestamp: m.timestamp
         });
       }
     });
 
-    const nodes = Object.entries(words)
-      .map(([text, count]) => ({ text, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 30);
+    // Cross-checks list
+    const allCrosschecks: { from: string; target: string; feedback: string; timestamp: Date | number }[] = [];
+    messages.forEach((m) => {
+      const crossCheckMatch = m.content.match(/cross-check feedback on\s+(\w+):?\s*([\s\S]*)/i);
+      if (crossCheckMatch && m.from) {
+        allCrosschecks.push({
+          from: m.from,
+          target: crossCheckMatch[1],
+          feedback: crossCheckMatch[2]?.trim() || m.content,
+          timestamp: m.timestamp
+        });
+      }
+    });
 
-    const activeWords = new Set(nodes.map(n => n.text));
-    const edges: { source: string, target: string, weight: number }[] = [];
-    
-    Object.entries(cooccurrence).forEach(([a, targets]) => {
-      if (!activeWords.has(a)) return;
-      Object.entries(targets).forEach(([b, weight]) => {
-        if (!activeWords.has(b)) return;
-        edges.push({ source: a, target: b, weight });
+    // Forwards list
+    const allForwards: { from: string; to: string; content: string; trigger: string }[] = [];
+    const agentOutputs: Record<string, string> = {};
+    messages.forEach((m) => {
+      let sender = 'Moderator';
+      if (m.role === 'user') sender = 'YOU';
+      else if (m.role === 'agent-whisper' && m.from) sender = m.from;
+      else if (m.role === 'moderator-whisper') sender = 'Moderator';
+      else if (m.role === 'moderator') sender = 'Moderator';
+
+      if (m.role === 'agent-whisper' && m.from) {
+        agentOutputs[m.from] = m.content;
+      }
+
+      if (m.role === 'moderator-whisper') {
+        // Find who is engaged
+        const engaged: string[] = [];
+        agentsList.forEach(agent => {
+          if (agent !== 'Moderator' && agent !== 'YOU' && agent !== 'CrossCheck') {
+            const regex = new RegExp(`\\b${agent}\\b`, 'i');
+            if (m.content.match(regex)) {
+              engaged.push(agent);
+            }
+          }
+        });
+
+        if (engaged.length > 0) {
+          engaged.forEach(target => {
+            Object.entries(agentOutputs).forEach(([source, content]) => {
+              if (source !== target) {
+                allForwards.push({
+                  from: source,
+                  to: target,
+                  content: content,
+                  trigger: m.content
+                });
+              }
+            });
+          });
+        }
+      }
+    });
+
+    // Look at moderator thoughts for forwards
+    thinking.forEach(t => {
+      if (t.agent === 'Moderator') {
+        const relayMatch = t.thought.match(/(?:relaying|forwarding|passing|sending)\s+(\w+)(?:\'s)?\s+(?:to|feedback to|info to|analysis to)\s+(\w+)/i);
+        if (relayMatch) {
+          const from = relayMatch[1];
+          const to = relayMatch[2];
+          const fromName = agentsList.find(a => a.toLowerCase() === from.toLowerCase());
+          const toName = agentsList.find(a => a.toLowerCase() === to.toLowerCase());
+          if (fromName && toName) {
+            allForwards.push({
+              from: fromName,
+              to: toName,
+              content: agentOutputs[fromName] || `Context from ${fromName}`,
+              trigger: t.thought
+            });
+          }
+        }
+      }
+    });
+
+    // Facts list
+    const allFacts: { label: string; content: string; source: string; timestamp: Date | number }[] = [];
+    messages.forEach(m => {
+      const sender = m.role === 'user' ? 'YOU' : (m.role === 'agent-whisper' && m.from ? m.from : (m.role === 'moderator' || m.role === 'moderator-whisper' ? 'Moderator' : m.role));
+      const sentences = m.content.split(/[.!?\n]/);
+      sentences.forEach(s => {
+        const match = s.match(/fact\s*\[\d+\]|\[fact:\d+\]/i);
+        if (match) {
+          const label = match[0].toUpperCase().replace(/\s+/g, '');
+          if (!allFacts.some(f => f.label === label)) {
+            allFacts.push({
+              label,
+              content: s.trim(),
+              source: sender,
+              timestamp: m.timestamp
+            });
+          }
+        }
       });
     });
 
-    return { nodes, edges };
+    // 1. Process all messages (whispers, user queries, final reports) for Graph Nodes & Edges
+    messages.forEach(m => {
+      let sender = 'Moderator';
+      if (m.role === 'user') sender = 'YOU';
+      else if (m.role === 'agent-whisper' && m.from) sender = m.from;
+      else if (m.role === 'moderator-whisper') sender = 'Moderator';
+      else if (m.role === 'moderator') sender = 'Moderator';
+
+      addNode(sender, 'agent', 1);
+
+      // Check for whispers: who said what to moderator
+      if (m.role === 'agent-whisper' && m.from) {
+        addEdge(m.from, 'Moderator', 'communication', 1);
+      } else if (m.role === 'user') {
+        addEdge('YOU', 'Moderator', 'communication', 1);
+      }
+
+      // Check for cross-check messages
+      const crossCheckMatch = m.content.match(/cross-check feedback on\s+(\w+)/i);
+      if (crossCheckMatch) {
+        const targetAgent = crossCheckMatch[1];
+        addEdge(sender, targetAgent, 'crosscheck', 2);
+        addNode('CrossCheck', 'crosscheck', 1);
+        addEdge(sender, 'CrossCheck', 'crosscheck', 1);
+        addEdge(targetAgent, 'CrossCheck', 'crosscheck', 1);
+      }
+
+      // Check for forwards
+      if (sender === 'Moderator') {
+        agentsList.forEach(otherAgent => {
+          if (otherAgent !== 'Moderator' && otherAgent !== 'YOU' && otherAgent !== 'CrossCheck') {
+            if (m.content.includes(otherAgent)) {
+              addEdge('Moderator', otherAgent, 'communication', 1);
+              messages.filter(prev => prev.role === 'agent-whisper' && prev.from === otherAgent).forEach(() => {
+                addEdge(otherAgent, 'Moderator', 'communication', 1);
+              });
+            }
+          }
+        });
+      }
+
+      // Extract facts and concepts
+      const content = m.content.toLowerCase();
+      const factsFound = content.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi);
+      if (factsFound) {
+        factsFound.forEach(f => {
+          const factLabel = f.toUpperCase().replace(/\s+/g, '');
+          addNode(factLabel, 'fact', 2);
+          addEdge(sender, factLabel, 'semantic', 1.5);
+        });
+      }
+
+      const isUserOrWhisper = ['user', 'moderator-whisper', 'agent-whisper'].includes(m.role);
+      extractFromText(m.content, !isUserOrWhisper, sender);
+    });
+
+    // 2. Process all thinking traces (neural trace)
+    thinking.forEach(t => {
+      const agent = t.agent || 'Moderator';
+      addNode(agent, 'agent', 1);
+
+      // Check for forwards/communication in thoughts
+      if (t.thought.toLowerCase().includes('forward') || t.thought.toLowerCase().includes('relay')) {
+        agentsList.forEach(otherAgent => {
+          if (otherAgent !== agent && t.thought.includes(otherAgent)) {
+            addEdge(agent, otherAgent, 'communication', 1.5);
+          }
+        });
+      }
+
+      extractFromText(t.thought, false, agent);
+    });
+
+    // Build lists of nodes and edges
+    const sortedConcepts = Object.entries(words)
+      .filter(([_, data]) => data.type === 'concept')
+      .map(([text, data]) => ({ text, count: data.count, type: data.type as 'concept' }))
+      .sort((a, b) => b.count - a.count);
+
+    const selectedConcepts = sortedConcepts.slice(0, 20); // Top 20 concepts
+
+    const allFactsNodes = Object.entries(words)
+      .filter(([_, data]) => data.type === 'fact' || data.type === 'crosscheck')
+      .map(([text, data]) => ({ text, count: data.count, type: data.type as 'fact' | 'crosscheck' }));
+
+    const selectedConceptsAndFacts = [...selectedConcepts, ...allFactsNodes];
+    const selectedAgents = Object.entries(words)
+      .filter(([_, data]) => data.type === 'agent' && data.count > 0)
+      .map(([text, data]) => ({ text, count: data.count, type: data.type }));
+
+    const finalNodes = [...selectedAgents, ...selectedConceptsAndFacts];
+    const activeWords = new Set(finalNodes.map(n => n.text));
+
+    const finalEdges: { source: string; target: string; weight: number; type: 'communication' | 'semantic' | 'crosscheck' }[] = [];
+    Object.entries(cooccurrence).forEach(([a, targets]) => {
+      if (!activeWords.has(a)) return;
+      Object.entries(targets).forEach(([b, data]) => {
+        if (!activeWords.has(b)) return;
+        finalEdges.push({ source: a, target: b, weight: data.weight, type: data.type });
+      });
+    });
+
+    return { 
+      nodes: finalNodes, 
+      edges: finalEdges,
+      whispers: allWhispers,
+      forwards: allForwards,
+      crosschecks: allCrosschecks,
+      facts: allFacts
+    };
+  };
+
+  // 5. Agent Integrity & Topic Analysis (Hallucination & Diversion Diagnostics)
+  const getAgentStats = () => {
+    const stats: Record<string, {
+      totalMessages: number;
+      factsClaimed: number;
+      factsChecked: number;
+      factsVerifiedRight: number;
+      diversionsCount: number;
+    }> = {};
+
+    const getAgentName = (m: Message): string => {
+      let role = m.role;
+      if (role === 'agent-whisper' && m.from) return m.from;
+      if (role === 'moderator-whisper') return 'moderator';
+      if (role === 'whisper') return 'moderator';
+      if (role === 'user') return 'YOU';
+      return role;
+    };
+
+    const initStats = (name: string) => {
+      const k = name.toUpperCase();
+      if (!stats[k]) {
+        stats[k] = {
+          totalMessages: 0,
+          factsClaimed: 0,
+          factsChecked: 0,
+          factsVerifiedRight: 0,
+          diversionsCount: 0,
+        };
+      }
+      return k;
+    };
+
+    messages.forEach((m, idx) => {
+      const sender = getAgentName(m);
+      if (sender === 'SYSTEM' || sender === 'INTERNAL' || sender === 'ERROR') return;
+      const key = initStats(sender);
+      stats[key].totalMessages += 1;
+
+      // Count facts claimed
+      const factClaims = m.content.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi) || [];
+      stats[key].factsClaimed += factClaims.length;
+
+      // Count facts checked and verified right
+      const sentences = m.content.split(/[.!?\n]/);
+      sentences.forEach(sentence => {
+        const hasFact = /fact\s*\[\d+\]|\[fact:\d+\]/gi.test(sentence);
+        if (hasFact) {
+          const isCheck = /verify|check|confirm|validate|correct|true|accurate|match/i.test(sentence);
+          if (isCheck) {
+            stats[key].factsChecked += 1;
+            const isRight = !/not|fail|incorrect|wrong|hallucinat|false|discrepancy/i.test(sentence);
+            if (isRight) {
+              stats[key].factsVerifiedRight += 1;
+            }
+          }
+        }
+      });
+
+      // Detect diversions
+      const contentLower = m.content.toLowerCase();
+      const hasDiversionKeyword = /off-topic|tangent|divert|deviation|stray|unrelated|sidebar/i.test(contentLower);
+      if (hasDiversionKeyword) {
+        if ((sender === 'MODERATOR' || sender === 'YOU') && idx > 0) {
+          const prevMsg = messages[idx - 1];
+          const prevSender = getAgentName(prevMsg);
+          if (prevSender !== 'SYSTEM' && prevSender !== 'INTERNAL' && prevSender !== 'ERROR') {
+            const prevKey = initStats(prevSender);
+            stats[prevKey].diversionsCount += 1;
+          }
+        } else {
+          stats[key].diversionsCount += 1;
+        }
+      }
+    });
+
+    thinking.forEach(t => {
+      if (!t.agent) return;
+      const key = initStats(t.agent);
+      const thoughtLower = t.thought.toLowerCase();
+
+      const factMatches = t.thought.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi) || [];
+      if (factMatches.length > 0) {
+        const isCheck = /verify|check|confirm|validate|lookup|compare|query|match/i.test(thoughtLower);
+        if (isCheck) {
+          stats[key].factsChecked += factMatches.length;
+          const isRight = !/fail|incorrect|wrong|hallucinat|false|error|discrepancy/i.test(thoughtLower);
+          if (isRight) {
+            stats[key].factsVerifiedRight += factMatches.length;
+          }
+        }
+      }
+    });
+
+    return Object.entries(stats).map(([name, data]) => {
+      const onTopicPercentage = data.totalMessages > 0
+        ? Math.max(0, Math.min(100, Math.round((1 - (data.diversionsCount / data.totalMessages)) * 100)))
+        : 100;
+
+      return {
+        agent: name,
+        ...data,
+        onTopicPercentage,
+      };
+    });
+  };
+
+  const getTimelineData = () => {
+    if (messages.length === 0) return [{ idx: 1, length: 0, facts: 0 }];
+    return messages.map((m, idx) => ({
+      idx: idx + 1,
+      length: m.content.split(/\s+/).length,
+      facts: (m.content.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi) || []).length
+    }));
+  };
+
+  const getConsensusData = () => {
+    let agree = 0;
+    let disagree = 0;
+    messages.forEach(m => {
+      const content = m.content.toLowerCase();
+      const agreeMatches = content.match(/agree|correct|match|accurate|confirm|validate|support/gi) || [];
+      const disagreeMatches = content.match(/disagree|differ|conflict|contradict|incorrect|discrepancy|error|dispute/gi) || [];
+      agree += agreeMatches.length;
+      disagree += disagreeMatches.length;
+    });
+    const data = [];
+    if (agree > 0) data.push({ name: 'AGREEMENT', value: agree, color: 'var(--cp-green)' });
+    if (disagree > 0) data.push({ name: 'FRICTION', value: disagree, color: 'rgba(255, 0, 85, 1)' });
+    if (data.length === 0) {
+      data.push({ name: 'AGREEMENT', value: 1, color: 'var(--cp-green)' });
+    }
+    return data;
+  };
+
+  const getThoughtLatencyData = () => {
+    const counts: Record<string, { totalLen: number; count: number }> = {};
+    thinking.forEach(t => {
+      if (!t.agent) return;
+      const name = t.agent.toUpperCase();
+      if (!counts[name]) counts[name] = { totalLen: 0, count: 0 };
+      counts[name].totalLen += t.thought.length;
+      counts[name].count += 1;
+    });
+    const res = Object.entries(counts).map(([name, d]) => ({
+      name,
+      avgLength: Math.round(d.totalLen / d.count)
+    })).sort((a, b) => b.avgLength - a.avgLength);
+    return res.length > 0 ? res : [{ name: 'NONE', avgLength: 0 }];
+  };
+
+  const getComplexityData = () => {
+    const counts: Record<string, { words: number; msgs: number }> = {};
+    messages.forEach(m => {
+      let role: string = m.role;
+      if (role === 'agent-whisper' && m.from) role = m.from;
+      if (role === 'moderator-whisper') role = 'moderator';
+      if (role === 'whisper') role = 'moderator';
+      if (role === 'user') role = 'YOU';
+      if (role === 'system' || role === 'internal' || role === 'error') return;
+      
+      const name = role.toUpperCase();
+      if (!counts[name]) counts[name] = { words: 0, msgs: 0 };
+      counts[name].words += m.content.split(/\s+/).length;
+      counts[name].msgs += 1;
+    });
+    const res = Object.entries(counts).map(([name, d]) => ({
+      name,
+      avgWords: Math.round(d.words / d.msgs)
+    })).sort((a, b) => b.avgWords - a.avgWords);
+    return res.length > 0 ? res : [{ name: 'NONE', avgWords: 0 }];
+  };
+
+  const getMcpCallStats = () => {
+    const stats: Record<string, { server: string; tool: string; caller: string; count: number }> = {};
+
+    const getAgentName = (m: Message): string => {
+      let role = m.role;
+      if (role === 'agent-whisper' && m.from) return m.from;
+      if (role === 'moderator-whisper') return 'moderator';
+      if (role === 'whisper') return 'moderator';
+      if (role === 'user') return 'YOU';
+      return role;
+    };
+
+    const recordCall = (server: string, tool: string, caller: string) => {
+      const s = server.toLowerCase();
+      const t = tool.toLowerCase();
+      const c = caller.toUpperCase();
+      const key = `${s}|${t}|${c}`;
+      if (!stats[key]) {
+        stats[key] = {
+          server: s,
+          tool: t,
+          caller: c,
+          count: 0
+        };
+      }
+      stats[key].count += 1;
+    };
+
+    const toolsMap: Record<string, string[]> = {
+      'savant-abilities': ['resolve_abilities', 'validate_store', 'list_personas', 'list_rules', 'list_policies', 'list_repos', 'read_asset', 'learn'],
+      'savant-workspace': ['list_workspaces', 'create_workspace', 'get_workspace', 'list_tasks', 'create_task', 'create_jira_ticket']
+    };
+
+    thinking.forEach(t => {
+      if (!t.agent) return;
+      const caller = t.agent;
+      const text = t.thought.toLowerCase();
+
+      const regex = /(savant-abilities|savant-workspace)[\/\s\->:]+([a-z_0-9]+)/gi;
+      let match;
+      let found = false;
+      while ((match = regex.exec(text)) !== null) {
+        const server = match[1].toLowerCase();
+        const tool = match[2].toLowerCase();
+        if (toolsMap[server] && toolsMap[server].includes(tool)) {
+          recordCall(server, tool, caller);
+          found = true;
+        }
+      }
+
+      if (!found) {
+        if (text.includes('resolving_abilities') || text.includes('abilities_resolved') || text.includes('resolve_abilities')) {
+          recordCall('savant-abilities', 'resolve_abilities', caller);
+        } else if (text.includes('validate_store')) {
+          recordCall('savant-abilities', 'validate_store', caller);
+        } else if (text.includes('list_personas')) {
+          recordCall('savant-abilities', 'list_personas', caller);
+        } else if (text.includes('list_rules')) {
+          recordCall('savant-abilities', 'list_rules', caller);
+        } else if (text.includes('list_policies')) {
+          recordCall('savant-abilities', 'list_policies', caller);
+        } else if (text.includes('list_repos')) {
+          recordCall('savant-abilities', 'list_repos', caller);
+        } else if (text.includes('read_asset')) {
+          recordCall('savant-abilities', 'read_asset', caller);
+        } else if (text.includes('learn')) {
+          recordCall('savant-abilities', 'learn', caller);
+        } else if (text.includes('list_workspaces')) {
+          recordCall('savant-workspace', 'list_workspaces', caller);
+        } else if (text.includes('create_workspace')) {
+          recordCall('savant-workspace', 'create_workspace', caller);
+        } else if (text.includes('get_workspace')) {
+          recordCall('savant-workspace', 'get_workspace', caller);
+        } else if (text.includes('list_tasks')) {
+          recordCall('savant-workspace', 'list_tasks', caller);
+        } else if (text.includes('create_task')) {
+          recordCall('savant-workspace', 'create_task', caller);
+        } else if (text.includes('create_jira_ticket')) {
+          recordCall('savant-workspace', 'create_jira_ticket', caller);
+        }
+      }
+    });
+
+    messages.forEach(m => {
+      const caller = getAgentName(m);
+      if (caller === 'SYSTEM' || caller === 'INTERNAL' || caller === 'ERROR') return;
+      const text = m.content.toLowerCase();
+
+      const regex = /(savant-abilities|savant-workspace)[\/\s\->:]+([a-z_0-9]+)/gi;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const server = match[1].toLowerCase();
+        const tool = match[2].toLowerCase();
+        if (toolsMap[server] && toolsMap[server].includes(tool)) {
+          recordCall(server, tool, caller);
+        }
+      }
+    });
+
+    return Object.values(stats).sort((a, b) => b.count - a.count);
   };
 
   const engagementData = getMessageEngagement();
   const ratioData = getWhisperRatio();
   const mermaidData = getMermaidUsage();
   const factNetwork = getFactNetwork();
+
+  const agentStats = getAgentStats();
+  const totalDiversions = agentStats.reduce((sum, a) => sum + a.diversionsCount, 0);
+  const mcpCallStats = getMcpCallStats();
+  const timelineData = getTimelineData();
+  const consensusData = getConsensusData();
+  const thoughtLatencyData = getThoughtLatencyData();
+  const complexityData = getComplexityData();
+  const providerStats = getProviderLeaderboard();
+  const cognitiveROI = getCognitiveROI();
+
+  const sortedByFacts = [...agentStats].sort((a, b) => b.factsClaimed - a.factsClaimed);
+  const mostFactsAgent = sortedByFacts.length > 0 && sortedByFacts[0].factsClaimed > 0 ? sortedByFacts[0] : null;
+  const leastFactsAgent = sortedByFacts.length > 0 ? sortedByFacts[sortedByFacts.length - 1] : null;
+
+  const sortedByChecksRight = [...agentStats].sort((a, b) => {
+    if (b.factsVerifiedRight !== a.factsVerifiedRight) {
+      return b.factsVerifiedRight - a.factsVerifiedRight;
+    }
+    return b.factsChecked - a.factsChecked;
+  });
+  const factCheckChampion = sortedByChecksRight.length > 0 && sortedByChecksRight[0].factsVerifiedRight > 0 ? sortedByChecksRight[0] : null;
+
+  const sortedByOnTopic = [...agentStats].sort((a, b) => b.onTopicPercentage - a.onTopicPercentage);
+  const mostOnTopicAgent = sortedByOnTopic.length > 0 ? sortedByOnTopic[0] : null;
+
+  const getStreamGraphData = () => {
+    if (messages.length === 0) return [{ idx: 1 }];
+    const agents = Array.from(new Set(agentStats.map(a => a.agent)));
+    return messages.map((m, idx) => {
+      const point: Record<string, any> = { idx: idx + 1 };
+      agents.forEach(agent => {
+        point[agent] = 0;
+      });
+      let sender = 'MODERATOR';
+      if (m.role === 'agent-whisper' && m.from) sender = m.from;
+      else if (m.role === 'user') sender = 'YOU';
+      else if (m.role === 'moderator') sender = 'MODERATOR';
+      
+      point[sender] = m.content.split(/\s+/).length;
+      return point;
+    });
+  };
+
+  const getRadialBarData = () => {
+    const counts: Record<string, number> = {};
+    thinking.forEach(t => {
+      if (!t.agent) return;
+      const name = t.agent.toUpperCase();
+      counts[name] = (counts[name] || 0) + t.thought.length;
+    });
+    const colors = ['#b624ff', '#00e5ff', '#00e676', '#ffeb3b', '#ff1744', '#ff9100'];
+    const data = Object.entries(counts).map(([name, value], idx) => ({
+      name,
+      value,
+      fill: colors[idx % colors.length]
+    })).sort((a, b) => b.value - a.value);
+    return data.length > 0 ? data : [{ name: 'NONE', value: 0, fill: '#8884d8' }];
+  };
+
+  const getStackedBarData = () => {
+    const data = agentStats.map(item => {
+      const verified = item.factsVerifiedRight;
+      const unverifiedChecks = Math.max(0, item.factsChecked - item.factsVerifiedRight);
+      const uncheckedClaims = Math.max(0, item.factsClaimed - item.factsChecked);
+      return {
+        name: item.agent.substring(0, 8).toUpperCase(),
+        verified,
+        unverifiedChecks,
+        uncheckedClaims
+      };
+    });
+    return data.length > 0 ? data : [{ name: 'NONE', verified: 0, unverifiedChecks: 0, uncheckedClaims: 0 }];
+  };
+
+  const getTreemapData = () => {
+    if (mcpCallStats.length === 0) {
+      return [{ name: 'NO CALLS', size: 1 }];
+    }
+    return mcpCallStats.map(item => ({
+      name: `${item.server.replace('savant-', '')}:${item.tool}`,
+      size: item.count
+    }));
+  };
+
+  const streamGraphData = getStreamGraphData();
+  const radialBarData = getRadialBarData();
+  const stackedBarData = getStackedBarData();
+  const treemapData = getTreemapData();
+  function getProviderLeaderboard() {
+    const stats: Record<string, {
+      provider: string;
+      model: string;
+      messagesCount: number;
+      factsClaimed: number;
+      factsChecked: number;
+      factsVerifiedRight: number;
+      diversionsCount: number;
+    }> = {};
+
+    const getAgentName = (m: Message): string => {
+      let role = m.role;
+      if (role === 'agent-whisper' && m.from) return m.from;
+      if (role === 'moderator-whisper') return 'moderator';
+      if (role === 'whisper') return 'moderator';
+      if (role === 'user') return 'YOU';
+      return role;
+    };
+
+    const chain = settings?.["provider:chain"] || [
+      { provider: 'gemini', model: 'gemini-2.0-flash' },
+      { provider: 'claude', model: 'haiku' }
+    ];
+    const defaultProvider = chain[0]?.provider || 'gemini';
+    const defaultModel = chain[0]?.model || 'gemini-2.0-flash';
+
+    messages.forEach((m, idx) => {
+      const sender = getAgentName(m);
+      if (sender === 'SYSTEM' || sender === 'INTERNAL' || sender === 'ERROR' || sender === 'YOU') return;
+
+      const provider = m.provider || defaultProvider;
+      const model = m.model || defaultModel;
+      const key = `${provider}|${model}`;
+
+      if (!stats[key]) {
+        stats[key] = {
+          provider,
+          model,
+          messagesCount: 0,
+          factsClaimed: 0,
+          factsChecked: 0,
+          factsVerifiedRight: 0,
+          diversionsCount: 0
+        };
+      }
+
+      stats[key].messagesCount += 1;
+
+      // Count facts claimed
+      const factClaims = m.content.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi) || [];
+      stats[key].factsClaimed += factClaims.length;
+
+      // Count facts checked and verified right
+      const sentences = m.content.split(/[.!?\n]/);
+      sentences.forEach(sentence => {
+        const hasFact = /fact\s*\[\d+\]|\[fact:\d+\]/gi.test(sentence);
+        if (hasFact) {
+          const isCheck = /verify|check|confirm|validate|correct|true|accurate|match/i.test(sentence);
+          if (isCheck) {
+            stats[key].factsChecked += 1;
+            const isRight = !/not|fail|incorrect|wrong|hallucinat|false|discrepancy/i.test(sentence);
+            if (isRight) {
+              stats[key].factsVerifiedRight += 1;
+            }
+          }
+        }
+      });
+
+      // Count diversions
+      const contentLower = m.content.toLowerCase();
+      const hasDiversion = /off-topic|tangent|divert|deviation|stray|unrelated|sidebar/i.test(contentLower);
+      if (hasDiversion) {
+        stats[key].diversionsCount += 1;
+      }
+    });
+
+    return Object.values(stats).map(d => {
+      const accuracyRate = d.factsChecked > 0 ? Math.round((d.factsVerifiedRight / d.factsChecked) * 100) : 100;
+      const efficiencyScore = d.messagesCount > 0 ? (d.factsClaimed / d.messagesCount).toFixed(1) : '0';
+      return {
+        ...d,
+        accuracyRate,
+        efficiencyScore
+      };
+    }).sort((a, b) => b.accuracyRate - a.accuracyRate || parseFloat(b.efficiencyScore) - parseFloat(a.efficiencyScore));
+  };
+
+  function getCognitiveROI() {
+    let totalChars = 0;
+    messages.forEach(m => totalChars += m.content.length);
+    thinking.forEach(t => totalChars += t.thought.length);
+    const estTokens = Math.round(totalChars / 4);
+
+    const totalFacts = agentStats.reduce((sum, a) => sum + a.factsClaimed, 0);
+    const tokenROI = estTokens > 0 ? ((totalFacts / estTokens) * 1000).toFixed(2) : '0.00';
+
+    const loopOverhead = thinking.filter(t => t.type === 'redecision' || t.type === 'loop_check' || t.type === 'timeout').length;
+
+    const consensusArr = consensusData || [];
+    const agreeObj = consensusArr.find(c => c.name === 'AGREEMENT');
+    const frictionObj = consensusArr.find(c => c.name === 'FRICTION');
+    const agreeVal = agreeObj ? agreeObj.value : 0;
+    const frictionVal = frictionObj ? frictionObj.value : 0;
+    const consensusRatio = (agreeVal + frictionVal) > 0 ? Math.round((agreeVal / (agreeVal + frictionVal)) * 100) : 100;
+
+    let productivityRating = 100;
+    productivityRating -= loopOverhead * 10;
+    productivityRating -= totalDiversions * 15;
+    productivityRating = Math.max(10, Math.min(100, productivityRating));
+    if (totalFacts === 0 && messages.length > 5) {
+      productivityRating = Math.round(productivityRating * 0.5);
+    }
+
+    return {
+      estTokens,
+      tokenROI,
+      loopOverhead,
+      consensusRatio,
+      productivityRating
+    };
+  };
+
+  // Base stats are declared at the top to resolve TDZ issues
 
   function handleTabClick(tabId: TabId) {
     setActiveTab(prev => prev === tabId ? null : tabId);
@@ -205,19 +961,44 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
   }
 
   function addUploadedFiles(files: FileList | File[]) {
-    const names = Array.from(files).map(file => file.name);
-    setUploadedFiles(prev => [...prev, ...names]);
+    Array.from(files).forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        window.dispatchEvent(new CustomEvent('toast', { detail: `File ${file.name} is too large (max 5MB)` }));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const rawContent = event.target?.result;
+        if (typeof rawContent === 'string') {
+          const content = rawContent.replace(/\0/g, '');
+          if (onUploadFile) {
+            try {
+              await onUploadFile(file.name, content);
+            } catch (err: any) {
+              window.dispatchEvent(new CustomEvent('toast', { detail: `Failed to upload ${file.name}: ${err.message}` }));
+            }
+          }
+        }
+      };
+      reader.onerror = () => {
+        window.dispatchEvent(new CustomEvent('toast', { detail: `Failed to read file ${file.name}` }));
+      };
+      reader.readAsText(file);
+    });
   }
 
   function handleFileDrop(e: React.DragEvent) {
     e.preventDefault();
-    addUploadedFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addUploadedFiles(e.dataTransfer.files);
+    }
   }
 
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
       addUploadedFiles(e.target.files);
     }
+    e.target.value = "";
   }
 
   const drawerOpen = activeTab !== null;
@@ -259,120 +1040,451 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
 
               <div className="flex-1 overflow-hidden">
                 {activeTab === "pulse" && (
-                  <div className="p-3 h-full flex flex-col space-y-4">
-                    {/* Row 1: First 3 Visualizations */}
-                    <div className="grid grid-cols-3 gap-3 shrink-0">
-                      {/* 1. Engagement */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-2">
-                        <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-2 opacity-60">
-                          // engagement
+                  <div className="p-3 h-full overflow-y-auto space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}>
+                    
+                    {/* 1. CHAT VISUALIZATIONS CONTAINER (1 per row at top) */}
+                    <section className="bg-black/20 border border-[var(--cp-border)] p-3">
+                      <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                        <Activity size={11} className="text-[var(--cp-cyan)] animate-pulse" />
+                        // CHAT_INSIGHTS_VISUALIZATIONS
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Row 1: The 4 requested charts in a single row (4 per row) */}
+                        <div className="grid grid-cols-4 gap-3">
+                          {/* Visual 1: Engagement */}
+                          <div className="bg-black/40 border border-white/5 p-2">
+                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                              // engagement_messages
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <BarChart data={engagementData} layout="vertical">
+                                <XAxis type="number" hide />
+                                <YAxis dataKey="name" type="category" hide />
+                                <Bar dataKey="value" fill="var(--cp-cyan)" radius={[0, 1, 1, 0]}>
+                                  {engagementData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.name === 'YOU' ? 'var(--cp-cyan)' : 'rgba(0,229,255,0.4)'} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 2: Stream Graph (Multi-Agent Chat Flow) */}
+                          <div className="bg-black/40 border border-white/5 p-2">
+                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                              // chat_flow_stream_graph
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <AreaChart data={streamGraphData}>
+                                <XAxis dataKey="idx" hide />
+                                <RechartsTooltip 
+                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
+                                />
+                                {Array.from(new Set(agentStats.map(a => a.agent))).map((agent, index) => {
+                                  const colors = ['#00e5ff', '#b624ff', '#00e676', '#ffeb3b', '#ff1744', '#ff9100'];
+                                  return (
+                                    <Area 
+                                      key={agent}
+                                      type="monotone" 
+                                      dataKey={agent} 
+                                      stackId="1" 
+                                      stroke={colors[index % colors.length]} 
+                                      fill={colors[index % colors.length]} 
+                                      opacity={0.6}
+                                    />
+                                  );
+                                })}
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 3: Consensus Ratio */}
+                          <div className="bg-black/40 border border-white/5 p-2 flex flex-col items-center justify-center">
+                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1 opacity-60 w-full">
+                              // consensus_balance
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <PieChart>
+                                <Pie
+                                  data={consensusData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={10}
+                                  outerRadius={18}
+                                  paddingAngle={2}
+                                  dataKey="value"
+                                >
+                                  {consensusData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 4: Factual Stacked Bar */}
+                          <div className="bg-black/40 border border-white/5 p-2">
+                            <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                              // factual_distribution_stack
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <BarChart data={stackedBarData}>
+                                <XAxis dataKey="name" hide />
+                                <RechartsTooltip 
+                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
+                                />
+                                <Bar dataKey="verified" stackId="a" fill="var(--cp-green)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="unverifiedChecks" stackId="a" fill="rgba(255, 0, 85, 0.8)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="uncheckedClaims" stackId="a" fill="var(--cp-cyan)" radius={[1, 1, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
-                        <ResponsiveContainer width="100%" height={80}>
-                          <BarChart data={engagementData} layout="vertical">
-                            <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" hide />
-                            <RechartsTooltip 
-                              contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
-                              itemStyle={{ color: 'var(--cp-cyan)' }}
-                            />
-                            <Bar dataKey="value" fill="var(--cp-cyan)" radius={[0, 1, 1, 0]}>
-                              {engagementData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.name === 'YOU' ? 'var(--cp-cyan)' : 'rgba(0,229,255,0.4)'} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
+
+                        {/* Row 2: Remaining 3 charts (3 per row) */}
+                        <div className="grid grid-cols-3 gap-3">
+                          {/* Visual 5: Radial Thought Depth */}
+                          <div className="bg-black/40 border border-white/5 p-2 flex flex-col items-center justify-center">
+                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1 opacity-60 w-full">
+                              // radial_thought_depth
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <RadialBarChart 
+                                cx="50%" 
+                                cy="50%" 
+                                innerRadius="30%" 
+                                outerRadius="100%" 
+                                barSize={4} 
+                                data={radialBarData}
+                                startAngle={180}
+                                endAngle={0}
+                              >
+                                <RadialBar
+                                  background
+                                  dataKey="value"
+                                />
+                              </RadialBarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 6: Treemap (MCP Distribution) */}
+                          <div className="bg-black/40 border border-white/5 p-2">
+                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                              // mcp_distribution_treemap
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <Treemap
+                                data={treemapData}
+                                dataKey="size"
+                                stroke="rgba(0,0,0,0.4)"
+                                fill="var(--cp-purple)"
+                              />
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 7: Visuals (Mermaid Usage) */}
+                          <div className="bg-black/40 border border-white/5 p-2">
+                            <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                              // visual_renderings_mermaid
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <BarChart data={mermaidData}>
+                                <XAxis dataKey="name" hide />
+                                <RechartsTooltip 
+                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
+                                  itemStyle={{ color: 'var(--cp-yellow)' }}
+                                />
+                                <Bar dataKey="value" fill="var(--cp-yellow)" radius={[1, 1, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* 2. DIAGNOSTICS GRIDS (3 per row - most of them) */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Factual Integrity & Hallucination Diagnostics */}
+                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
+                        <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                          <Zap size={11} className="text-[var(--cp-green)] animate-pulse" />
+                          // FACTUAL_INTEGRITY_DIAGNOSTICS
+                        </div>
+                        
+                        {/* High-level facts summaries */}
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-black/40 border border-white/5 p-2 text-center">
+                            <div className="text-[8px] opacity-40 uppercase">Most Facts</div>
+                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                              {mostFactsAgent ? `${mostFactsAgent.agent} (${mostFactsAgent.factsClaimed})` : "N/A"}
+                            </div>
+                          </div>
+                          <div className="bg-black/40 border border-white/5 p-2 text-center">
+                            <div className="text-[8px] opacity-40 uppercase">Least Facts</div>
+                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                              {leastFactsAgent ? `${leastFactsAgent.agent} (${leastFactsAgent.factsClaimed})` : "N/A"}
+                            </div>
+                          </div>
+                          <div className="bg-black/40 border border-white/5 p-2 text-center">
+                            <div className="text-[8px] opacity-40 uppercase">Champion</div>
+                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1" title={factCheckChampion ? `Checked ${factCheckChampion.factsChecked}, Verified ${factCheckChampion.factsVerifiedRight} right` : ""}>
+                              {factCheckChampion ? `${factCheckChampion.agent} (${factCheckChampion.factsVerifiedRight}✓)` : "N/A"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Details table/list */}
+                        <div className="space-y-1.5">
+                          <div className="grid grid-cols-4 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                            <span>Agent</span>
+                            <span className="text-right">Claims</span>
+                            <span className="text-right">Checks</span>
+                            <span className="text-right">Right</span>
+                          </div>
+                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          {agentStats.length === 0 ? (
+                            <div className="text-center text-[10px] opacity-30 py-2">No data.</div>
+                          ) : (
+                            agentStats.map((item, idx) => (
+                              <div key={idx} className="grid grid-cols-4 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="truncate font-medium">{item.agent}</span>
+                                <span className="text-right text-white/80">{item.factsClaimed}</span>
+                                <span className="text-right text-white/80">{item.factsChecked}</span>
+                                <span className="text-right text-[var(--cp-green)] font-bold">{item.factsVerifiedRight}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </section>
 
-                      {/* 2. Research Depth */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-2 flex flex-col items-center justify-center">
-                        <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1 opacity-60 w-full">
-                          // depth
+                      {/* Topic Drift & Diversion Analysis */}
+                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
+                        <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                          <GitBranch size={11} className="text-[var(--cp-yellow)]" />
+                          // TOPIC_DRIFT_ANALYSIS
                         </div>
-                        <ResponsiveContainer width="100%" height={80}>
-                          <PieChart>
-                            <Pie
-                              data={ratioData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={15}
-                              outerRadius={25}
-                              paddingAngle={2}
-                              dataKey="value"
-                            >
-                              {ratioData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
+
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="bg-black/40 border border-white/5 p-2 text-center">
+                            <div className="text-[8px] opacity-40 uppercase">Most On-Topic</div>
+                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                              {mostOnTopicAgent ? `${mostOnTopicAgent.agent} (${mostOnTopicAgent.onTopicPercentage}%)` : "N/A"}
+                            </div>
+                          </div>
+                          <div className="bg-black/40 border border-white/5 p-2 text-center">
+                            <div className="text-[8px] opacity-40 uppercase">Diversions</div>
+                            <div style={{ color: "rgba(255, 0, 85, 1)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                              {totalDiversions} times
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                            <span className="col-span-4">Agent</span>
+                            <span className="col-span-5 text-center">On-Topic</span>
+                            <span className="col-span-3 text-right">Divs</span>
+                          </div>
+                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          {agentStats.length === 0 ? (
+                            <div className="text-center text-[10px] opacity-30 py-2">No data.</div>
+                          ) : (
+                            agentStats.map((item, idx) => (
+                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-yellow)" }} className="col-span-4 truncate font-medium">{item.agent}</span>
+                                <div className="col-span-5 px-2 flex items-center gap-1.5">
+                                  <div className="flex-1 bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/10">
+                                    <div 
+                                      style={{ 
+                                        width: `${item.onTopicPercentage}%`,
+                                        background: item.onTopicPercentage > 80 ? 'var(--cp-green)' : item.onTopicPercentage > 50 ? 'var(--cp-yellow)' : 'rgba(255, 0, 85, 1)'
+                                      }} 
+                                      className="h-full rounded-full"
+                                    />
+                                  </div>
+                                  <span className="text-[8px] min-w-[20px] text-right font-bold">{item.onTopicPercentage}%</span>
+                                </div>
+                                <span className={`col-span-3 text-right font-bold ${item.diversionsCount > 0 ? 'text-[rgba(255,0,85,1)]' : 'text-white/40'}`}>
+                                  {item.diversionsCount}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </section>
 
-                      {/* 3. Mermaid Usage */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-2">
-                        <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-2 opacity-60">
-                          // visuals
+                      {/* COGNITIVE ROI & EFFICIENCY DIAGNOSTICS */}
+                      <section className="bg-black/20 border border-[var(--cp-border)] p-3 flex flex-col justify-between">
+                        <div>
+                          <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                            <Timer size={11} className="text-[var(--cp-cyan)]" />
+                            // COGNITIVE_ROI_DIAGNOSTICS
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
+                              <div className="text-[7px] opacity-40 uppercase">Est. Tokens</div>
+                              <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                                {cognitiveROI.estTokens}
+                              </div>
+                            </div>
+                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
+                              <div className="text-[7px] opacity-40 uppercase">Token ROI</div>
+                              <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1" title="Facts per 1,000 tokens">
+                                {cognitiveROI.tokenROI} <span className="text-[7px] opacity-45">F/1K</span>
+                              </div>
+                            </div>
+                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
+                              <div className="text-[7px] opacity-40 uppercase">Loop Overhead</div>
+                              <div style={{ color: cognitiveROI.loopOverhead > 2 ? "rgba(255, 0, 85, 1)" : "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                                {cognitiveROI.loopOverhead} cycles
+                              </div>
+                            </div>
+                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
+                              <div className="text-[7px] opacity-40 uppercase">Productivity</div>
+                              <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                                {cognitiveROI.productivityRating}%
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <ResponsiveContainer width="100%" height={80}>
-                          <BarChart data={mermaidData}>
-                            <XAxis dataKey="name" hide />
-                            <Bar dataKey="value" fill="var(--cp-yellow)" radius={[1, 1, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
+
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex justify-between items-center opacity-70">
+                            <span>Consensus Ratio:</span>
+                            <span className="font-bold text-[var(--cp-cyan)]">{cognitiveROI.consensusRatio}%</span>
+                          </div>
+                          <div className="flex justify-between items-center opacity-70">
+                            <span>Factual Density:</span>
+                            <span className="font-bold text-[var(--cp-green)]">
+                              {(messages.length > 0 ? (agentStats.reduce((sum, a) => sum + a.factsClaimed, 0) / messages.length).toFixed(2) : "0.00")}
+                            </span>
+                          </div>
+                          {cognitiveROI.loopOverhead > 2 && (
+                            <div className="text-[8px] text-[rgba(255,0,85,0.85)] flex items-center gap-1 mt-1 font-bold animate-pulse">
+                              <AlertTriangle size={9} />
+                              WARNING: High loop overhead.
+                            </div>
+                          )}
+                        </div>
+                      </section>
+
+                      {/* MODEL PROVIDER PERFORMANCE LEADERBOARD */}
+                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
+                        <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                          <ListChecks size={11} className="text-[var(--cp-yellow)]" />
+                          // MODEL_PROVIDER_LEADERBOARD
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                            <span className="col-span-4">Provider/Model</span>
+                            <span className="col-span-2 text-right">Msgs</span>
+                            <span className="col-span-2 text-right">Facts</span>
+                            <span className="col-span-2 text-right">Acc</span>
+                            <span className="col-span-2 text-right">Dens</span>
+                          </div>
+                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          {providerStats.length === 0 ? (
+                            <div className="text-center text-[10px] opacity-30 py-2">No stats found.</div>
+                          ) : (
+                            providerStats.map((item, idx) => (
+                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
+                                <div className="col-span-4 truncate flex flex-col">
+                                  <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="font-medium truncate">{item.provider}</span>
+                                  <span className="text-[7px] text-white/40 truncate">{item.model}</span>
+                                </div>
+                                <span className="col-span-2 text-right text-white/80">{item.messagesCount}</span>
+                                <span className="col-span-2 text-right text-white/80">{item.factsClaimed}</span>
+                                <span className="col-span-2 text-right text-[var(--cp-green)] font-bold">{item.accuracyRate}%</span>
+                                <span className="col-span-2 text-right text-[var(--cp-yellow)] font-bold">{item.efficiencyScore} F/M</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </section>
+
+                      {/* MCP INTEGRATION METRICS (Spans 2 columns to complete the 3-column row) */}
+                      <section className="bg-black/20 border border-[var(--cp-border)] p-3 col-span-2">
+                        <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
+                          <Cpu size={11} className="text-[var(--cp-purple)]" />
+                          // MCP_INTEGRATION_METRICS
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                            <span className="col-span-4">MCP Server</span>
+                            <span className="col-span-4">Tool</span>
+                            <span className="col-span-3">Caller</span>
+                            <span className="col-span-1 text-right">Calls</span>
+                          </div>
+                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          {mcpCallStats.length === 0 ? (
+                            <div className="text-center text-[10px] opacity-30 py-2">No MCP calls.</div>
+                          ) : (
+                            mcpCallStats.map((item, idx) => (
+                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-purple)" }} className="col-span-4 truncate font-medium">{item.server}</span>
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="col-span-4 truncate font-medium">{item.tool}</span>
+                                <span className="col-span-3 truncate text-white/80">{item.caller}</span>
+                                <span className="col-span-1 text-right text-[var(--cp-yellow)] font-bold">{item.count}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </section>
                     </div>
 
-                    {/* Row 2: Fact Network (Full remaining height) */}
-                    <section className="flex-1 min-h-0 flex flex-col">
+                    {/* 3. NEURAL FACT INDEX / WORD CLOUD (1 per row at bottom) */}
+                    <section className="bg-black/20 border border-[var(--cp-border)] p-3">
                       <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-2 opacity-60">
-                        // neural_fact_index
+                        // NEURAL_FACT_INDEX
                       </div>
-                      <div className="flex-1 border border-[var(--cp-border)] bg-black/40 relative overflow-hidden">
+                      <div className="h-[380px] border border-white/5 bg-black/40 relative overflow-hidden">
                         <NeuralFactNetwork data={factNetwork} />
                       </div>
+                      <div className="flex justify-center gap-4 mt-2 opacity-40 hover:opacity-100 transition-opacity">
+                        <span style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px]">
+                          SCROLL TO ZOOM · DRAG TO PAN
+                        </span>
+                      </div>
                     </section>
+
                   </div>
                 )}
 
                 {activeTab === "trace" && (
-                  <div className="p-2 space-y-2 h-full overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}>
+                  <div className="trace-viewport">
                     {thinking.map(t => {
                       const agentColor = getAgentColor(t.agent);
                       return (
                         <div
                           key={t.id}
-                          style={{
-                            background: "var(--cp-bg-2)",
-                            border: "1px solid var(--cp-border)",
-                            borderLeft: `2px solid ${agentColor}`,
-                            fontFamily: "'Share Tech Mono', monospace",
-                          }}
-                          className="p-2 group hover:border-[rgba(0,229,255,0.3)] transition-colors"
+                          style={{ borderLeft: `2px solid ${agentColor}` }}
+                          className="trace-card"
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <span style={{ color: agentColor }} className="text-[9px] font-bold">
+                          <div className="trace-card-header">
+                            <span style={{ color: agentColor }} className="trace-agent-name">
                               {t.agent.toUpperCase()}
                             </span>
-                            <div className="flex items-center gap-1.5">
+                            <div className="trace-meta-info">
                               {getThinkingIcon(t.type, agentColor)}
-                              <span className="text-[8px] opacity-30">
+                              <span className="trace-timestamp">
                                 {new Date(t.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                               </span>
                             </div>
                           </div>
-                          <div
-                            style={{ color: "var(--foreground)", fontFamily: "'Rajdhani', sans-serif" }}
-                            className="text-[10px] leading-relaxed opacity-70 group-hover:opacity-100 transition-opacity whitespace-pre-wrap break-words"
-                          >
+                          <div className="trace-thought-text">
                             {t.thought}
                           </div>
                         </div>
                       );
                     })}
                     {thinking.length === 0 && (
-                      <div className="h-full flex flex-col items-center justify-center opacity-10 mt-20">
+                      <div className="trace-empty-state">
                         <Zap size={32} />
-                        <span className="text-[10px] mt-2 uppercase tracking-[0.2em]">idle_state</span>
+                        <span className="trace-empty-text">idle_state</span>
                       </div>
                     )}
                   </div>
@@ -439,7 +1551,7 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
                 )}
 
                 {activeTab === "uploads" && (
-                  <div className="p-3 space-y-3">
+                  <div className="p-3 space-y-3" onDragOver={e => e.preventDefault()} onDrop={handleFileDrop}>
                     <div
                       style={{
                         border: "1px dashed rgba(0,229,255,0.25)",
@@ -447,7 +1559,7 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
                         color: "var(--cp-cyan)",
                         fontFamily: "'Share Tech Mono', monospace",
                       }}
-                      className="p-4 text-center text-[10px] opacity-50 cursor-pointer"
+                      className="p-4 text-center text-[10px] opacity-50"
                     >
                       <Upload size={16} className="mx-auto mb-1 opacity-40" />
                       drop files or{" "}
@@ -456,21 +1568,50 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
                         <input type="file" multiple className="hidden" onChange={handleFileInput} />
                       </label>
                     </div>
-                    {uploadedFiles.length > 0 && (
-                      <div className="space-y-1">
-                        {uploadedFiles.map((fileName, index) => (
+                    {sessionFiles.length > 0 && (
+                      <div className="space-y-2">
+                        {sessionFiles.map((file, index) => (
                           <div
-                            key={`${fileName}-${index}`}
+                            key={`${file.name}-${index}`}
                             style={{
                               background: "var(--cp-bg-3)",
                               border: "1px solid var(--cp-border)",
                               color: "var(--foreground)",
                               fontFamily: "'Share Tech Mono', monospace",
+                              borderRadius: "4px"
                             }}
-                            className="px-2 py-1 text-xs flex items-center gap-2"
+                            className="p-2 text-xs flex flex-col gap-1.5"
                           >
-                            <FileText size={10} style={{ color: "var(--cp-cyan)" }} />
-                            <span className="truncate opacity-70">{fileName}</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                <FileText size={10} style={{ color: "var(--cp-cyan)" }} />
+                                <span className="truncate opacity-75 font-semibold" title={file.name}>{file.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {file.loading && <span className="text-[10px] text-[var(--cp-yellow)] animate-pulse">(summarizing...)</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteSessionFile?.(file.name)}
+                                  className="text-muted-foreground hover:text-[var(--cp-magenta)] transition-colors p-0.5"
+                                  title="Delete file"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
+                            {file.summary && (
+                              <details className="mt-1 text-[10px] text-muted-foreground">
+                                <summary className="cursor-pointer hover:text-[var(--cp-cyan)] transition-colors select-none font-bold">
+                                  View Summary
+                                </summary>
+                                <div 
+                                  className="mt-1 p-1.5 bg-black/40 border border-[var(--cp-border)] rounded overflow-y-auto select-text max-h-40 whitespace-pre-wrap"
+                                  style={{ fontFamily: "var(--font-sans)", lineHeight: "1.3" }}
+                                >
+                                  {file.summary}
+                                </div>
+                              </details>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -508,7 +1649,15 @@ export function RightPanel({ thinking, messages, statusText, sessionSummary, onS
   );
 }
 
-function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[] } }) {
+function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whispers?: any[], forwards?: any[], crosschecks?: any[], facts?: any[] } }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'inspector' | 'whispers' | 'forwards' | 'crosschecks' | 'facts'>('inspector');
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedEdge, setSelectedEdge] = useState<any>(null);
+  const containerRef = useRef<SVGSVGElement>(null);
+
   // Simple deterministic circle layout + jitter for network feel
   const nodesWithPos = data.nodes.map((node, i) => {
     const angle = (i / data.nodes.length) * 2 * Math.PI;
@@ -522,150 +1671,6 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[] } }) {
 
   const maxCount = Math.max(...data.nodes.map(n => n.count), 1);
 
-  return (
-    <svg 
-      width="100%" height="100%" 
-      viewBox="0 0 200 200"
-      className="select-none"
-    >
-      <defs>
-        <filter id="factGlow">
-          <feGaussianBlur stdDeviation="1.5" result="blur"/>
-          <feMerge>
-            <feMergeNode in="blur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-
-      {/* Edges */}
-      {data.edges.map((edge, i) => {
-        const s = nodesWithPos.find(n => n.text === edge.source);
-        const t = nodesWithPos.find(n => n.text === edge.target);
-        if (!s || !t) return null;
-        return (
-          <line
-            key={i}
-            x1={s.x} y1={s.y}
-            x2={t.x} y2={t.y}
-            stroke="var(--cp-green)"
-            strokeWidth={0.3}
-            strokeOpacity={0.15 + (edge.weight / 5) * 0.3}
-          />
-        );
-      })}
-
-      {/* Nodes */}
-      {nodesWithPos.map((node, i) => {
-        const sizeRatio = node.count / maxCount;
-        const fontSize = 5 + sizeRatio * 6;
-        const opacity = 0.4 + sizeRatio * 0.6;
-        
-        return (
-          <g key={i}>
-            <circle 
-              cx={node.x} cy={node.y} 
-              r={1.5 + sizeRatio * 2} 
-              fill="var(--cp-green)" 
-              fillOpacity={0.8}
-              filter="url(#factGlow)"
-            />
-            <text
-              x={node.x} y={node.y - (3 + sizeRatio * 2)}
-              textAnchor="middle"
-              fill="var(--cp-green)"
-              fontSize={fontSize}
-              fontWeight={sizeRatio > 0.5 ? 'bold' : 'normal'}
-              fontFamily="'Share Tech Mono', monospace"
-              style={{ opacity, textTransform: 'uppercase' }}
-            >
-              {node.text}
-            </text>
-          </g>
-        );
-      })}
-
-      {data.nodes.length === 0 && (
-        <text 
-          x="100" y="100" 
-          textAnchor="middle" 
-          fill="var(--cp-green)" 
-          opacity="0.2" 
-          fontSize="8"
-          fontFamily="'Share Tech Mono', monospace"
-        >
-          AWAITING_FACTUAL_INTEL...
-        </text>
-      )}
-    </svg>
-  );
-}
-
-function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thinking[] }) {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<SVGSVGElement>(null);
-
-  // Extract participants and their relationships from messages and thinking
-  const nodes: { id: string, label: string, x: number, y: number, color: string, type: 'entity' | 'mcp' }[] = [
-    { id: "user", label: "USER", x: 100, y: 30, color: "var(--cp-cyan)", type: 'entity' },
-    { id: "moderator", label: "MODERATOR", x: 100, y: 95, color: "var(--cp-green)", type: 'entity' },
-  ];
-
-  // Identify all active agents from messages (including whispers) and thinking
-  const agentIdsFromMessages = messages
-    .map(m => m.role === 'agent-whisper' ? m.from : (!['user', 'moderator', 'system', 'internal', 'error', 'ai', 'whisper', 'moderator-whisper'].includes(m.role) ? m.role : null))
-    .filter((id): id is string => !!id);
-  
-  const agentIdsFromThinking = thinking
-    .map(t => t.agent !== 'Moderator' && t.agent !== 'System' ? t.agent : null)
-    .filter((id): id is string => !!id);
-
-  const uniqueAgents = Array.from(new Set([...agentIdsFromMessages, ...agentIdsFromThinking]));
-
-  // Layout agents in a semi-circle below the moderator
-  uniqueAgents.forEach((agentId, index) => {
-    const angle = (Math.PI / (uniqueAgents.length + 1)) * (index + 1);
-    const radius = 65;
-    const x = 100 + radius * Math.cos(angle + Math.PI);
-    const y = 95 + radius * Math.sin(angle);
-
-    nodes.push({
-      id: agentId.toLowerCase(),
-      label: agentId.toUpperCase(),
-      x,
-      y,
-      color: "var(--cp-yellow)",
-      type: 'entity'
-    });
-  });
-
-  const edges: { from: string, to: string, dash?: string, color?: string }[] = [];
-
-  if (messages.some(m => m.role === 'user')) {
-    edges.push({ from: "user", to: "moderator" });
-  }
-
-  uniqueAgents.forEach(agentId => {
-    const agentNodeId = agentId.toLowerCase();
-    edges.push({ from: "moderator", to: agentNodeId, dash: "3,3" });
-    edges.push({ from: agentNodeId, to: "moderator", dash: "3,3" });
-
-    // Check if this agent has cross-checked others (messages that mention other agents)
-    const agentMsg = messages.find(m => (m.role === agentId || (m.role === 'agent-whisper' && m.from === agentId)));
-    if (agentMsg) {
-      uniqueAgents.forEach(otherId => {
-        if (otherId !== agentId && agentMsg.content.toLowerCase().includes(otherId.toLowerCase())) {
-          edges.push({ from: agentNodeId, to: otherId.toLowerCase(), dash: "2,2", color: "var(--cp-magenta)" });
-        }
-      });
-    }
-  });
-
-  if (messages.some(m => m.role === 'moderator')) {
-    edges.push({ from: "moderator", to: "user" });
-  }
   const handleWheel = (e: React.WheelEvent) => {
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(prev => Math.min(Math.max(prev * delta, 0.5), 5));
@@ -683,70 +1688,1413 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
   };
 
   return (
-    <svg 
-      ref={containerRef}
-      width="100%" height="100%" 
-      viewBox="0 0 200 250"
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      style={{ cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none' }}
-    >
-      <defs>
-        <marker id="arrowhead" markerWidth="6" markerHeight="4" 
-        refX="15" refY="2" orient="auto">
-          <polygon points="0 0, 6 2, 0 4" fill="var(--cp-border)" />
-        </marker>
-      </defs>
-      
-      <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`} style={{ transformOrigin: 'center' }}>
-        {edges.map((edge, i) => {
-          const fromNode = nodes.find(n => n.id === edge.from);
-          const toNode = nodes.find(n => n.id === edge.to);
-          if (!fromNode || !toNode) return null;
-          
-          return (
-            <line
-              key={i}
-              x1={fromNode.x} y1={fromNode.y}
-              x2={toNode.x} y2={toNode.y}
-              stroke={edge.color || "var(--cp-border)"} 
-              strokeWidth={0.8}
-              strokeDasharray={edge.dash}
-              markerEnd="url(#arrowhead)"
-              style={{ opacity: 0.4 }}
-            />
-          );
-        })}
-        
-        {nodes.map(node => (
-          <g key={node.id}>
-            <rect
-              x={node.x - 30} 
-              y={node.y - 10}
-              width={60} 
-              height={20}
-              fill="var(--cp-bg-3)"
-              stroke={node.color}
-              strokeWidth={1}
-              strokeOpacity={0.6}
-              rx={2}
-            />
-            <text
-              x={node.x} y={node.y + 3}
-              textAnchor="middle"
-              fill={node.color}
-              fontSize={7}
-              fontFamily="'Share Tech Mono', monospace"
-              className="select-none"
-            >
-              {node.label}
-            </text>
+    <div className="flex flex-row h-full w-full bg-black/10 select-none min-h-0 overflow-hidden">
+      {/* Left side: SVG Visualization */}
+      <div className="flex-1 min-h-0 relative bg-black/30 border border-white/5 overflow-hidden">
+        <svg 
+          ref={containerRef}
+          width="100%" height="100%" 
+          viewBox="0 0 200 200"
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onClick={() => {
+            setSelectedNode(null);
+            setSelectedEdge(null);
+          }}
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        >
+          <defs>
+            <filter id="factGlow">
+              <feGaussianBlur stdDeviation="1.5" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+
+          <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`} style={{ transformOrigin: 'center' }}>
+            {/* Edges */}
+            {data.edges.map((edge, i) => {
+              const s = nodesWithPos.find(n => n.text === edge.source);
+              const t = nodesWithPos.find(n => n.text === edge.target);
+              if (!s || !t) return null;
+              
+              const isSelected = selectedEdge?.source === edge.source && selectedEdge?.target === edge.target;
+              
+              let strokeColor = "var(--cp-green)";
+              if (edge.type === 'crosscheck') {
+                strokeColor = "var(--cp-purple)";
+              } else if (edge.type === 'communication') {
+                strokeColor = "var(--cp-cyan)";
+              }
+
+              return (
+                <line
+                  key={i}
+                  x1={s.x} y1={s.y}
+                  x2={t.x} y2={t.y}
+                  stroke={strokeColor}
+                  strokeWidth={isSelected ? 0.8 : 0.3}
+                  strokeOpacity={isSelected ? 0.9 : 0.15 + (edge.weight / 5) * 0.3}
+                  strokeDasharray={edge.type === 'crosscheck' ? "2,2" : undefined}
+                  cursor="pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedEdge(edge);
+                    setSelectedNode(null);
+                    if (edge.type === 'crosscheck') {
+                      setActiveSubTab('crosschecks');
+                    } else if (edge.type === 'communication') {
+                      setActiveSubTab('whispers');
+                    } else {
+                      setActiveSubTab('inspector');
+                    }
+                  }}
+                />
+              );
+            })}
+
+            {/* Nodes */}
+            {nodesWithPos.map((node, i) => {
+              const sizeRatio = node.count / maxCount;
+              const fontSize = 5 + sizeRatio * 6;
+              const opacity = 0.4 + sizeRatio * 0.6;
+              const isSelected = selectedNode?.text === node.text;
+
+              let nodeColor = "var(--cp-green)";
+              let radius = 1.5 + sizeRatio * 2;
+              
+              if (node.type === 'agent') {
+                nodeColor = "var(--cp-cyan)";
+                radius = 3.0 + sizeRatio * 1.5;
+              } else if (node.type === 'fact') {
+                nodeColor = "var(--cp-yellow)";
+                radius = 2.0 + sizeRatio * 1.0;
+              } else if (node.type === 'crosscheck') {
+                nodeColor = "var(--cp-purple)";
+                radius = 2.0 + sizeRatio * 1.0;
+              }
+
+              return (
+                <g 
+                  key={i}
+                  cursor="pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedNode(node);
+                    setSelectedEdge(null);
+                    if (node.type === 'fact') {
+                      setActiveSubTab('facts');
+                    } else if (node.type === 'crosscheck') {
+                      setActiveSubTab('crosschecks');
+                    } else {
+                      setActiveSubTab('inspector');
+                    }
+                  }}
+                >
+                  {isSelected && (
+                    <circle
+                      cx={node.x} cy={node.y}
+                      r={radius + 1.5}
+                      fill="none"
+                      stroke={nodeColor}
+                      strokeWidth={0.5}
+                      className="animate-pulse"
+                    />
+                  )}
+                  <circle 
+                    cx={node.x} cy={node.y} 
+                    r={radius} 
+                    fill={nodeColor} 
+                    fillOpacity={isSelected ? 1.0 : 0.8}
+                    filter="url(#factGlow)"
+                  />
+                  <text
+                    x={node.x} y={node.y - (radius + 1.5)}
+                    textAnchor="middle"
+                    fill={nodeColor}
+                    fontSize={fontSize}
+                    fontWeight={node.type === 'agent' || isSelected ? 'bold' : 'normal'}
+                    fontFamily="'Share Tech Mono', monospace"
+                    style={{ opacity: isSelected ? 1.0 : opacity, textTransform: 'uppercase' }}
+                  >
+                    {node.text}
+                  </text>
+                </g>
+              );
+            })}
+
+            {data.nodes.length === 0 && (
+              <text 
+                x="100" y="100" 
+                textAnchor="middle" 
+                fill="var(--cp-green)" 
+                opacity="0.2" 
+                fontSize="8"
+                fontFamily="'Share Tech Mono', monospace"
+              >
+                // AWAITING_FACTUAL_INTEL...
+              </text>
+            )}
           </g>
-        ))}
-      </g>
-    </svg>
+        </svg>
+      </div>
+
+      {/* Right side: Interactive inspector panel */}
+      <div className="flex-shrink-0 w-[680px] border-l border-[var(--cp-border)] bg-black/60 flex flex-col min-h-0 h-full text-[10px] font-mono">
+        {/* Tab Headers (Symmetric 2x2 grid + full width Facts row) */}
+        <div className="flex flex-wrap border-b border-[var(--cp-border)] bg-black/40 text-[11px] font-bold tracking-widest flex-shrink-0">
+          <button
+            onClick={() => setActiveSubTab('inspector')}
+            style={{ width: '50%' }}
+            className={`text-center py-1 border-r border-b border-[var(--cp-border)] uppercase transition-colors ${
+              activeSubTab === 'inspector' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            INSPECT
+          </button>
+          <button
+            onClick={() => setActiveSubTab('whispers')}
+            style={{ width: '50%' }}
+            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
+              activeSubTab === 'whispers' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            WHISP ({data.whispers?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('forwards')}
+            style={{ width: '50%' }}
+            className={`text-center py-1 border-r border-b border-[var(--cp-border)] uppercase transition-colors ${
+              activeSubTab === 'forwards' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            FWD ({data.forwards?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('crosschecks')}
+            style={{ width: '50%' }}
+            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
+              activeSubTab === 'crosschecks' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            CROSS ({data.crosschecks?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('facts')}
+            style={{ width: '100%' }}
+            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
+              activeSubTab === 'facts' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            FACTS ({data.facts?.length || 0})
+          </button>
+        </div>
+
+        {/* Tab Body */}
+        <div className="flex-1 overflow-y-auto p-1.5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(0,229,255,0.1) transparent' }}>
+          {activeSubTab === 'inspector' && (
+            <div className="space-y-1.5">
+              {selectedNode ? (
+                <div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
+                    <span className="font-bold text-[var(--cp-cyan)] uppercase text-[12px] truncate">{selectedNode.text}</span>
+                    <span className="px-1.5 py-0.5 text-[9px] bg-white/5 border border-white/10 uppercase shrink-0" style={{ color: selectedNode.type === 'agent' ? 'var(--cp-cyan)' : selectedNode.type === 'fact' ? 'var(--cp-yellow)' : selectedNode.type === 'crosscheck' ? 'var(--cp-purple)' : 'var(--cp-green)' }}>
+                      {selectedNode.type}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 text-[10px] opacity-80">
+                    <div>Occurrences: <span className="font-bold text-white">{selectedNode.count}</span></div>
+                    {selectedNode.type === 'agent' && (
+                      <>
+                        <div>Whispers: <span className="font-bold text-white">{(data.whispers || []).filter(w => w.from === selectedNode.text).length}</span></div>
+                        <div>Forwards: <span className="font-bold text-white">{(data.forwards || []).filter(f => f.to === selectedNode.text).length}</span></div>
+                      </>
+                    )}
+                  </div>
+                  {selectedNode.type === 'fact' && (
+                    <div className="mt-2 p-1.5 bg-yellow-500/5 border border-[var(--cp-yellow)]/20 text-[10px] rounded">
+                      <div className="text-[var(--cp-yellow)] font-bold mb-0.5 text-[10px]">FACT DETAILS</div>
+                      <div className="text-white/95 italic">"{(data.facts || []).find(f => f.label === selectedNode.text)?.content || 'No text extracted.'}"</div>
+                      <div className="text-[9px] mt-0.5 opacity-55">Source: {(data.facts || []).find(f => f.label === selectedNode.text)?.source || 'Unknown'}</div>
+                    </div>
+                  )}
+                </div>
+              ) : selectedEdge ? (
+                <div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
+                    <span className="font-bold text-[var(--cp-cyan)] uppercase text-[11px] truncate">{selectedEdge.source} ⇄ {selectedEdge.target}</span>
+                    <span className="px-1.5 py-0.5 text-[9px] bg-white/5 border border-white/10 uppercase shrink-0" style={{ color: selectedEdge.type === 'communication' ? 'var(--cp-cyan)' : selectedEdge.type === 'crosscheck' ? 'var(--cp-purple)' : 'var(--cp-green)' }}>
+                      {selectedEdge.type}
+                    </span>
+                  </div>
+                  <div className="text-[10px] opacity-80">
+                    <div>Weight: <span className="font-bold text-white">{selectedEdge.weight.toFixed(1)}</span></div>
+                  </div>
+                  {selectedEdge.type === 'crosscheck' && (
+                    <div className="mt-2 p-1.5 bg-purple-500/5 border border-[var(--cp-purple)]/20 text-[10px] rounded">
+                      <div className="text-[var(--cp-purple)] font-bold mb-0.5 text-[10px]">CROSS-CHECK</div>
+                      <div className="text-white/95 italic">
+                        "{(data.crosschecks || []).find(c => (c.from === selectedEdge.source && c.target === selectedEdge.target) || (c.from === selectedEdge.target && c.target === selectedEdge.source))?.feedback || 'Feedback logged.'}"
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-white/30 py-4 italic text-[10.5px]">
+                  Click node/edge to inspect paths.
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSubTab === 'whispers' && (
+            <div className="space-y-1">
+              {(data.whispers || []).length === 0 ? (
+                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No whispers.</div>
+              ) : (data.whispers || []).map((w, idx) => (
+                <div key={idx} className="p-1 bg-cyan-500/5 border border-[var(--cp-cyan)]/10 text-[10px] rounded">
+                  <div className="flex justify-between text-[var(--cp-cyan)] font-bold mb-0.5">
+                    <span>{w.from} ➔ {w.to}</span>
+                  </div>
+                  <div className="text-white/95">{w.content}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSubTab === 'forwards' && (
+            <div className="space-y-1">
+              {(data.forwards || []).length === 0 ? (
+                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No forwards.</div>
+              ) : (data.forwards || []).map((f, idx) => (
+                <div key={idx} className="p-1 bg-green-500/5 border border-[var(--cp-green)]/10 text-[10px] rounded">
+                  <div className="text-[var(--cp-green)] font-bold mb-0.5">
+                    <span>{f.from} ➔ {f.to}</span>
+                  </div>
+                  <div className="text-white/80 line-clamp-3 hover:line-clamp-none transition-all cursor-pointer bg-black/25 p-1 border border-white/5 mt-0.5">
+                    {f.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSubTab === 'crosschecks' && (
+            <div className="space-y-1">
+              {(data.crosschecks || []).length === 0 ? (
+                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No cross-checks.</div>
+              ) : (data.crosschecks || []).map((c, idx) => (
+                <div key={idx} className="p-1 bg-purple-500/5 border border-[var(--cp-purple)]/10 text-[10px] rounded">
+                  <div className="flex justify-between text-[var(--cp-purple)] font-bold mb-0.5">
+                    <span>{c.from} ➔ {c.target}</span>
+                  </div>
+                  <div className="text-white/95 italic">"{c.feedback}"</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeSubTab === 'facts' && (
+            <div className="space-y-1">
+              {(data.facts || []).length === 0 ? (
+                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No facts.</div>
+              ) : (data.facts || []).map((f, idx) => (
+                <div key={idx} className="p-1 bg-yellow-500/5 border border-[var(--cp-yellow)]/10 text-[10px] rounded">
+                  <div className="flex justify-between text-[var(--cp-yellow)] font-bold mb-0.5">
+                    <span className="font-bold truncate">{f.label}</span>
+                  </div>
+                  <div className="text-white/95">{f.content}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
+
+interface SunburstNode {
+  name: string;
+  size?: number;
+  children?: SunburstNode[];
+}
+
+interface NeuralPathSunburstProps {
+  messages: Message[];
+  thinking: Thinking[];
+}
+
+function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
+  const [hoveredNode, setHoveredNode] = useState<d3.HierarchyRectangularNode<SunburstNode> | null>(null);
+
+  // 1. EXTRACT PATHS FROM TIMELINE
+  const turnsList: string[][] = [];
+  let currentTurnActors: string[] = [];
+
+  const allEvents = [
+    ...messages.map(m => ({
+      role: m.role,
+      agent: m.role === 'user' ? 'YOU' : (m.from || m.role),
+      timestamp: typeof m.timestamp === 'object' ? (m.timestamp as Date).getTime() : m.timestamp
+    })),
+    ...thinking.map(t => ({
+      role: "internal",
+      agent: t.agent,
+      timestamp: t.timestamp
+    }))
+  ].sort((a, b) => a.timestamp - b.timestamp);
+
+  allEvents.forEach(evt => {
+    const actor = evt.agent.toUpperCase();
+    if (evt.role === 'user') {
+      if (currentTurnActors.length > 0) {
+        turnsList.push(currentTurnActors);
+      }
+      currentTurnActors = [actor];
+    } else {
+      if (currentTurnActors.length === 0 || currentTurnActors[currentTurnActors.length - 1] !== actor) {
+        currentTurnActors.push(actor);
+      }
+    }
+  });
+
+  if (currentTurnActors.length > 0) {
+    turnsList.push(currentTurnActors);
+  }
+
+  const pathCounts: Record<string, number> = {};
+  turnsList.forEach(turn => {
+    const pathStr = turn.join("-").toLowerCase();
+    pathCounts[pathStr] = (pathCounts[pathStr] || 0) + 1;
+  });
+
+  const csvData: [string, number][] = Object.keys(pathCounts).length > 0
+    ? Object.entries(pathCounts)
+    : [
+        ["you-moderator-architect-engineer-moderator", 10],
+        ["you-moderator-engineer-moderator", 6],
+        ["you-moderator-security-moderator", 4],
+        ["you-moderator-architect-moderator", 3],
+        ["you-moderator-security-architect-engineer-moderator", 2],
+      ];
+
+  const buildHierarchy = (csv: [string, number][]): SunburstNode => {
+    const rootNode: SunburstNode = { name: "root", children: [] };
+    for (let i = 0; i < csv.length; i++) {
+      const sequence = csv[i][0];
+      const size = csv[i][1];
+      const parts = sequence.split("-");
+      let currentNode = rootNode;
+      for (let j = 0; j < parts.length; j++) {
+        const children = currentNode.children || [];
+        if (!currentNode.children) currentNode.children = children;
+        const nodeName = parts[j];
+        let childNode: SunburstNode | undefined;
+        if (j + 1 < parts.length) {
+          let foundChild = false;
+          for (let k = 0; k < children.length; k++) {
+            if (children[k].name === nodeName) {
+              childNode = children[k];
+              foundChild = true;
+              break;
+            }
+          }
+          if (!foundChild) {
+            childNode = { name: nodeName, children: [] };
+            children.push(childNode);
+          }
+          currentNode = childNode!;
+        } else {
+          childNode = { name: nodeName, size };
+          children.push(childNode);
+        }
+      }
+    }
+    return rootNode;
+  };
+
+  const hierarchyData = buildHierarchy(csvData);
+
+  const width = 450;
+  const height = 430;
+  const radius = Math.min(width, height) / 2 - 15;
+
+  const actorColors: Record<string, string> = {
+    "you": "var(--cp-cyan)",
+    "user": "var(--cp-cyan)",
+    "moderator": "var(--cp-green)",
+    "architect": "var(--cp-yellow)",
+    "engineer": "var(--cp-purple)",
+    "security": "var(--cp-magenta)",
+    "system": "var(--cp-border)",
+    "other": "#a173d1"
+  };
+
+  const getActorColor = (name: string) => {
+    const norm = name.toLowerCase();
+    return actorColors[norm] || "var(--cp-yellow)";
+  };
+
+  const root = d3.hierarchy<SunburstNode>(hierarchyData)
+    .sum(d => d.size || 0)
+    .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+  const partitionLayout = d3.partition<SunburstNode>()
+    .size([2 * Math.PI, radius * radius]);
+
+  const partitionRoot = partitionLayout(root);
+  const nodes = partitionRoot.descendants().filter(d => {
+    return d.depth > 0 && (d.x1 - d.x0 > 0.005);
+  });
+
+  const arcGenerator = d3.arc<d3.HierarchyRectangularNode<SunburstNode>>()
+    .startAngle(d => d.x0)
+    .endAngle(d => d.x1)
+    .innerRadius(d => Math.sqrt(d.y0))
+    .outerRadius(d => Math.sqrt(d.y1));
+
+  const getAncestors = (node: d3.HierarchyRectangularNode<SunburstNode>) => {
+    const pathList: d3.HierarchyRectangularNode<SunburstNode>[] = [];
+    let current: d3.HierarchyRectangularNode<SunburstNode> | null = node;
+    while (current && current.depth > 0) {
+      pathList.unshift(current);
+      current = current.parent;
+    }
+    return pathList;
+  };
+
+  const ancestors = hoveredNode ? getAncestors(hoveredNode) : [];
+
+  const totalSize = root.value || 1;
+  const hoveredValue = hoveredNode ? hoveredNode.value || 0 : 0;
+  const percentage = hoveredNode ? ((100 * hoveredValue) / totalSize).toFixed(1) : "0.0";
+
+  const breadcrumbW = 85;
+  const breadcrumbH = 22;
+  const breadcrumbSpacing = 3;
+  const breadcrumbTip = 6;
+
+  const getBreadcrumbPoints = (idx: number) => {
+    const points = [];
+    points.push("0,0");
+    points.push(`${breadcrumbW},0`);
+    points.push(`${breadcrumbW + breadcrumbTip},${breadcrumbH / 2}`);
+    points.push(`${breadcrumbW},${breadcrumbH}`);
+    points.push(`0,${breadcrumbH}`);
+    if (idx > 0) {
+      points.push(`${breadcrumbTip},${breadcrumbH / 2}`);
+    }
+    return points.join(" ");
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-black/10 select-none relative p-3 font-mono">
+      {/* Breadcrumbs Trail */}
+      <div 
+        className="flex-shrink-0 h-[32px] flex items-center border border-[var(--cp-border)] bg-black/40 px-2 rounded overflow-x-auto overflow-y-hidden"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {ancestors.length === 0 ? (
+          <div className="text-[9px] text-white/30 uppercase tracking-widest font-mono">
+            // HOVER_OVER_ARC_TO_EXPLORE_ROUTING_FLOWS
+          </div>
+        ) : (
+          <div className="flex items-center gap-[3px] py-1">
+            {ancestors.map((node, idx) => {
+              const name = node.data.name.toUpperCase();
+              const color = getActorColor(node.data.name);
+              return (
+                <div key={idx} className="relative flex items-center shrink-0">
+                  <svg width={breadcrumbW + breadcrumbTip} height={breadcrumbH}>
+                    <polygon
+                      points={getBreadcrumbPoints(idx)}
+                      fill="var(--cp-bg-3)"
+                      stroke={color}
+                      strokeWidth="0.8"
+                    />
+                    <text
+                      x={(breadcrumbW + breadcrumbTip) / 2}
+                      y={breadcrumbH / 2}
+                      dy="0.35em"
+                      textAnchor="middle"
+                      fill={color}
+                      fontSize="7.5"
+                      fontWeight="bold"
+                      fontFamily="'Share Tech Mono', monospace"
+                    >
+                      {name}
+                    </text>
+                  </svg>
+                </div>
+              );
+            })}
+            
+            <div 
+              style={{
+                background: "rgba(0, 229, 255, 0.1)",
+                border: "1px solid var(--cp-cyan)",
+                color: "var(--cp-cyan)",
+                fontFamily: "'Share Tech Mono', monospace"
+              }}
+              className="px-2 py-0.5 text-[8px] font-bold rounded ml-2 uppercase shrink-0"
+            >
+              {percentage}% OF RUNS
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Chart Section */}
+      <div className="flex-1 min-h-0 flex items-center justify-center relative">
+        <svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          className="max-w-full max-h-full"
+        >
+          <g transform={`translate(${width / 2}, ${height / 2})`}>
+            <circle r={radius} fill="none" stroke="rgba(0, 229, 255, 0.03)" strokeWidth="0.5" />
+            
+            {nodes.map((node, idx) => {
+              const isHighlighted = hoveredNode ? ancestors.includes(node) : true;
+              const fill = getActorColor(node.data.name);
+              
+              return (
+                <path
+                  key={idx}
+                  d={arcGenerator(node) || ""}
+                  fill={fill}
+                  stroke="var(--cp-bg-1)"
+                  strokeWidth="1.5"
+                  opacity={isHighlighted ? 0.95 : 0.2}
+                  style={{
+                    cursor: "pointer",
+                    transition: "opacity 0.25s, transform 0.2s",
+                    filter: hoveredNode === node ? "drop-shadow(0px 0px 4px rgba(255,255,255,0.25))" : undefined
+                  }}
+                  onMouseEnter={() => setHoveredNode(node)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                />
+              );
+            })}
+
+            <circle r="55" fill="var(--cp-bg-0)" stroke="var(--cp-border)" strokeWidth="1" />
+            <circle r="51" fill="var(--cp-bg-2)" />
+            
+            {hoveredNode && (
+              <circle 
+                r="53" 
+                fill="none" 
+                stroke={getActorColor(hoveredNode.data.name)} 
+                strokeWidth="1" 
+                className="animate-pulse" 
+              />
+            )}
+            
+            <g transform="translate(0, 0)">
+              {hoveredNode ? (
+                <>
+                  <text
+                    y="-14"
+                    textAnchor="middle"
+                    fill={getActorColor(hoveredNode.data.name)}
+                    fontSize="9.5"
+                    fontWeight="bold"
+                    fontFamily="'Share Tech Mono', monospace"
+                    className="uppercase tracking-wider"
+                  >
+                    {hoveredNode.data.name}
+                  </text>
+                  <text
+                    y="8"
+                    textAnchor="middle"
+                    fill="white"
+                    fontSize="16"
+                    fontWeight="bold"
+                    fontFamily="'Share Tech Mono', monospace"
+                  >
+                    {percentage}%
+                  </text>
+                  <text
+                    y="24"
+                    textAnchor="middle"
+                    fill="rgba(255,255,255,0.4)"
+                    fontSize="7"
+                    fontFamily="var(--font-sans)"
+                    className="uppercase tracking-wide"
+                  >
+                    {hoveredValue} {hoveredValue === 1 ? 'run' : 'runs'}
+                  </text>
+                </>
+              ) : (
+                <>
+                  <text
+                    y="-10"
+                    textAnchor="middle"
+                    fill="rgba(0, 229, 255, 0.4)"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                    fontFamily="'Share Tech Mono', monospace"
+                    className="uppercase tracking-widest"
+                  >
+                    // NEURAL
+                  </text>
+                  <text
+                    y="6"
+                    textAnchor="middle"
+                    fill="white"
+                    fontSize="11"
+                    fontWeight="bold"
+                    fontFamily="'Share Tech Mono', monospace"
+                    className="uppercase tracking-widest"
+                  >
+                    ROUTING
+                  </text>
+                  <text
+                    y="22"
+                    textAnchor="middle"
+                    fill="var(--cp-green)"
+                    fontSize="7.5"
+                    fontWeight="bold"
+                    fontFamily="'Share Tech Mono', monospace"
+                    className="uppercase tracking-wider"
+                  >
+                    TOTAL: {totalSize} {totalSize === 1 ? 'RUN' : 'RUNS'}
+                  </text>
+                </>
+              )}
+            </g>
+          </g>
+        </svg>
+
+        <div 
+          className="absolute bottom-2 left-2 p-2 rounded border border-[var(--cp-border)] bg-black/80 flex flex-col gap-1 text-[8px] font-mono"
+          style={{ width: "90px" }}
+        >
+          <div className="text-[var(--cp-cyan)] font-bold mb-1">// ROSTER</div>
+          {Object.entries(actorColors)
+            .filter(([k]) => k !== 'system' && k !== 'other')
+            .map(([actor, color]) => (
+              <div key={actor} className="flex items-center gap-1.5">
+                <span 
+                  className="w-2 h-2 rounded-sm inline-block shrink-0" 
+                  style={{ backgroundColor: color, border: `1px solid ${color}` }}
+                />
+                <span className="text-white/80 uppercase truncate">{actor}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thinking[] }) {
+  const [graphMode, setGraphMode] = useState<"topology" | "tree" | "sunburst">("topology");
+  const [viewMode, setViewMode] = useState<"single" | "full">("single");
+  const [activeTurnIdx, setActiveTurnIdx] = useState<number>(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [customNodePositions, setCustomNodePositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [selectedNode, setSelectedNode] = useState<any | null>(null);
+
+  const containerRef = useRef<SVGSVGElement>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+  }, [zoom, pan]);
+
+  // ── 1. ZOOM TO CURSOR WHEEL LISTENER ──
+  useEffect(() => {
+    const svgEl = containerRef.current;
+    if (!svgEl) return;
+
+    const handleWheelZoom = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = svgEl.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+
+      const nextZoom = Math.min(Math.max(currentZoom * factor, 0.1), 8);
+
+      const graphX = (localX - currentPan.x) / currentZoom;
+      const graphY = (localY - currentPan.y) / currentZoom;
+
+      setZoom(nextZoom);
+      setPan({
+        x: localX - graphX * nextZoom,
+        y: localY - graphY * nextZoom
+      });
+    };
+
+    svgEl.addEventListener("wheel", handleWheelZoom, { passive: false });
+    return () => {
+      svgEl.removeEventListener("wheel", handleWheelZoom);
+    };
+  }, []);
+
+  // ── 2. PARSE TIMELINE / TURNS ──
+  const turns: {
+    id: number;
+    userQuery: string;
+    events: {
+      id: string;
+      role: string;
+      agent: string;
+      type: "message" | "thought";
+      content: string;
+      timestamp: number;
+    }[];
+  }[] = [];
+
+  let currentTurnEvents: typeof turns[0]["events"] = [];
+  let currentTurnQuery = "";
+  let turnCounter = 0;
+
+  const allEvents = [
+    ...messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      agent: m.role === 'user' ? 'YOU' : (m.from || m.role),
+      type: "message" as const,
+      content: m.content,
+      timestamp: typeof m.timestamp === 'object' ? (m.timestamp as Date).getTime() : m.timestamp
+    })),
+    ...thinking.map(t => ({
+      id: t.id,
+      role: "internal",
+      agent: t.agent,
+      type: "thought" as const,
+      content: t.thought,
+      timestamp: t.timestamp
+    }))
+  ].sort((a, b) => a.timestamp - b.timestamp);
+
+  allEvents.forEach(evt => {
+    if (evt.role === 'user') {
+      if (currentTurnEvents.length > 0) {
+        turns.push({
+          id: turnCounter++,
+          userQuery: currentTurnQuery,
+          events: currentTurnEvents
+        });
+      }
+      currentTurnQuery = evt.content;
+      currentTurnEvents = [evt];
+    } else {
+      currentTurnEvents.push(evt);
+    }
+  });
+
+  if (currentTurnEvents.length > 0) {
+    turns.push({
+      id: turnCounter++,
+      userQuery: currentTurnQuery,
+      events: currentTurnEvents
+    });
+  }
+
+  // Sync turn index to latest when turn length changes
+  useEffect(() => {
+    if (turns.length > 0) {
+      setActiveTurnIdx(turns.length - 1);
+    }
+  }, [turns.length]);
+
+  // Determine dynamic node positions for Quorum Topology Mode
+  const activeAgents = new Set<string>();
+  messages.forEach(m => {
+    const roleLower = m.role.toLowerCase();
+    if (!['user', 'moderator', 'system', 'internal', 'error', 'ai', 'whisper', 'moderator-whisper'].includes(roleLower)) {
+      activeAgents.add(roleLower);
+    }
+    if (m.from) {
+      const fromLower = m.from.toLowerCase();
+      if (fromLower !== 'moderator' && fromLower !== 'system') activeAgents.add(fromLower);
+    }
+  });
+  thinking.forEach(t => {
+    if (t.agent) {
+      const agentLower = t.agent.toLowerCase();
+      if (agentLower !== 'moderator' && agentLower !== 'system') activeAgents.add(agentLower);
+    }
+  });
+
+  // Default ones to ensure graph remains filled
+  activeAgents.add("architect");
+  activeAgents.add("engineer");
+  activeAgents.add("security");
+
+  const otherAgents = Array.from(activeAgents);
+  const agentNodes = otherAgents.map((id, idx) => {
+    const total = otherAgents.length;
+    const angle = total === 1 ? Math.PI / 2 : (idx / (total - 1)) * Math.PI * 0.7 + Math.PI * 0.15;
+    return {
+      id,
+      label: id.toUpperCase(),
+      x: total === 1 ? 300 : 300 + 200 * Math.cos(angle + Math.PI / 2),
+      y: total === 1 ? 360 : 320 + 100 * Math.sin(angle + Math.PI / 2),
+      color: "var(--cp-yellow)",
+      type: "agent"
+    };
+  });
+
+  const topologyNodes = [
+    { id: "user", label: "USER", x: 300, y: 60, color: "var(--cp-cyan)", type: "user" },
+    { id: "moderator", label: "MODERATOR", x: 300, y: 190, color: "var(--cp-green)", type: "moderator" },
+    ...agentNodes
+  ];
+
+  // Compute edges based on actual message flow
+  const edgeCounts: Record<string, number> = {};
+  messages.forEach(m => {
+    const fromLower = m.from?.toLowerCase() || m.role.toLowerCase();
+    
+    if (m.role === 'user') {
+      edgeCounts["user->moderator"] = (edgeCounts["user->moderator"] || 0) + 1;
+    } else if (m.role === 'moderator') {
+      edgeCounts["moderator->user"] = (edgeCounts["moderator->user"] || 0) + 1;
+    } else if (m.role === 'moderator-whisper' && m.to) {
+      const key = `moderator->${m.to.toLowerCase()}`;
+      edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+    } else if (m.role === 'agent-whisper' && m.from) {
+      const from = m.from.toLowerCase();
+      const crossCheckMatch = m.content.match(/cross-check feedback on\s+(\w+)/i);
+      if (crossCheckMatch) {
+        const to = crossCheckMatch[1].toLowerCase();
+        const key = `${from}->${to}`;
+        edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+      } else {
+        const key = `${from}->moderator`;
+        edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+      }
+    } else if (m.from && !['user', 'moderator', 'system'].includes(m.from.toLowerCase())) {
+      const key = `${m.from.toLowerCase()}->moderator`;
+      edgeCounts[key] = (edgeCounts[key] || 0) + 1;
+    }
+  });
+
+  const topologyEdges: { from: string; to: string; label: string; count: number; type: string }[] = [];
+  Object.entries(edgeCounts).forEach(([key, count]) => {
+    const [from, to] = key.split("->");
+    let type = "whisper";
+    if (from === 'user') type = "input";
+    else if (to === 'user') type = "output";
+    else if (from === 'moderator') type = "delegate";
+    else if (from !== 'moderator' && to !== 'moderator') type = "crosscheck";
+    
+    topologyEdges.push({ from, to, label: `${count} msg`, count, type });
+  });
+
+  if (topologyEdges.length === 0) {
+    topologyEdges.push({ from: "user", to: "moderator", label: "0 msg", count: 0, type: "input" });
+    topologyEdges.push({ from: "moderator", to: "architect", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "moderator", to: "engineer", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "moderator", to: "security", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "architect", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
+    topologyEdges.push({ from: "engineer", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
+    topologyEdges.push({ from: "security", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
+  }
+
+  // ── 3. COGNITIVE TREE WATERFALL MODE ──
+  const getXOffset = (agentName: string) => {
+    const name = agentName.toLowerCase();
+    if (name === 'you' || name === 'user') return 300;
+    if (name === 'moderator') return 300;
+    if (name === 'engineer') return 180;
+    if (name === 'architect') return 420;
+    if (name === 'security') return 240;
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return 120 + (Math.abs(hash) % 360);
+  };
+
+  const turnEvents = viewMode === "full" ? allEvents : (turns[activeTurnIdx]?.events || []);
+  const treeNodes = turnEvents.map((evt, idx) => {
+    const agent = evt.agent.toLowerCase();
+    const x = getXOffset(evt.agent);
+    const y = 60 + idx * 70;
+    
+    let color = "var(--cp-cyan)";
+    if (agent === 'you' || agent === 'user') color = "var(--cp-cyan)";
+    else if (agent === 'moderator') color = "var(--cp-green)";
+    else if (agent === 'system') color = "var(--cp-purple)";
+    else color = "var(--cp-yellow)";
+
+    return {
+      id: evt.id,
+      label: evt.agent.toUpperCase(),
+      detail: evt.type === 'thought' ? 'THINKING' : 'MESSAGE',
+      x,
+      y,
+      color,
+      type: evt.type,
+      evt
+    };
+  });
+
+  const treeEdges: { from: string; to: string; type: string; label: string; count: number }[] = [];
+  for (let idx = 0; idx < treeNodes.length - 1; idx++) {
+    treeEdges.push({
+      from: treeNodes[idx].id,
+      to: treeNodes[idx + 1].id,
+      type: treeNodes[idx + 1].type === 'thought' ? 'thought' : 'message',
+      label: "",
+      count: 0
+    });
+  }
+
+  // Select active set
+  const currentNodes = graphMode === "topology" ? topologyNodes : treeNodes;
+  const currentEdges = graphMode === "topology" ? topologyEdges : treeEdges;
+
+  // ── 4. DRAG / PAN HANDLERS (wheel zoom is in useEffect) ──
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as SVGElement).tagName === 'svg' || (e.target as SVGElement).id === 'grid-bg') {
+      setIsDragging(true);
+      dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (draggedNodeId) {
+      const dx = e.movementX / zoom;
+      const dy = e.movementY / zoom;
+      setCustomNodePositions(prev => {
+        const defaultNode = currentNodes.find(n => n.id === draggedNodeId);
+        const currentPos = prev[draggedNodeId] || { x: defaultNode?.x || 300, y: defaultNode?.y || 200 };
+        return {
+          ...prev,
+          [draggedNodeId]: {
+            x: currentPos.x + dx,
+            y: currentPos.y + dy
+          }
+        };
+      });
+    } else if (isDragging) {
+      setPan({
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setDraggedNodeId(null);
+  };
+
+  const zoomIn = () => setZoom(prev => Math.min(prev * 1.25, 8));
+  const zoomOut = () => setZoom(prev => Math.max(prev / 1.25, 0.1));
+  const resetZoom = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setCustomNodePositions({});
+    setSelectedNode(null);
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-black/10 select-none relative">
+      {/* Mode Selectors */}
+      <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--cp-border)] bg-black/40 px-2 py-1">
+        <div className="flex gap-1.5 items-center">
+          <button
+            onClick={() => { setGraphMode("topology"); resetZoom(); }}
+            style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
+              graphMode === "topology" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            }`}
+          >
+            [TOPOLOGY]
+          </button>
+          <button
+            onClick={() => { setGraphMode("tree"); resetZoom(); }}
+            style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
+              graphMode === "tree" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            }`}
+          >
+            [COGNITIVE TRACE]
+          </button>
+          <button
+            onClick={() => { setGraphMode("sunburst"); resetZoom(); }}
+            style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
+              graphMode === "sunburst" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            }`}
+          >
+            [PATH SUNBURST]
+          </button>
+        </div>
+      </div>
+
+      {/* Sub tabs for Cognitive Trace */}
+      {graphMode === "tree" && (
+        <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--cp-border)] bg-black/20 px-3 py-1">
+          <div className="flex gap-4">
+            <button
+              onClick={() => { setViewMode("single"); resetZoom(); }}
+              className={`text-[9px] uppercase font-bold tracking-wider py-1 border-b-2 transition-all ${
+                viewMode === "single"
+                  ? 'border-[var(--cp-cyan)] text-[var(--cp-cyan)]'
+                  : 'border-transparent text-white/40 hover:text-white/70'
+              }`}
+              style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            >
+              SINGLE TURN
+            </button>
+            <button
+              onClick={() => { setViewMode("full"); resetZoom(); }}
+              className={`text-[9px] uppercase font-bold tracking-wider py-1 border-b-2 transition-all ${
+                viewMode === "full"
+                  ? 'border-[var(--cp-cyan)] text-[var(--cp-cyan)]'
+                  : 'border-transparent text-white/40 hover:text-white/70'
+              }`}
+              style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            >
+              FULL SESSION
+            </button>
+          </div>
+
+          {viewMode === "single" && turns.length > 0 && (
+            <div className="flex items-center gap-2 text-[9px] font-mono text-white/60">
+              <button
+                onClick={() => setActiveTurnIdx(prev => Math.max(prev - 1, 0))}
+                disabled={activeTurnIdx === 0}
+                className="px-1.5 py-0.5 border border-white/10 rounded disabled:opacity-20 hover:text-[var(--cp-cyan)] hover:border-[var(--cp-cyan)]/50 transition-colors"
+              >
+                &lt;
+              </button>
+              <span>
+                TURN {activeTurnIdx + 1} / {turns.length}
+              </span>
+              <button
+                onClick={() => setActiveTurnIdx(prev => Math.min(prev + 1, turns.length - 1))}
+                disabled={activeTurnIdx === turns.length - 1}
+                className="px-1.5 py-0.5 border border-white/10 rounded disabled:opacity-20 hover:text-[var(--cp-cyan)] hover:border-[var(--cp-cyan)]/50 transition-colors"
+              >
+                &gt;
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floating Canvas Controls */}
+      {graphMode !== "sunburst" && (
+        <div className="absolute right-2 top-10 flex flex-col gap-1.5 z-10 opacity-30 hover:opacity-100 transition-opacity">
+          <button onClick={zoomIn} title="Zoom In" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[11px] rounded font-mono">+</button>
+          <button onClick={zoomOut} title="Zoom Out" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[11px] rounded font-mono">-</button>
+          <button onClick={resetZoom} title="Reset Canvas" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[9px] rounded font-mono">↺</button>
+        </div>
+      )}
+
+      {/* SVG Canvas */}
+      <div className="flex-1 min-h-0 relative bg-black/20 overflow-hidden">
+        {graphMode === "sunburst" ? (
+          <NeuralPathSunburst messages={messages} thinking={thinking} />
+        ) : currentNodes.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center text-white/30 text-[10px]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            // NO_ACTIVE_SESSION_DATA
+          </div>
+        ) : (
+          <svg
+            ref={containerRef}
+            width="100%"
+            height="100%"
+            viewBox="0 0 600 500"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: isDragging ? 'grabbing' : draggedNodeId ? 'grabbing' : 'grab' }}
+          >
+            <defs>
+              <pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0, 229, 255, 0.02)" strokeWidth="0.5" />
+              </pattern>
+              <marker id="arrow-cyan" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-cyan)" />
+              </marker>
+              <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-green)" />
+              </marker>
+              <marker id="arrow-yellow" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-yellow)" />
+              </marker>
+              <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-purple)" />
+              </marker>
+              <marker id="arrow-tree" markerWidth="6" markerHeight="4" refX="32" refY="2" orient="auto">
+                <polygon points="0 0, 6 2, 0 4" fill="rgba(0, 229, 255, 0.4)" />
+              </marker>
+              <marker id="arrow-tree-dashed" markerWidth="6" markerHeight="4" refX="32" refY="2" orient="auto">
+                <polygon points="0 0, 6 2, 0 4" fill="rgba(182, 36, 255, 0.4)" />
+              </marker>
+            </defs>
+
+            {/* Grid Background */}
+            <rect id="grid-bg" width="100%" height="100%" fill="url(#canvas-grid)" />
+
+            <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+              {/* 1. DRAW EDGES */}
+              {currentEdges.map((edge, i) => {
+                const fromNode = currentNodes.find(n => n.id === edge.from);
+                const toNode = currentNodes.find(n => n.id === edge.to);
+                if (!fromNode || !toNode) return null;
+
+                const fromPos = customNodePositions[edge.from] || { x: fromNode.x, y: fromNode.y };
+                const toPos = customNodePositions[edge.to] || { x: toNode.x, y: toNode.y };
+
+                let strokeColor = "rgba(255,255,255,0.08)";
+                let markerId = "arrow-tree";
+                let dashArray: string | undefined = undefined;
+
+                if (graphMode === "topology") {
+                  if (edge.count > 0) {
+                    if (edge.type === 'input') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
+                    else if (edge.type === 'delegate') { strokeColor = "var(--cp-green)"; markerId = "arrow-green"; dashArray = "3,3"; }
+                    else if (edge.type === 'whisper') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
+                    else if (edge.type === 'crosscheck') { strokeColor = "var(--cp-purple)"; markerId = "arrow-purple"; dashArray = "1,1"; }
+                    else if (edge.type === 'output') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
+                  }
+                } else {
+                  // Tree Waterfall mode
+                  strokeColor = edge.type === 'thought' ? "rgba(182, 36, 255, 0.45)" : "rgba(0, 229, 255, 0.4)";
+                  if (edge.type === 'thought') {
+                    dashArray = "2,2";
+                    markerId = "arrow-tree-dashed";
+                  }
+                }
+
+                // Curving path for crosschecks to prevent overlaps
+                const dx = toPos.x - fromPos.x;
+                const dy = toPos.y - fromPos.y;
+                const isCross = graphMode === "topology" && edge.type === 'crosscheck';
+                let pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
+                
+                if (isCross) {
+                  const cx = (fromPos.x + toPos.x) / 2 - dy * 0.15;
+                  const cy = (fromPos.y + toPos.y) / 2 + dx * 0.15;
+                  pathData = `M ${fromPos.x} ${fromPos.y} Q ${cx} ${cy} ${toPos.x} ${toPos.y}`;
+                }
+
+                const strokeWidth = graphMode === "topology" && edge.count > 0 ? Math.min(0.5 + edge.count * 0.5, 3) : 0.8;
+
+                return (
+                  <g key={`edge-${i}`} style={{ opacity: graphMode === "topology" && edge.count === 0 ? 0.3 : 1 }}>
+                    <path
+                      d={pathData}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={dashArray}
+                      markerEnd={`url(#${markerId})`}
+                    />
+                    {graphMode === "topology" && edge.count > 0 && (
+                      <g transform={`translate(${(fromPos.x + toPos.x) / 2}, ${(fromPos.y + toPos.y) / 2})`}>
+                        <rect x="-16" y="-6" width="32" height="12" fill="var(--cp-bg-3)" stroke={strokeColor} strokeWidth="0.5" rx="2" />
+                        <text y="2.5" textAnchor="middle" fill={strokeColor} fontSize="7" fontWeight="bold" fontFamily="'Share Tech Mono', monospace">
+                          {edge.count}
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* 2. DRAW NODES */}
+              {currentNodes.map(node => {
+                const pos = customNodePositions[node.id] || { x: node.x, y: node.y };
+                const isTopology = graphMode === "topology";
+                const w = isTopology ? 84 : 110;
+                const h = isTopology ? 24 : 32;
+
+                // For tree node text preview extraction
+                const nodeEvt = (node as any).evt;
+                const isThought = (node as any).type === "thought";
+                const cleanContent = nodeEvt?.content ? nodeEvt.content.replace(/\s+/g, ' ') : '';
+                const previewText = cleanContent ? cleanContent.substring(0, 18) + (cleanContent.length > 18 ? '...' : '') : '';
+
+                return (
+                  <g
+                    key={`node-${node.id}`}
+                    transform={`translate(${pos.x}, ${pos.y})`}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      setDraggedNodeId(node.id);
+                    }}
+                    onClick={() => {
+                      if (graphMode === "tree" && nodeEvt) {
+                        setSelectedNode(nodeEvt);
+                      } else if (graphMode === "topology") {
+                        const nodeId = node.id;
+                        const agentMessages = messages.filter(m => {
+                          const from = m.from?.toLowerCase() || m.role.toLowerCase();
+                          return from === nodeId;
+                        });
+                        const agentThoughts = thinking.filter(t => t.agent?.toLowerCase() === nodeId);
+                        
+                        setSelectedNode({
+                          id: nodeId,
+                          agent: node.label,
+                          type: "agent_summary",
+                          timestamp: Date.now(),
+                          content: `AGENT INTEGRATION REPORT: ${node.label}\n\n` +
+                            `Active Role: ${nodeId.toUpperCase()}\n` +
+                            `Messages Relayed: ${agentMessages.length}\n` +
+                            `Cognitive Tasks: ${agentThoughts.length}\n\n` +
+                            `--- CHRONOLOGICAL ACTIVITY LOG ---\n\n` +
+                            [
+                              ...agentMessages.map(m => `[MESSAGE] ${new Date(typeof m.timestamp === 'object' ? (m.timestamp as Date).getTime() : m.timestamp).toLocaleTimeString()}:\n${m.content}`),
+                              ...agentThoughts.map(t => `[THINKING] ${new Date(t.timestamp).toLocaleTimeString()}:\n${t.thought}`)
+                            ].join("\n\n")
+                        });
+                      }
+                    }}
+                    style={{ cursor: draggedNodeId === node.id ? 'grabbing' : 'grab' }}
+                  >
+                    <rect
+                      x={-w / 2}
+                      y={-h / 2}
+                      width={w}
+                      height={h}
+                      fill={isThought ? "rgba(182, 36, 255, 0.08)" : "var(--cp-bg-3)"}
+                      stroke={node.color}
+                      strokeWidth={draggedNodeId === node.id ? 1.5 : 0.8}
+                      strokeDasharray={isThought ? "3,3" : undefined}
+                      rx={3}
+                      style={{
+                        filter: draggedNodeId === node.id ? "drop-shadow(0px 0px 8px rgba(0, 229, 255, 0.4))" : undefined,
+                        transition: 'stroke 0.2s, filter 0.2s'
+                      }}
+                    />
+                    
+                    {/* Node text content */}
+                    {isTopology ? (
+                      <text
+                        y="3"
+                        textAnchor="middle"
+                        fill={node.color}
+                        fontSize="9"
+                        fontWeight="bold"
+                        fontFamily="'Share Tech Mono', monospace"
+                      >
+                        {node.label}
+                      </text>
+                    ) : (
+                      <>
+                        <text
+                          y="-3"
+                          textAnchor="middle"
+                          fill={node.color}
+                          fontSize="8.5"
+                          fontWeight="bold"
+                          fontFamily="'Share Tech Mono', monospace"
+                        >
+                          {node.label}
+                        </text>
+                        <text
+                          y="8"
+                          textAnchor="middle"
+                          fill={isThought ? "rgba(182, 36, 255, 0.7)" : "rgba(255,255,255,0.45)"}
+                          fontSize="6.5"
+                          fontFamily="var(--font-sans)"
+                        >
+                          {previewText}
+                        </text>
+                      </>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+        )}
+      </div>
+
+      {/* Interactive Turn Details Footer for Tree Mode */}
+      {graphMode === "tree" && (
+        <div className="flex-shrink-0 h-[100px] border-t border-[var(--cp-border)] bg-black/60 p-2 text-[10px] font-mono overflow-y-auto">
+          <div className="text-[var(--cp-cyan)] font-bold mb-1">
+            {viewMode === "full" ? "// FULL_SESSION_TRACE" : "// ACTIVE_TURN_QUERY"}
+          </div>
+          <div className="text-white/80 italic p-1 bg-white/5 border border-white/5 mb-1 select-text">
+            {viewMode === "full" 
+              ? `Displaying entire session sequence containing ${allEvents.length} events across ${turns.length} turns.`
+              : `"${turns[activeTurnIdx]?.userQuery || ''}"`}
+          </div>
+          <div className="text-[8px] text-white/40">
+            Click any node in the tree flow map above to inspect the full contents of that reasoning stage.
+          </div>
+        </div>
+      )}
+
+      {/* Inspector Modal Overlay */}
+      {selectedNode && (
+        <div className="absolute inset-0 bg-black/85 flex items-center justify-center p-3 z-50">
+          <div
+            style={{
+              background: "var(--cp-bg-1)",
+              border: "1px solid var(--cp-cyan)",
+              boxShadow: "0 0 20px rgba(0,229,255,0.25)",
+              fontFamily: "var(--font-sans)",
+              borderRadius: "4px"
+            }}
+            className="w-full max-w-md p-4 flex flex-col max-h-[85%] select-text"
+          >
+            <div style={{ fontFamily: "'Share Tech Mono', monospace" }} className="flex justify-between items-center border-b border-[var(--cp-border)] pb-1.5 mb-2">
+              <span className="text-[var(--cp-cyan)] uppercase text-[10px] font-bold tracking-wider">
+                // INSPECT: {selectedNode.agent}
+              </span>
+              <span className="text-[8px] text-muted-foreground opacity-60">
+                {selectedNode.type.toUpperCase()} · {new Date(selectedNode.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+            
+            <div
+              className="flex-1 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap pr-1 bg-black/40 border border-white/5 p-2"
+              style={{ maxHeight: "300px", scrollbarWidth: "thin", fontFamily: "var(--font-sans)", scrollbarColor: 'rgba(0,229,255,0.1) transparent' }}
+            >
+              {selectedNode.content}
+            </div>
+
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={() => setSelectedNode(null)}
+                style={{
+                  background: "rgba(0, 229, 255, 0.15)",
+                  border: "1px solid var(--cp-cyan)",
+                  color: "var(--cp-cyan)",
+                  fontFamily: "'Share Tech Mono', monospace",
+                }}
+                className="px-3 py-1 text-[10px] hover:bg-[var(--cp-cyan)] hover:text-black transition-colors"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

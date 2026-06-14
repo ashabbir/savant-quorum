@@ -15,7 +15,7 @@ interface Window {
   sessions: {
     list: () => Promise<any[]>
     load: (id: string) => Promise<any>
-    save: (data: { id: string, title: string, messages: any[], thinking: any[], summary?: string }) => Promise<boolean>
+    save: (data: { id: string, title: string, messages: any[], thinking: any[], summary?: string, metadata?: string }) => Promise<boolean>
     delete: (id: string) => Promise<boolean>
   }
   system: {

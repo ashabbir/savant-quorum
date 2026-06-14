@@ -25,6 +25,23 @@ function run(command, args, options = {}) {
     })
   })
 }
+function isServerRunning(url) {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
+      res.resume()
+      resolve(true)
+    })
+
+    req.on('error', () => {
+      resolve(false)
+    })
+
+    req.setTimeout(500, () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
 
 function waitForServer(url, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
@@ -62,6 +79,32 @@ await run(process.execPath, [
   'development',
 ])
 
+const isConcurrent = process.argv.includes('--concurrent')
+let rendererProcess = null
+
+if (!isConcurrent) {
+  const running = await isServerRunning(devServerUrl)
+  if (!running) {
+    console.log('[electron:dev] Renderer dev server not detected. Starting renderer dev server...')
+    rendererProcess = spawn(process.execPath, [
+      path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js'),
+      '--force',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      '5173',
+      '--strictPort'
+    ], {
+      cwd: rootDir,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        QUORUM_RENDERER_ONLY: '1'
+      }
+    })
+  }
+}
+
 await waitForServer(devServerUrl)
 
 const electronProcess = spawn(electron, ['.'], {
@@ -73,15 +116,23 @@ const electronProcess = spawn(electron, ['.'], {
   },
 })
 
-const stopElectron = () => {
+const stopProcesses = () => {
+  if (rendererProcess && !rendererProcess.killed) {
+    try {
+      rendererProcess.kill()
+    } catch (e) {}
+  }
   if (!electronProcess.killed) {
-    electronProcess.kill()
+    try {
+      electronProcess.kill()
+    } catch (e) {}
   }
 }
 
-process.on('SIGINT', stopElectron)
-process.on('SIGTERM', stopElectron)
+process.on('SIGINT', stopProcesses)
+process.on('SIGTERM', stopProcesses)
 
 electronProcess.on('exit', (code) => {
+  stopProcesses()
   process.exit(code ?? 0)
 })

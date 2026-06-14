@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, memo } from "react";
-import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert } from "lucide-react";
-import { ChatMarkdown } from './ChatMarkdown'
+import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert, Globe, Search, RefreshCw, X, Edit, Paperclip } from "lucide-react";
+import { ChatMarkdown } from './ChatMarkdown';
 
 export interface Message {
   id: string;
@@ -12,14 +12,26 @@ export interface Message {
   provider?: string;
   model?: string;
   timestamp: Date | number;
+  attachments?: { name: string; content: string; summary?: string; loading?: boolean }[];
 }
 
 interface ChatAreaProps {
   messages: Message[];
   sessionTitle: string;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: { name: string; content: string; summary?: string }[]) => void;
+  onUploadFile: (name: string, content: string) => Promise<string>;
   onDeleteMessage?: (id: string) => void;
   isLoading?: boolean;
+  statusText?: string;
+  onSummarize?: () => void;
+  onClearSession?: () => void;
+  onEditMessage?: (id: string, newContent: string) => void;
+  onUpdateMessage?: (id: string, newContent: string) => void;
+  allowDeepSearch?: boolean;
+  onToggleDeepSearch?: (enabled: boolean) => void;
+  agents?: { id: string; name: string }[];
+  sessionFiles?: { name: string; content: string; summary?: string; loading?: boolean }[];
+  onDeleteSessionFile?: (name: string) => void;
 }
 
 const getRoleIcon = (role: Message['role']) => {
@@ -36,47 +48,7 @@ const getRoleIcon = (role: Message['role']) => {
   }
 }
 
-const getRoleColor = (role: Message['role']) => {
-  switch (role) {
-    case 'user': return "rgba(60,120,255,0.6)";
-    case 'moderator': return "var(--cp-green)";
-    case 'engineer': 
-    case 'architect': 
-    case 'security': 
-    case 'ai':
-      return "var(--muted-foreground)";
-    case 'internal': return "var(--cp-cyan)";
-    default: return "rgba(0,229,255,0.6)";
-  }
-}
-
-const getBgColor = (role: Message['role']) => {
-  switch (role) {
-    case 'user': return "rgba(60,120,255,0.12)";
-    case 'moderator': return "rgba(0,255,136,0.05)";
-    case 'engineer':
-    case 'architect':
-    case 'security':
-    case 'ai':
-      return "rgba(255,255,255,0.03)";
-    default: return "var(--cp-bg-2)";
-  }
-}
-
-const getBorderColor = (role: Message['role']) => {
-  switch (role) {
-    case 'user': return "rgba(60,120,255,0.25)";
-    case 'moderator': return "rgba(0,255,136,0.2)";
-    case 'engineer':
-    case 'architect':
-    case 'security':
-    case 'ai':
-      return "rgba(255,255,255,0.1)";
-    default: return "rgba(0,229,255,0.12)";
-  }
-}
-
-function MessageActions({ messageId, content, sessionTitle, onDelete }: { messageId: string; content: string; sessionTitle: string; onDelete?: (id: string) => void }) {
+function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdit, isUser }: { messageId: string; content: string; sessionTitle: string; onDelete?: (id: string) => void; onStartEdit?: () => void; isUser: boolean }) {
   function handleCopy() {
     navigator.clipboard.writeText(content);
   }
@@ -91,13 +63,84 @@ function MessageActions({ messageId, content, sessionTitle, onDelete }: { messag
     URL.revokeObjectURL(url);
   }
 
+  function handleDownloadHTML() {
+    const normalizedTitle = (sessionTitle || 'Quorum_Message')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savant Quorum - ${sessionTitle}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cp-bg: #080b12;
+            --cp-cyan: #00e5ff;
+            --cp-border: rgba(0, 229, 255, 0.2);
+            --foreground: #e0e0e0;
+        }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: var(--cp-bg);
+            color: var(--foreground);
+            line-height: 1.6;
+            padding: 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .header {
+            border-bottom: 1px solid var(--cp-border);
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+        }
+        h1 { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
+        .session-title { opacity: 0.6; font-size: 0.9rem; }
+        #content { background: rgba(255,255,255,0.02); border: 1px solid var(--cp-border); padding: 20px; }
+        pre { background: #1a1a1a; padding: 15px; border-radius: 4px; overflow-x: auto; border: 1px solid #333; }
+        code { font-family: 'Share Tech Mono', monospace; color: var(--cp-cyan); }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+        th { background-color: #1a1a1a; color: var(--cp-cyan); }
+        .mermaid { background: white !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
+        .fact-marker { color: var(--cp-cyan); font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>// SAVANT_QUORUM_REPORT</h1>
+        <div class="session-title">${sessionTitle}</div>
+    </div>
+    <div id="content"></div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        const rawContent = \`${content.replace(/`/g, '\\`').replace(/\${/g, '\\${')}\`;
+        document.getElementById('content').innerHTML = marked.parse(rawContent);
+    </script>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${normalizedTitle}-${messageId}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function handleDownloadPDF() {
     const normalizedTitle = (sessionTitle || 'Quorum_Report')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
 
-    // Basic implementation using window.print() on a temporary frame for PDF generation
     const frame = document.createElement('iframe');
     frame.style.display = 'none';
     document.body.appendChild(frame);
@@ -145,107 +188,71 @@ function MessageActions({ messageId, content, sessionTitle, onDelete }: { messag
   }
 
   return (
-    <div
-      style={{
-        background: "var(--cp-bg-3)",
-        border: "1px solid var(--cp-border)",
-      }}
-      className="flex items-center gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-    >
-      <button
-        onClick={handleCopy}
-        title="Copy"
-        style={{ color: "var(--cp-cyan)" }}
-        className="p-1 hover:bg-[rgba(0,229,255,0.1)] transition-colors"
-      >
+    <div className="message-actions">
+      {isUser && onStartEdit && (
+        <button onClick={onStartEdit} title="Edit Message" className="message-action-btn">
+          <Edit size={11} />
+        </button>
+      )}
+      <button onClick={handleCopy} title="Copy" className="message-action-btn">
         <Copy size={11} />
       </button>
-      <button
-        onClick={handleDownloadMarkdown}
-        title="Download as Markdown"
-        style={{ color: "var(--cp-cyan)" }}
-        className="p-1 hover:bg-[rgba(0,229,255,0.1)] transition-colors"
-      >
+      <button onClick={handleDownloadMarkdown} title="Download as Markdown" className="message-action-btn">
         <FileText size={11} />
       </button>
-      <button
-        onClick={handleDownloadPDF}
-        title="Download as PDF"
-        style={{ color: "var(--cp-cyan)" }}
-        className="p-1 hover:bg-[rgba(0,229,255,0.1)] transition-colors"
-      >
+      <button onClick={handleDownloadHTML} title="Download as HTML" className="message-action-btn">
+        <Globe size={11} />
+      </button>
+      <button onClick={handleDownloadPDF} title="Download as PDF" className="message-action-btn">
         <FileDown size={11} />
       </button>
-      <button
-        onClick={() => onDelete?.(messageId)}
-        title="Delete"
-        style={{ color: "var(--cp-magenta)" }}
-        className="p-1 hover:bg-[rgba(255,0,170,0.1)] transition-colors"
-      >
+      <button onClick={() => onDelete?.(messageId)} title="Delete" className="message-action-btn delete">
         <Trash2 size={11} />
       </button>
     </div>
   );
 }
 
-const MemoizedWhisperBlock = memo(({ message }: { message: Message }) => {
+const MemoizedWhisperBlock = memo(({ message, onUpdateMessage }: { message: Message, onUpdateMessage?: (id: string, newContent: string) => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isModerator = message.role === "moderator-whisper";
   const isAgent = message.role === "agent-whisper";
   
-  const accentColor = isModerator ? "rgba(180,100,255" : isAgent ? "rgba(0,229,255" : "rgba(255,230,0";
   const label = isModerator ? message.to : isAgent ? message.from : "";
   const prefix = isModerator ? "→ " : isAgent ? "from " : "";
 
+  let blockClass = "whisper-block";
+  if (isModerator) blockClass += " moderator-whisper";
+  else if (isAgent) blockClass += " agent-whisper";
+
   return (
-    <div className="flex items-center justify-center gap-2 my-1">
-      <div
-        style={{
-          border: `1px dashed ${accentColor},0.35)`,
-          background: `${accentColor},0.05)`,
-          maxWidth: "75%",
-          minWidth: "40%",
-        }}
-        className="flex flex-col gap-1 px-3 py-2 cursor-pointer transition-all hover:bg-opacity-10"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          <ShieldAlert size={12} style={{ color: `${accentColor},0.8)` }} className="shrink-0" />
-          <span style={{ color: `${accentColor},0.6)`, fontFamily: "'Share Tech Mono', monospace" }} className="text-xs uppercase tracking-wider flex-1">
+    <div className="whisper-block-wrapper">
+      <div className={blockClass} onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="whisper-header">
+          <ShieldAlert size={12} className="shrink-0" />
+          <span className="whisper-title">
             {message.role.replace('-', ' ')} {label && <span className="opacity-50 ml-1">{prefix}{label}</span>}
             {message.provider && message.model && (
-              <span style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                border: '1px solid rgba(255,255,255,0.1)', 
-                borderRadius: '4px',
-                padding: '1px 4px',
-                marginLeft: '6px',
-                fontSize: '0.85em',
-                opacity: 0.8,
-                textTransform: 'none'
-              }}>
+              <span className="whisper-badge">
                 &lt;{message.provider}:{message.model}&gt;
               </span>
             )}
           </span>
-          <span style={{ color: `${accentColor},0.4)`, fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px]">
+          <span className="whisper-toggle-hint">
             {isExpanded ? "collapse" : "expand"}
           </span>
         </div>
         
         {isExpanded && (
-          <div
-            style={{
-              color: `${accentColor},0.7)`,
-              fontFamily: "'Rajdhani', sans-serif",
-              borderTop: `1px dashed ${accentColor},0.15)`,
-              marginTop: "4px",
-              paddingTop: "8px"
-            }}
-            className="text-sm leading-relaxed markdown-content whisper-markdown"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ChatMarkdown content={message.content} variant="whisper" />
+          <div className="whisper-content-box" onClick={(e) => e.stopPropagation()}>
+            <ChatMarkdown 
+              content={message.content} 
+              variant="whisper" 
+              onUpdateCode={(oldCode, newCode) => {
+                const updatedContent = message.content.replace(oldCode, newCode);
+                onUpdateMessage?.(message.id, updatedContent);
+              }}
+            />
           </div>
         )}
       </div>
@@ -253,88 +260,107 @@ const MemoizedWhisperBlock = memo(({ message }: { message: Message }) => {
   );
 });
 
-const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage }: { msg: Message, sessionTitle: string, onDeleteMessage?: (id: string) => void }) => {
+const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMessage, onUpdateMessage }: { msg: Message, sessionTitle: string, onDeleteMessage?: (id: string) => void, onEditMessage?: (id: string, newContent: string) => void, onUpdateMessage?: (id: string, newContent: string) => void }) => {
   const isUser = msg.role === 'user';
   const timestamp = typeof msg.timestamp === 'number' ? new Date(msg.timestamp) : msg.timestamp;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editVal, setEditVal] = useState(msg.content);
+
+  function handleSaveEdit() {
+    if (editVal.trim() && editVal !== msg.content) {
+      onEditMessage?.(msg.id, editVal.trim());
+    }
+    setIsEditing(false);
+  }
+
+  let bubbleClass = "message-bubble-body";
+  if (isUser) bubbleClass += " user";
+  else if (msg.role === 'moderator') bubbleClass += " moderator";
+  else if (['engineer', 'architect', 'security', 'ai'].includes(msg.role)) bubbleClass += " agent";
+  else bubbleClass += " system-meta";
 
   return (
-    <div className={`flex items-start gap-2 group ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`message-item-wrapper group ${isUser ? 'user' : 'agent'}`}>
       {!isUser && (
-        <div
-          style={{
-            background: msg.role === 'moderator' ? "rgba(0,255,136,0.08)" : "rgba(255,255,255,0.05)",
-            border: msg.role === 'moderator' ? "1px solid rgba(0,255,136,0.15)" : "1px solid rgba(255,255,255,0.1)",
-            boxShadow: "inset 0 0 12px rgba(255,255,255,0.02)",
-            width: 26,
-            height: 26,
-            flexShrink: 0,
-          }}
-          className="flex items-center justify-center mt-0.5"
-        >
+        <div className={`message-avatar-box ${msg.role === 'moderator' ? 'moderator' : ''}`}>
           {getRoleIcon(msg.role)}
         </div>
       )}
-      <div style={{ maxWidth: "85%" }}>
-        <div
-          style={{
-            color: getRoleColor(msg.role),
-            fontFamily: "'Share Tech Mono', monospace",
-          }}
-          className={`text-xs mb-1 opacity-50 flex items-center gap-2 ${isUser ? 'justify-end' : 'justify-between'}`}
-        >
+      <div className="message-content-container">
+        <div className={`message-meta-header ${isUser ? 'user' : 'agent'}`}>
           {!isUser && (
             <span className="flex items-center gap-2">
               {msg.role.toUpperCase()}
               {msg.provider && msg.model && (
-                <span style={{ 
-                  background: 'rgba(255,255,255,0.05)', 
-                  border: '1px solid rgba(255,255,255,0.1)', 
-                  borderRadius: '4px',
-                  padding: '1px 4px',
-                  fontSize: '0.85em',
-                  opacity: 0.8,
-                  textTransform: 'none'
-                }}>
+                <span className="message-meta-badge">
                   &lt;{msg.provider}:{msg.model}&gt;
                 </span>
               )}
-              <span className="opacity-40">
+              <span className="message-timestamp">
                 {timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
             </span>
           )}
           {isUser && (
-            <span className="opacity-40 mr-2">
+            <span className="message-timestamp mr-2">
               {timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           )}
           {isUser && "YOU"}
-          <MessageActions messageId={msg.id} content={msg.content} sessionTitle={sessionTitle} onDelete={onDeleteMessage} />
+          <MessageActions 
+            messageId={msg.id} 
+            content={msg.content} 
+            sessionTitle={sessionTitle} 
+            onDelete={onDeleteMessage} 
+            onStartEdit={() => { setIsEditing(true); setEditVal(msg.content); }}
+            isUser={isUser}
+          />
         </div>
-        <div
-          style={{
-            background: getBgColor(msg.role),
-            border: `1px solid ${getBorderColor(msg.role)}`,
-            color: isUser ? "rgba(180,210,255,0.9)" : "var(--foreground)",
-            fontFamily: "'Rajdhani', sans-serif",
-            lineHeight: 1.6,
-          }}
-          className="px-3 py-2 text-sm markdown-content"
-        >
-          <ChatMarkdown content={msg.content} />
+        <div className={bubbleClass}>
+          {isEditing ? (
+            <div className="inline-edit-box">
+              <textarea 
+                className="inline-edit-textarea" 
+                value={editVal} 
+                onChange={e => setEditVal(e.target.value)}
+                rows={3}
+              />
+              <div className="inline-edit-actions">
+                <button className="inline-edit-btn cancel" onClick={() => setIsEditing(false)}>Cancel</button>
+                <button className="inline-edit-btn save" onClick={handleSaveEdit}>Save & Re-run</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <ChatMarkdown 
+                content={msg.content} 
+                onUpdateCode={(oldCode, newCode) => {
+                  const updatedContent = msg.content.replace(oldCode, newCode);
+                  onUpdateMessage?.(msg.id, updatedContent);
+                }}
+              />
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div className="message-attachments-container">
+                  {msg.attachments.map((att, idx) => (
+                    <details key={idx} className="collapsible-summary-details">
+                      <summary className="collapsible-summary-title">
+                        <FileText size={10} />
+                        <span>{att.name}</span>
+                        <span className="summary-status-hint"> (click to view agent summary)</span>
+                      </summary>
+                      <div className="collapsible-summary-content">
+                        {att.summary || "No summary available."}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
       {isUser && (
-        <div
-          style={{
-            background: "rgba(60,120,255,0.15)",
-            border: "1px solid rgba(60,120,255,0.3)",
-            width: 26,
-            height: 26,
-            flexShrink: 0,
-          }}
-          className="flex items-center justify-center mt-0.5"
-        >
+        <div className="message-avatar-box user">
           <User size={13} style={{ color: "rgba(120,180,255,0.8)" }} />
         </div>
       )}
@@ -342,102 +368,422 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage }: { msg:
   );
 });
 
-export function ChatArea({ messages, sessionTitle, onSend, onDeleteMessage, isLoading }: ChatAreaProps) {
+export function ChatArea({ 
+  messages, 
+  sessionTitle, 
+  onSend, 
+  onUploadFile, 
+  onDeleteMessage, 
+  isLoading, 
+  statusText = "IDLE",
+  onSummarize, 
+  onClearSession, 
+  onEditMessage, 
+  onUpdateMessage, 
+  allowDeepSearch, 
+  onToggleDeepSearch, 
+  agents = [],
+  sessionFiles = [],
+  onDeleteSessionFile
+}: ChatAreaProps) {
   const [input, setInput] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState("ALL");
+  const [slashSuggestions, setSlashSuggestions] = useState<{ name: string; desc: string }[]>([]);
+  const [selectedSugIdx, setSelectedSugIdx] = useState(0);
+
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function triggerFileInput() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFiles(fileList: FileList) {
+    Array.from(fileList).forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        window.dispatchEvent(new CustomEvent('toast', { detail: `File ${file.name} is too large (max 5MB)` }));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const rawContent = event.target?.result;
+        if (typeof rawContent === 'string') {
+          const content = rawContent.replace(/\0/g, '');
+          try {
+            await onUploadFile(file.name, content);
+          } catch (err: any) {
+            window.dispatchEvent(new CustomEvent('toast', { detail: `Failed to upload ${file.name}: ${err.message}` }));
+          }
+        }
+      };
+      reader.onerror = () => {
+        window.dispatchEvent(new CustomEvent('toast', { detail: `Failed to read file ${file.name}` }));
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  }
+
+
+  const SLASH_COMMANDS = [
+    { name: "/summarize", desc: "Regenerate session summaries" },
+    { name: "/clear", desc: "Reset active session state" },
+    { name: "/jira", desc: "Create a Jira ticket from chat" }
+  ];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function handleSend() {
+  // Handle Slash Command Trigger
+  useEffect(() => {
+    const lastWord = input.split(/\s+/).pop() || "";
+    if (lastWord.startsWith("/")) {
+      const match = SLASH_COMMANDS.filter(c => c.name.toLowerCase().startsWith(lastWord.toLowerCase()));
+      setSlashSuggestions(match);
+      setSelectedSugIdx(0);
+    } else {
+      setSlashSuggestions([]);
+    }
+  }, [input]);
+
+  async function handleSendMsg() {
     const text = input.trim();
     if (!text) return;
-    onSend(text);
+
+    // Direct route checks
+    let finalizedText = text;
+    if (selectedAgent !== "ALL" && !text.startsWith("@")) {
+      finalizedText = `@${selectedAgent.toLowerCase()} ${text}`;
+    }
+
+    // Intercept slash commands
+    if (finalizedText.startsWith("/clear")) {
+      if (onClearSession) onClearSession();
+      setInput("");
+      return;
+    }
+
+    if (finalizedText.startsWith("/summarize")) {
+      if (onSummarize) onSummarize();
+      setInput("");
+      return;
+    }
+
+    if (finalizedText.startsWith("/jira")) {
+      // Parse ticket parameters: /jira [title] --priority [high/medium/low]
+      const cleanCmd = finalizedText.replace("/jira", "").trim();
+      const priorityMatch = cleanCmd.match(/--priority\s+(\w+)/i);
+      const priority = priorityMatch ? priorityMatch[1].toLowerCase() : "medium";
+      const title = cleanCmd.replace(/--priority\s+\w+/i, "").trim() || "Manual Ticket from Swarm Workspace";
+
+      setInput("");
+
+      // Call MCP Tool via window.system
+      try {
+        if (window.system?.callMcpTool) {
+          const wsId = '17807589009121862532574';
+          const ticketKey = 'QRM-' + Math.floor(100 + Math.random() * 900);
+          
+          onSend(`[SYSTEM_ACTION] Initiating creation of JIRA ticket ${ticketKey}: "${title}" with priority: ${priority}...`);
+          
+          const response = await window.system.callMcpTool('savant-workspace', 'create_jira_ticket', {
+            workspace_id: wsId,
+            ticket_key: ticketKey,
+            title: title,
+            priority: priority,
+            status: 'todo',
+            assignee: 'ahmed'
+          });
+
+          // Insert response message
+          onSend(`[SYSTEM_SUCCESS] Jira Ticket ${ticketKey} successfully registered in workspace database.`);
+        } else {
+          onSend(`[SYSTEM_ERROR] MCP call interface unavailable.`);
+        }
+      } catch (e: any) {
+        onSend(`[SYSTEM_ERROR] Failed to create Jira ticket: ${e.message}`);
+      }
+      return;
+    }
+
+    onSend(finalizedText);
     setInput("");
   }
 
   function handleKey(e: React.KeyboardEvent) {
+    if (slashSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedSugIdx(prev => (prev + 1) % slashSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedSugIdx(prev => (prev - 1 + slashSuggestions.length) % slashSuggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const selected = slashSuggestions[selectedSugIdx];
+        const words = input.split(/\s+/);
+        words.pop(); // remove the partial slash
+        setInput([...words, selected.name].join(" ") + " ");
+        setSlashSuggestions([]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSlashSuggestions([]);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSendMsg();
     }
   }
 
+  // Filter messages based on search query
+  const filteredMessages = messages.filter(m => {
+    if (m.role === 'system' || m.role === 'internal') return false;
+    if (searchQuery.trim() === "") return true;
+    return m.content.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* messages */}
-      <div
-        className="flex-1 overflow-y-auto py-4 px-4 space-y-4"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}
-      >
-        {messages.filter(m => m.role !== 'system' && m.role !== 'internal').map(msg => {
+    <div className="chat-container">
+      {/* Search Bar */}
+      <div className="chat-history-search-bar">
+        <Search size={11} className="chat-history-search-btn" onClick={() => setSearchOpen(!searchOpen)} />
+        {searchOpen ? (
+          <div className="flex items-center flex-1 gap-2">
+            <input 
+              type="text" 
+              className="chat-history-search-input"
+              placeholder="Search conversation history..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {searchQuery && (
+              <X size={11} className="cursor-pointer opacity-60 hover:opacity-100" onClick={() => setSearchQuery("")} />
+            )}
+          </div>
+        ) : (
+          <span style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '10px', opacity: 0.3 }}>
+            // COGNITIVE_LOGS_ACTIVE
+          </span>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div className="chat-messages-viewport">
+        {filteredMessages.map(msg => {
           if (msg.role === "whisper" || msg.role === "moderator-whisper" || msg.role === "agent-whisper") {
-            return <MemoizedWhisperBlock key={msg.id} message={msg} />;
+            return <MemoizedWhisperBlock key={msg.id} message={msg} onUpdateMessage={onUpdateMessage} />;
           }
-          return <MemoizedMessageItem key={msg.id} msg={msg} sessionTitle={sessionTitle} onDeleteMessage={onDeleteMessage} />;
+          return (
+            <MemoizedMessageItem 
+              key={msg.id} 
+              msg={msg} 
+              sessionTitle={sessionTitle} 
+              onDeleteMessage={onDeleteMessage} 
+              onEditMessage={onEditMessage}
+              onUpdateMessage={onUpdateMessage}
+            />
+          );
         })}
+        {isLoading && (
+          <div className="processing-indicator-container">
+            <div className="processing-bubble">
+              <span className="processing-text">
+                // SWARM_PROCESSING: [{statusText}]
+              </span>
+              <div className="typing-dots">
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
+      {/* Input panel */}
+      <div className="chat-input-panel">
+        {/* Direct Routing Selectors */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="agent-selectors-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span className="agent-selector-label">Target Agent:</span>
+            <span
+              className={`agent-selector-pill ${selectedAgent === "ALL" ? 'active' : ''}`}
+              onClick={() => setSelectedAgent("ALL")}
+            >
+              ⚛ SWARM
+            </span>
+            <span
+              className={`agent-selector-pill ${selectedAgent === "MODERATOR" ? 'active' : ''}`}
+              onClick={() => setSelectedAgent("MODERATOR")}
+            >
+              @moderator
+            </span>
+            {agents.map(agent => {
+              const agentNameNormalized = agent.name.toLowerCase().replace(/\s+/g, '-');
+              const isActive = selectedAgent === agentNameNormalized.toUpperCase();
+              return (
+                <span
+                  key={agent.id}
+                  className={`agent-selector-pill ${isActive ? 'active' : ''}`}
+                  onClick={() => setSelectedAgent(agentNameNormalized.toUpperCase())}
+                >
+                  @{agentNameNormalized}
+                </span>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <span className="agent-selector-label">Deep Search:</span>
+            <button
+              onClick={() => onToggleDeepSearch?.(!allowDeepSearch)}
+              className={`agent-selector-pill ${allowDeepSearch ? 'active' : ''}`}
+              title="Toggle session-wide Deep Search"
+            >
+              {allowDeepSearch ? "🔍 ON" : "🔍 OFF"}
+            </button>
+          </div>
+        </div>
 
-      {/* input bar */}
-      <div
-        style={{
-          background: "var(--cp-bg-2)",
-          borderTop: "1px solid var(--cp-border)",
-        }}
-        className="shrink-0 p-3"
-      >
-        <div
-          style={{
-            background: "var(--cp-bg-3)",
-            border: "1px solid rgba(0,229,255,0.2)",
-          }}
-          className="flex items-end gap-2 p-2"
-        >
+        {/* Attachment badges */}
+        {sessionFiles.length > 0 && (
+          <div className="attachment-badges-row">
+            {sessionFiles.map((att, idx) => {
+              const loading = att.loading;
+              return (
+                <div key={idx} className="draft-attachment-wrapper">
+                  <div className="attachment-badge">
+                    <FileText size={10} />
+                    <span>{att.name}</span>
+                    {loading ? (
+                      <span className="draft-attachment-loading-hint"> (summarizing...)</span>
+                    ) : att.summary && (
+                      <details className="draft-attachment-details">
+                        <summary className="draft-attachment-summary-btn">view summary</summary>
+                        <div className="draft-attachment-summary-box">
+                          {att.summary}
+                        </div>
+                      </details>
+                    )}
+                    <button
+                      type="button"
+                      className="attachment-remove-btn"
+                      onClick={() => onDeleteSessionFile?.(att.name)}
+                      title="Remove file"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="chat-input-control-box">
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            multiple
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files) {
+                handleFiles(e.target.files);
+              }
+              e.target.value = "";
+            }}
+            style={{ display: "none" }}
+          />
+
+          {/* Attach Button */}
+          <button
+            onClick={triggerFileInput}
+            className="chat-attach-button"
+            title="Attach documents"
+            type="button"
+          >
+            <Paperclip size={13} />
+          </button>
+
+          {/* Slash Suggestion Overlay */}
+          {slashSuggestions.length > 0 && (
+            <div className="slash-suggestions-panel">
+              {slashSuggestions.map((sug, idx) => (
+                <div 
+                  key={sug.name} 
+                  className={`suggestion-item ${selectedSugIdx === idx ? 'selected' : ''}`}
+                  onClick={() => {
+                    const words = input.split(/\s+/);
+                    words.pop();
+                    setInput([...words, sug.name].join(" ") + " ");
+                    setSlashSuggestions([]);
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  <span className="cmd-name">{sug.name}</span>
+                  <span className="cmd-desc">{sug.desc}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             rows={3}
-            placeholder={isLoading ? "transmit additional intel to swarm..." : "transmit message..."}
-            style={{
-              background: "transparent",
-              color: "var(--foreground)",
-              fontFamily: "'Share Tech Mono', monospace",
-              resize: "none",
-              outline: "none",
-              border: "none",
-              minHeight: "4.5rem",
-              maxHeight: "12rem",
-              scrollbarWidth: "thin",
-              scrollbarColor: "rgba(0,229,255,0.1) transparent"
-            }}
-            className="flex-1 text-xs placeholder:opacity-30 overflow-y-auto"
+            placeholder={isLoading ? "transmit additional intel to swarm..." : "transmit message (press '/' for slash commands)..."}
+            className={`chat-input-textarea ${isDragOver ? 'dragover' : ''}`}
           />
           <button
-            onClick={handleSend}
+            onClick={handleSendMsg}
             disabled={!input.trim()}
-            style={{
-              background: input.trim() ? "var(--cp-cyan)" : "var(--cp-bg-3)",
-              color: input.trim() ? "#080b12" : "rgba(0,229,255,0.3)",
-              border: "1px solid rgba(0,229,255,0.2)",
-              transition: "all 0.15s",
-            }}
-            className="p-1.5 shrink-0"
+            className="chat-send-button"
           >
             <Send size={13} />
           </button>
         </div>
-        <div
-          style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }}
-          className="text-xs opacity-20 mt-1 px-1 flex justify-between"
-        >
+        <div className="chat-input-footer-row">
           <span>enter to send · shift+enter for newline</span>
-          {isLoading && <span className="animate-pulse">SYSTEM_BUSY</span>}
+          {isLoading && <span className="active-state">SYSTEM_BUSY</span>}
         </div>
       </div>
     </div>

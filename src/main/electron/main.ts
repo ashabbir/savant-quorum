@@ -46,6 +46,8 @@ async function initDb() {
         from_agent TEXT,
         to_agent TEXT,
         timestamp INTEGER,
+        provider TEXT,
+        model TEXT,
         FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
       );
 
@@ -64,6 +66,19 @@ async function initDb() {
         value TEXT
       );
     `)
+
+    // Migration block for existing messages table
+    try {
+      db.exec("ALTER TABLE messages ADD COLUMN provider TEXT");
+    } catch (e) {
+      // Column may already exist
+    }
+    try {
+      db.exec("ALTER TABLE messages ADD COLUMN model TEXT");
+    } catch (e) {
+      // Column may already exist
+    }
+
     console.log('[QUORUM] SQLite engine initialized.')
   } catch (e) {
     console.error('Failed to initialize Savant Quorum database:', e)
@@ -181,6 +196,7 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     console.log(`[QUORUM] Loading Dev Server: ${VITE_DEV_SERVER_URL}`)
     win.loadURL(VITE_DEV_SERVER_URL)
+    win.webContents.openDevTools()
   } else {
     // In built app, index.html is in the dist folder
     // When running from root (dev/build), dist-electron and dist are siblings
@@ -271,8 +287,11 @@ ipcMain.handle('run-agent', async (_event, { provider, model, prompt }) => {
     
     const { id } = await runRes.json();
     
+    let pollDelay = 25;
     while (true) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, pollDelay));
+      if (pollDelay < 100) pollDelay += 15;
+      
       const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
         headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
       });
@@ -310,7 +329,7 @@ ipcMain.handle('load-session', async (_event, sessionId) => {
   try {
     const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId)
     if (!session) return null
-    const messages = db.prepare('SELECT id, role, content, from_agent as \"from\", to_agent as \"to\", timestamp FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(sessionId)
+    const messages = db.prepare('SELECT id, role, content, from_agent as \"from\", to_agent as \"to\", timestamp, provider, model FROM messages WHERE session_id = ? ORDER BY timestamp ASC').all(sessionId)
     const thinking = db.prepare('SELECT id, agent, thought, type, timestamp FROM thinking WHERE session_id = ? ORDER BY timestamp ASC').all(sessionId)
     return { ...session, messages, thinking }
   } catch (e) {
@@ -318,24 +337,24 @@ ipcMain.handle('load-session', async (_event, sessionId) => {
   }
 })
 
-ipcMain.handle('save-session', async (_event, { id, title, messages, thinking }) => {
+ipcMain.handle('save-session', async (_event, { id, title, messages, thinking, metadata }) => {
   if (!db) return false
   try {
     const transaction = db.transaction((data: any) => {
       const now = Date.now()
       db.prepare(`
-        INSERT INTO sessions (id, title, created_at, updated_at) 
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at
-      `).run(data.id, data.title, now, now)
+        INSERT INTO sessions (id, title, created_at, updated_at, metadata) 
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at, metadata=excluded.metadata
+      `).run(data.id, data.title, now, now, data.metadata || null)
       db.prepare('DELETE FROM messages WHERE session_id = ?').run(data.id)
       db.prepare('DELETE FROM thinking WHERE session_id = ?').run(data.id)
-      const insertMsg = db.prepare(`INSERT INTO messages (id, session_id, role, content, from_agent, to_agent, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      for (const m of data.messages) insertMsg.run(m.id, data.id, m.role, m.content, m.from || null, m.to || null, m.timestamp)
+      const insertMsg = db.prepare(`INSERT INTO messages (id, session_id, role, content, from_agent, to_agent, timestamp, provider, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      for (const m of data.messages) insertMsg.run(m.id, data.id, m.role, m.content, m.from || null, m.to || null, m.timestamp, m.provider || null, m.model || null)
       const insertThink = db.prepare(`INSERT INTO thinking (id, session_id, agent, thought, type, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
       for (const t of data.thinking) insertThink.run(t.id, data.id, t.agent, t.thought, t.type || 'thought', t.timestamp)
     })
-    transaction({ id, title, messages, thinking })
+    transaction({ id, title, messages, thinking, metadata })
     return true
   } catch (e) {
     return false
