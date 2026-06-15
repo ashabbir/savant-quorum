@@ -200,9 +200,7 @@ function createWindow() {
   } else {
     // In built app, index.html is in the dist folder
     // When running from root (dev/build), dist-electron and dist are siblings
-    const indexPath = app.isPackaged 
-      ? path.join(process.resourcesPath, 'app', 'dist', 'index.html')
-      : path.join(__dirname, '..', 'dist', 'index.html')
+    const indexPath = path.join(__dirname, '..', 'dist', 'index.html')
     
     console.log(`[QUORUM] Loading production file: ${indexPath}`)
     win.loadFile(indexPath).catch(err => {

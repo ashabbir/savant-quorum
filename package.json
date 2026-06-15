@@ -1,6 +1,6 @@
 {
   "name": "savant-quorum",
-  "version": "5.0.0",
+  "version": "5.0.2",
   "description": "Savant Quorum - A high-security multi-agent collaborative environment.",
   "author": "project-x",
   "main": "dist-electron/main.js",
