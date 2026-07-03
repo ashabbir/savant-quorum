@@ -4,9 +4,9 @@ export function TopBar() {
   return (
     <header
       style={{
-        background: "var(--cp-bg-1)",
-        borderBottom: "1px solid var(--cp-border)",
-        boxShadow: "0 1px 0 rgba(0,229,255,0.08)",
+        background: "var(--background)",
+        borderBottom: "1px solid var(--border)",
+        boxShadow: "none",
       }}
       className="flex items-center justify-between px-3 h-10 shrink-0"
     >
@@ -17,28 +17,26 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <div
           style={{
-            background:
-              "linear-gradient(135deg, var(--cp-cyan), var(--cp-purple))",
-            boxShadow: "var(--cp-glow-cyan)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
           }}
           className="w-6 h-6 flex items-center justify-center overflow-hidden"
         >
           <img
             src={savantIcon}
-            alt="Savant"
+            alt="Quorum"
             className="w-full h-full object-contain"
           />
         </div>
         <span
           style={{
             fontFamily: "'Orbitron', monospace",
-            color: "var(--cp-cyan)",
-            textShadow: "var(--cp-glow-cyan)",
-            letterSpacing: "0.15em",
+            color: "var(--primary)",
+            letterSpacing: "0.22em",
           }}
-          className="text-sm font-bold uppercase tracking-widest"
+          className="text-base font-bold uppercase tracking-[0.22em]"
         >
-          quorum
+          Quorum
         </span>
       </div>
 

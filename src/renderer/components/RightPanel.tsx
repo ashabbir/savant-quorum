@@ -53,9 +53,9 @@ function NavIcon({
           <button
             onClick={onClick}
             style={{
-              color: "var(--cp-cyan)",
+              color: "var(--primary)",
               opacity: isActive ? 1 : 0.45,
-              borderRight: isActive ? "2px solid var(--cp-cyan)" : "2px solid transparent",
+              borderRight: isActive ? "2px solid var(--primary)" : "2px solid transparent",
             }}
             className="w-10 h-10 flex items-center justify-center hover:opacity-100 transition-all"
           >
@@ -66,9 +66,9 @@ function NavIcon({
           <Tooltip.Content
             side="left"
             style={{
-              background: "var(--cp-bg-3)",
-              border: "1px solid var(--cp-border)",
-              color: "var(--cp-cyan)",
+              background: "var(--secondary)",
+              border: "1px solid var(--border)",
+              color: "var(--primary)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
             className="px-2 py-1 text-xs z-50"
@@ -111,7 +111,7 @@ export function RightPanel({
     const whispers = messages.filter(m => ['whisper', 'moderator-whisper', 'agent-whisper'].includes(m.role)).length;
     const publics = messages.filter(m => !['whisper', 'moderator-whisper', 'agent-whisper', 'system', 'internal'].includes(m.role)).length;
     return [
-      { name: 'WHISPERS', value: whispers, color: '#b624ff' },
+      { name: 'WHISPERS', value: whispers, color: '#ff00aa' },
       { name: 'PUBLIC', value: publics, color: '#00e5ff' }
     ].filter(v => v.value > 0);
   };
@@ -571,10 +571,10 @@ export function RightPanel({
       disagree += disagreeMatches.length;
     });
     const data = [];
-    if (agree > 0) data.push({ name: 'AGREEMENT', value: agree, color: 'var(--cp-green)' });
+    if (agree > 0) data.push({ name: 'AGREEMENT', value: agree, color: 'var(--good)' });
     if (disagree > 0) data.push({ name: 'FRICTION', value: disagree, color: 'rgba(255, 0, 85, 1)' });
     if (data.length === 0) {
-      data.push({ name: 'AGREEMENT', value: 1, color: 'var(--cp-green)' });
+      data.push({ name: 'AGREEMENT', value: 1, color: 'var(--good)' });
     }
     return data;
   };
@@ -774,7 +774,7 @@ export function RightPanel({
       const name = t.agent.toUpperCase();
       counts[name] = (counts[name] || 0) + t.thought.length;
     });
-    const colors = ['#b624ff', '#00e5ff', '#00e676', '#ffeb3b', '#ff1744', '#ff9100'];
+    const colors = ['#ff00aa', '#00e5ff', '#00ff88', '#ffe600', '#ff2244', '#ff9100'];
     const data = Object.entries(counts).map(([name, value], idx) => ({
       name,
       value,
@@ -955,8 +955,8 @@ export function RightPanel({
 
   const getAgentColor = (agent: string) => {
     const a = agent.toLowerCase();
-    if (a === 'moderator') return 'var(--cp-green)';
-    if (a === 'system') return 'var(--cp-purple)';
+    if (a === 'moderator') return 'var(--good)';
+    if (a === 'system') return 'var(--chart-5)';
     return 'var(--muted-foreground)';
   }
 
@@ -1009,9 +1009,9 @@ export function RightPanel({
         {drawerOpen && (
           <motion.div
             key="drawer-panel"
-            initial={{ x: "100%", opacity: 0 }}
+            initial={{ x: "-100%", opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "100%", opacity: 0 }}
+            exit={{ x: "-100%", opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
             style={{
               position: "absolute",
@@ -1020,32 +1020,32 @@ export function RightPanel({
               top: 0,
               bottom: 0,
               overflow: "hidden",
-              borderLeft: "1px solid var(--cp-border)",
-              background: "var(--cp-bg-1)",
+              borderRight: "1px solid var(--border)",
+              background: "var(--background)",
               zIndex: 10,
             }}
           >
             <div className="flex flex-col overflow-hidden h-full w-full">
               <div
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
-                  borderBottom: "1px solid var(--cp-border)",
+                  borderBottom: "1px solid var(--border)",
                 }}
-                className="px-3 py-1.5 text-xs opacity-40 uppercase tracking-widest shrink-0 flex justify-between items-center"
+                className="px-3 py-1.5 text-sm opacity-55 uppercase tracking-widest shrink-0 flex justify-between items-center"
               >
                 <span>// {TABS.find(t => t.id === activeTab)?.label}</span>
-                {activeTab === 'trace' && <span className="text-[var(--cp-yellow)] animate-pulse">{statusText}</span>}
+                {activeTab === 'trace' && <span className="text-[var(--chart-3)] animate-pulse">{statusText}</span>}
               </div>
 
               <div className="flex-1 overflow-hidden">
                 {activeTab === "pulse" && (
-                  <div className="p-3 h-full overflow-y-auto space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}>
+                  <div className="p-3 h-full overflow-y-auto space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "var(--primary) transparent" }}>
                     
                     {/* 1. CHAT VISUALIZATIONS CONTAINER (1 per row at top) */}
-                    <section className="bg-black/20 border border-[var(--cp-border)] p-3">
-                      <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                        <Activity size={11} className="text-[var(--cp-cyan)] animate-pulse" />
+                    <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                      <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                        <Activity size={11} className="text-[var(--primary)] animate-pulse" />
                         // CHAT_INSIGHTS_VISUALIZATIONS
                       </div>
 
@@ -1053,17 +1053,17 @@ export function RightPanel({
                         {/* Row 1: The 4 requested charts in a single row (4 per row) */}
                         <div className="grid grid-cols-4 gap-3">
                           {/* Visual 1: Engagement */}
-                          <div className="bg-black/40 border border-white/5 p-2">
-                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
                               // engagement_messages
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
                               <BarChart data={engagementData} layout="vertical">
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="name" type="category" hide />
-                                <Bar dataKey="value" fill="var(--cp-cyan)" radius={[0, 1, 1, 0]}>
+                                <Bar dataKey="value" fill="var(--primary)" radius={[0, 1, 1, 0]}>
                                   {engagementData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.name === 'YOU' ? 'var(--cp-cyan)' : 'rgba(0,229,255,0.4)'} />
+                                    <Cell key={`cell-${index}`} fill={entry.name === 'YOU' ? 'var(--primary)' : 'var(--chart-3)'} />
                                   ))}
                                 </Bar>
                               </BarChart>
@@ -1071,18 +1071,18 @@ export function RightPanel({
                           </div>
 
                           {/* Visual 2: Stream Graph (Multi-Agent Chat Flow) */}
-                          <div className="bg-black/40 border border-white/5 p-2">
-                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
                               // chat_flow_stream_graph
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
                               <AreaChart data={streamGraphData}>
                                 <XAxis dataKey="idx" hide />
                                 <RechartsTooltip 
-                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
+                                  contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
                                 />
                                 {Array.from(new Set(agentStats.map(a => a.agent))).map((agent, index) => {
-                                  const colors = ['#00e5ff', '#b624ff', '#00e676', '#ffeb3b', '#ff1744', '#ff9100'];
+                                  const colors = ['#00e5ff', '#ff00aa', '#00ff88', '#ffe600', '#ff2244', '#ff9100'];
                                   return (
                                     <Area 
                                       key={agent}
@@ -1100,8 +1100,8 @@ export function RightPanel({
                           </div>
 
                           {/* Visual 3: Consensus Ratio */}
-                          <div className="bg-black/40 border border-white/5 p-2 flex flex-col items-center justify-center">
-                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1 opacity-60 w-full">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 flex flex-col items-center justify-center">
+                            <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1 opacity-70 w-full">
                               // consensus_balance
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
@@ -1124,19 +1124,19 @@ export function RightPanel({
                           </div>
 
                           {/* Visual 4: Factual Stacked Bar */}
-                          <div className="bg-black/40 border border-white/5 p-2">
-                            <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
                               // factual_distribution_stack
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
                               <BarChart data={stackedBarData}>
                                 <XAxis dataKey="name" hide />
                                 <RechartsTooltip 
-                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
+                                  contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
                                 />
-                                <Bar dataKey="verified" stackId="a" fill="var(--cp-green)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="verified" stackId="a" fill="var(--good)" radius={[1, 1, 0, 0]} />
                                 <Bar dataKey="unverifiedChecks" stackId="a" fill="rgba(255, 0, 85, 0.8)" radius={[1, 1, 0, 0]} />
-                                <Bar dataKey="uncheckedClaims" stackId="a" fill="var(--cp-cyan)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="uncheckedClaims" stackId="a" fill="var(--primary)" radius={[1, 1, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
@@ -1145,8 +1145,8 @@ export function RightPanel({
                         {/* Row 2: Remaining 3 charts (3 per row) */}
                         <div className="grid grid-cols-3 gap-3">
                           {/* Visual 5: Radial Thought Depth */}
-                          <div className="bg-black/40 border border-white/5 p-2 flex flex-col items-center justify-center">
-                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1 opacity-60 w-full">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 flex flex-col items-center justify-center">
+                            <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1 opacity-70 w-full">
                               // radial_thought_depth
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
@@ -1169,8 +1169,8 @@ export function RightPanel({
                           </div>
 
                           {/* Visual 6: Treemap (MCP Distribution) */}
-                          <div className="bg-black/40 border border-white/5 p-2">
-                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
                               // mcp_distribution_treemap
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
@@ -1178,24 +1178,24 @@ export function RightPanel({
                                 data={treemapData}
                                 dataKey="size"
                                 stroke="rgba(0,0,0,0.4)"
-                                fill="var(--cp-purple)"
+                                fill="var(--chart-5)"
                               />
                             </ResponsiveContainer>
                           </div>
 
                           {/* Visual 7: Visuals (Mermaid Usage) */}
-                          <div className="bg-black/40 border border-white/5 p-2">
-                            <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px] uppercase tracking-widest mb-1.5 opacity-60">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
                               // visual_renderings_mermaid
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
                               <BarChart data={mermaidData}>
                                 <XAxis dataKey="name" hide />
                                 <RechartsTooltip 
-                                  contentStyle={{ background: 'var(--cp-bg-3)', border: '1px solid var(--cp-border)', fontSize: '8px' }}
-                                  itemStyle={{ color: 'var(--cp-yellow)' }}
+                                  contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
+                                  itemStyle={{ color: 'var(--chart-3)' }}
                                 />
-                                <Bar dataKey="value" fill="var(--cp-yellow)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="value" fill="var(--chart-3)" radius={[1, 1, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
@@ -1206,29 +1206,29 @@ export function RightPanel({
                     {/* 2. DIAGNOSTICS GRIDS (3 per row - most of them) */}
                     <div className="grid grid-cols-3 gap-3">
                       {/* Factual Integrity & Hallucination Diagnostics */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
-                        <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                          <Zap size={11} className="text-[var(--cp-green)] animate-pulse" />
+                      <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                        <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                          <Zap size={11} className="text-[var(--good)] animate-pulse" />
                           // FACTUAL_INTEGRITY_DIAGNOSTICS
                         </div>
                         
                         {/* High-level facts summaries */}
                         <div className="grid grid-cols-3 gap-2 mb-3">
-                          <div className="bg-black/40 border border-white/5 p-2 text-center">
-                            <div className="text-[8px] opacity-40 uppercase">Most Facts</div>
-                            <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
+                            <div className="text-[9px] opacity-50 uppercase">Most Facts</div>
+                            <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
                               {mostFactsAgent ? `${mostFactsAgent.agent} (${mostFactsAgent.factsClaimed})` : "N/A"}
                             </div>
                           </div>
-                          <div className="bg-black/40 border border-white/5 p-2 text-center">
-                            <div className="text-[8px] opacity-40 uppercase">Least Facts</div>
-                            <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
+                            <div className="text-[9px] opacity-50 uppercase">Least Facts</div>
+                            <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
                               {leastFactsAgent ? `${leastFactsAgent.agent} (${leastFactsAgent.factsClaimed})` : "N/A"}
                             </div>
                           </div>
-                          <div className="bg-black/40 border border-white/5 p-2 text-center">
-                            <div className="text-[8px] opacity-40 uppercase">Champion</div>
-                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1" title={factCheckChampion ? `Checked ${factCheckChampion.factsChecked}, Verified ${factCheckChampion.factsVerifiedRight} right` : ""}>
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
+                            <div className="text-[9px] opacity-50 uppercase">Champion</div>
+                            <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1" title={factCheckChampion ? `Checked ${factCheckChampion.factsChecked}, Verified ${factCheckChampion.factsVerifiedRight} right` : ""}>
                               {factCheckChampion ? `${factCheckChampion.agent} (${factCheckChampion.factsVerifiedRight}✓)` : "N/A"}
                             </div>
                           </div>
@@ -1236,22 +1236,22 @@ export function RightPanel({
 
                         {/* Details table/list */}
                         <div className="space-y-1.5">
-                          <div className="grid grid-cols-4 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                          <div className="grid grid-cols-4 text-[9px] uppercase tracking-wider opacity-50 px-1 font-bold">
                             <span>Agent</span>
                             <span className="text-right">Claims</span>
                             <span className="text-right">Checks</span>
                             <span className="text-right">Right</span>
                           </div>
-                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          <div style={{ height: 1, background: "var(--border)", opacity: 0.3 }} />
                           {agentStats.length === 0 ? (
-                            <div className="text-center text-[10px] opacity-30 py-2">No data.</div>
+                            <div className="text-center text-[11px] opacity-35 py-2">No data.</div>
                           ) : (
                             agentStats.map((item, idx) => (
-                              <div key={idx} className="grid grid-cols-4 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
-                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="truncate font-medium">{item.agent}</span>
-                                <span className="text-right text-white/80">{item.factsClaimed}</span>
-                                <span className="text-right text-white/80">{item.factsChecked}</span>
-                                <span className="text-right text-[var(--cp-green)] font-bold">{item.factsVerifiedRight}</span>
+                              <div key={idx} className="grid grid-cols-4 text-[11px] items-center px-1 py-1 hover:bg-[var(--secondary)]">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--primary)" }} className="truncate font-medium">{item.agent}</span>
+                                <span className="text-right text-[var(--foreground)]">{item.factsClaimed}</span>
+                                <span className="text-right text-[var(--foreground)]">{item.factsChecked}</span>
+                                <span className="text-right text-[var(--good)] font-bold">{item.factsVerifiedRight}</span>
                               </div>
                             ))
                           )}
@@ -1259,53 +1259,53 @@ export function RightPanel({
                       </section>
 
                       {/* Topic Drift & Diversion Analysis */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
-                        <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                          <GitBranch size={11} className="text-[var(--cp-yellow)]" />
+                      <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                        <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                          <GitBranch size={11} className="text-[var(--chart-3)]" />
                           // TOPIC_DRIFT_ANALYSIS
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 mb-3">
-                          <div className="bg-black/40 border border-white/5 p-2 text-center">
-                            <div className="text-[8px] opacity-40 uppercase">Most On-Topic</div>
-                            <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
+                            <div className="text-[9px] opacity-50 uppercase">Most On-Topic</div>
+                            <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
                               {mostOnTopicAgent ? `${mostOnTopicAgent.agent} (${mostOnTopicAgent.onTopicPercentage}%)` : "N/A"}
                             </div>
                           </div>
-                          <div className="bg-black/40 border border-white/5 p-2 text-center">
-                            <div className="text-[8px] opacity-40 uppercase">Diversions</div>
-                            <div style={{ color: "rgba(255, 0, 85, 1)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold truncate mt-1">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
+                            <div className="text-[9px] opacity-50 uppercase">Diversions</div>
+                            <div style={{ color: "rgba(255, 0, 85, 1)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
                               {totalDiversions} times
                             </div>
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                          <div className="grid grid-cols-12 text-[9px] uppercase tracking-wider opacity-50 px-1 font-bold">
                             <span className="col-span-4">Agent</span>
                             <span className="col-span-5 text-center">On-Topic</span>
                             <span className="col-span-3 text-right">Divs</span>
                           </div>
-                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          <div style={{ height: 1, background: "var(--border)", opacity: 0.3 }} />
                           {agentStats.length === 0 ? (
-                            <div className="text-center text-[10px] opacity-30 py-2">No data.</div>
+                            <div className="text-center text-[11px] opacity-35 py-2">No data.</div>
                           ) : (
                             agentStats.map((item, idx) => (
-                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
-                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-yellow)" }} className="col-span-4 truncate font-medium">{item.agent}</span>
+                              <div key={idx} className="grid grid-cols-12 text-[11px] items-center px-1 py-1 hover:bg-[var(--secondary)]">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--chart-3)" }} className="col-span-4 truncate font-medium">{item.agent}</span>
                                 <div className="col-span-5 px-2 flex items-center gap-1.5">
-                                  <div className="flex-1 bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/10">
+                                  <div className="flex-1 bg-[var(--secondary)] h-1.5 rounded-none overflow-hidden border border-[var(--border)]">
                                     <div 
                                       style={{ 
                                         width: `${item.onTopicPercentage}%`,
-                                        background: item.onTopicPercentage > 80 ? 'var(--cp-green)' : item.onTopicPercentage > 50 ? 'var(--cp-yellow)' : 'rgba(255, 0, 85, 1)'
+                                        background: item.onTopicPercentage > 80 ? 'var(--good)' : item.onTopicPercentage > 50 ? 'var(--chart-3)' : 'rgba(255, 0, 85, 1)'
                                       }} 
-                                      className="h-full rounded-full"
+                                      className="h-full rounded-none"
                                     />
                                   </div>
-                                  <span className="text-[8px] min-w-[20px] text-right font-bold">{item.onTopicPercentage}%</span>
+                                  <span className="text-[9px] min-w-[20px] text-right font-bold">{item.onTopicPercentage}%</span>
                                 </div>
-                                <span className={`col-span-3 text-right font-bold ${item.diversionsCount > 0 ? 'text-[rgba(255,0,85,1)]' : 'text-white/40'}`}>
+                                <span className={`col-span-3 text-right font-bold ${item.diversionsCount > 0 ? 'text-[rgba(255,0,85,1)]' : 'text-[var(--muted-foreground)]'}`}>
                                   {item.diversionsCount}
                                 </span>
                               </div>
@@ -1315,54 +1315,54 @@ export function RightPanel({
                       </section>
 
                       {/* COGNITIVE ROI & EFFICIENCY DIAGNOSTICS */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-3 flex flex-col justify-between">
+                      <section className="bg-[var(--card)] border border-[var(--border)] p-3 flex flex-col justify-between">
                         <div>
-                          <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                            <Timer size={11} className="text-[var(--cp-cyan)]" />
+                          <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                            <Timer size={11} className="text-[var(--primary)]" />
                             // COGNITIVE_ROI_DIAGNOSTICS
                           </div>
 
                           <div className="grid grid-cols-2 gap-2 mb-3">
-                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
-                              <div className="text-[7px] opacity-40 uppercase">Est. Tokens</div>
-                              <div style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-1.5 text-center">
+                              <div className="text-[8px] opacity-50 uppercase">Est. Tokens</div>
+                              <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold mt-1">
                                 {cognitiveROI.estTokens}
                               </div>
                             </div>
-                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
-                              <div className="text-[7px] opacity-40 uppercase">Token ROI</div>
-                              <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1" title="Facts per 1,000 tokens">
-                                {cognitiveROI.tokenROI} <span className="text-[7px] opacity-45">F/1K</span>
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-1.5 text-center">
+                              <div className="text-[8px] opacity-50 uppercase">Token ROI</div>
+                              <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold mt-1" title="Facts per 1,000 tokens">
+                                {cognitiveROI.tokenROI} <span className="text-[8px] opacity-45">F/1K</span>
                               </div>
                             </div>
-                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
-                              <div className="text-[7px] opacity-40 uppercase">Loop Overhead</div>
-                              <div style={{ color: cognitiveROI.loopOverhead > 2 ? "rgba(255, 0, 85, 1)" : "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-1.5 text-center">
+                              <div className="text-[8px] opacity-50 uppercase">Loop Overhead</div>
+                              <div style={{ color: cognitiveROI.loopOverhead > 2 ? "rgba(255, 0, 85, 1)" : "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold mt-1">
                                 {cognitiveROI.loopOverhead} cycles
                               </div>
                             </div>
-                            <div className="bg-black/40 border border-white/5 p-1.5 text-center">
-                              <div className="text-[7px] opacity-40 uppercase">Productivity</div>
-                              <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-bold mt-1">
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-1.5 text-center">
+                              <div className="text-[8px] opacity-50 uppercase">Productivity</div>
+                              <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold mt-1">
                                 {cognitiveROI.productivityRating}%
                               </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="space-y-1 text-[10px]">
+                        <div className="space-y-1 text-[11px]">
                           <div className="flex justify-between items-center opacity-70">
                             <span>Consensus Ratio:</span>
-                            <span className="font-bold text-[var(--cp-cyan)]">{cognitiveROI.consensusRatio}%</span>
+                            <span className="font-bold text-[var(--primary)]">{cognitiveROI.consensusRatio}%</span>
                           </div>
                           <div className="flex justify-between items-center opacity-70">
                             <span>Factual Density:</span>
-                            <span className="font-bold text-[var(--cp-green)]">
+                            <span className="font-bold text-[var(--good)]">
                               {(messages.length > 0 ? (agentStats.reduce((sum, a) => sum + a.factsClaimed, 0) / messages.length).toFixed(2) : "0.00")}
                             </span>
                           </div>
                           {cognitiveROI.loopOverhead > 2 && (
-                            <div className="text-[8px] text-[rgba(255,0,85,0.85)] flex items-center gap-1 mt-1 font-bold animate-pulse">
+                            <div className="text-[9px] text-[rgba(255,0,85,0.85)] flex items-center gap-1 mt-1 font-bold animate-pulse">
                               <AlertTriangle size={9} />
                               WARNING: High loop overhead.
                             </div>
@@ -1371,34 +1371,34 @@ export function RightPanel({
                       </section>
 
                       {/* MODEL PROVIDER PERFORMANCE LEADERBOARD */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-3">
-                        <div style={{ color: "var(--cp-yellow)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                          <ListChecks size={11} className="text-[var(--cp-yellow)]" />
+                      <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                        <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                          <ListChecks size={11} className="text-[var(--chart-3)]" />
                           // MODEL_PROVIDER_LEADERBOARD
                         </div>
 
                         <div className="space-y-1.5">
-                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                          <div className="grid grid-cols-12 text-[9px] uppercase tracking-wider opacity-50 px-1 font-bold">
                             <span className="col-span-4">Provider/Model</span>
                             <span className="col-span-2 text-right">Msgs</span>
                             <span className="col-span-2 text-right">Facts</span>
                             <span className="col-span-2 text-right">Acc</span>
                             <span className="col-span-2 text-right">Dens</span>
                           </div>
-                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          <div style={{ height: 1, background: "var(--border)", opacity: 0.3 }} />
                           {providerStats.length === 0 ? (
-                            <div className="text-center text-[10px] opacity-30 py-2">No stats found.</div>
+                            <div className="text-center text-[11px] opacity-35 py-2">No stats found.</div>
                           ) : (
                             providerStats.map((item, idx) => (
-                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
+                              <div key={idx} className="grid grid-cols-12 text-[11px] items-center px-1 py-1 hover:bg-[var(--secondary)]">
                                 <div className="col-span-4 truncate flex flex-col">
-                                  <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="font-medium truncate">{item.provider}</span>
-                                  <span className="text-[7px] text-white/40 truncate">{item.model}</span>
+                                  <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--primary)" }} className="font-medium truncate">{item.provider}</span>
+                                  <span className="text-[8px] text-[var(--muted-foreground)] truncate">{item.model}</span>
                                 </div>
-                                <span className="col-span-2 text-right text-white/80">{item.messagesCount}</span>
-                                <span className="col-span-2 text-right text-white/80">{item.factsClaimed}</span>
-                                <span className="col-span-2 text-right text-[var(--cp-green)] font-bold">{item.accuracyRate}%</span>
-                                <span className="col-span-2 text-right text-[var(--cp-yellow)] font-bold">{item.efficiencyScore} F/M</span>
+                                <span className="col-span-2 text-right text-[var(--foreground)]">{item.messagesCount}</span>
+                                <span className="col-span-2 text-right text-[var(--foreground)]">{item.factsClaimed}</span>
+                                <span className="col-span-2 text-right text-[var(--good)] font-bold">{item.accuracyRate}%</span>
+                                <span className="col-span-2 text-right text-[var(--chart-3)] font-bold">{item.efficiencyScore} F/M</span>
                               </div>
                             ))
                           )}
@@ -1406,29 +1406,29 @@ export function RightPanel({
                       </section>
 
                       {/* MCP INTEGRATION METRICS (Spans 2 columns to complete the 3-column row) */}
-                      <section className="bg-black/20 border border-[var(--cp-border)] p-3 col-span-2">
-                        <div style={{ color: "var(--cp-purple)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-3 opacity-60 flex items-center gap-1">
-                          <Cpu size={11} className="text-[var(--cp-purple)]" />
+                      <section className="bg-[var(--card)] border border-[var(--border)] p-3 col-span-2">
+                        <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                          <Cpu size={11} className="text-[var(--chart-5)]" />
                           // MCP_INTEGRATION_METRICS
                         </div>
 
                         <div className="space-y-2">
-                          <div className="grid grid-cols-12 text-[8px] uppercase tracking-wider opacity-40 px-1 font-bold">
+                          <div className="grid grid-cols-12 text-[9px] uppercase tracking-wider opacity-50 px-1 font-bold">
                             <span className="col-span-4">MCP Server</span>
                             <span className="col-span-4">Tool</span>
                             <span className="col-span-3">Caller</span>
                             <span className="col-span-1 text-right">Calls</span>
                           </div>
-                          <div style={{ height: 1, background: "var(--cp-border)", opacity: 0.3 }} />
+                          <div style={{ height: 1, background: "var(--border)", opacity: 0.3 }} />
                           {mcpCallStats.length === 0 ? (
-                            <div className="text-center text-[10px] opacity-30 py-2">No MCP calls.</div>
+                            <div className="text-center text-[11px] opacity-35 py-2">No MCP calls.</div>
                           ) : (
                             mcpCallStats.map((item, idx) => (
-                              <div key={idx} className="grid grid-cols-12 text-[10px] items-center px-1 py-0.5 hover:bg-white/5">
-                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-purple)" }} className="col-span-4 truncate font-medium">{item.server}</span>
-                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--cp-cyan)" }} className="col-span-4 truncate font-medium">{item.tool}</span>
-                                <span className="col-span-3 truncate text-white/80">{item.caller}</span>
-                                <span className="col-span-1 text-right text-[var(--cp-yellow)] font-bold">{item.count}</span>
+                              <div key={idx} className="grid grid-cols-12 text-[11px] items-center px-1 py-1 hover:bg-[var(--secondary)]">
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--chart-5)" }} className="col-span-4 truncate font-medium">{item.server}</span>
+                                <span style={{ fontFamily: "'Share Tech Mono', monospace", color: "var(--primary)" }} className="col-span-4 truncate font-medium">{item.tool}</span>
+                                <span className="col-span-3 truncate text-[var(--foreground)]">{item.caller}</span>
+                                <span className="col-span-1 text-right text-[var(--chart-3)] font-bold">{item.count}</span>
                               </div>
                             ))
                           )}
@@ -1437,15 +1437,15 @@ export function RightPanel({
                     </div>
 
                     {/* 3. NEURAL FACT INDEX / WORD CLOUD (1 per row at bottom) */}
-                    <section className="bg-black/20 border border-[var(--cp-border)] p-3">
-                      <div style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase tracking-widest mb-2 opacity-60">
+                    <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                      <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-2 opacity-70">
                         // NEURAL_FACT_INDEX
                       </div>
-                      <div className="h-[380px] border border-white/5 bg-black/40 relative overflow-hidden">
+                      <div className="h-[380px] border border-[var(--border)] bg-[var(--secondary)] relative overflow-hidden">
                         <NeuralFactNetwork data={factNetwork} />
                       </div>
                       <div className="flex justify-center gap-4 mt-2 opacity-40 hover:opacity-100 transition-opacity">
-                        <span style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[8px]">
+                        <span style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px]">
                           SCROLL TO ZOOM · DRAG TO PAN
                         </span>
                       </div>
@@ -1496,20 +1496,20 @@ export function RightPanel({
                       onDragOver={e => e.preventDefault()}
                       onDrop={handleFileDrop}
                       style={{
-                        border: "1px solid var(--cp-border)",
-                        background: "var(--cp-bg-2)",
-                        color: "var(--cp-cyan)",
+                        border: "1px solid var(--border)",
+                        background: "var(--card)",
+                        color: "var(--primary)",
                         fontFamily: "'Share Tech Mono', monospace",
                       }}
-                      className="p-3 text-[10px] opacity-50 text-center uppercase tracking-widest shrink-0"
+              className="p-3 text-[11px] opacity-60 text-center uppercase tracking-widest shrink-0"
                     >
                       neural_session_graph
                     </div>
-                    <div className="flex-1 min-h-0 relative overflow-hidden bg-black/20 border border-[var(--cp-border)] border-t-0">
+                    <div className="flex-1 min-h-0 relative overflow-hidden bg-[var(--card)] border border-[var(--border)] border-t-0">
                        <AgentGraph messages={messages} thinking={thinking} />
                     </div>
                     <div className="flex justify-center gap-4 mt-2 opacity-40 hover:opacity-100 transition-opacity">
-                      <span style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px]">
+                      <span style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px]">
                         SCROLL TO ZOOM · DRAG TO PAN
                       </span>
                     </div>
@@ -1521,11 +1521,11 @@ export function RightPanel({
                     <button
                       onClick={onSummarize}
                       style={{
-                        background: "var(--cp-cyan)",
-                        color: "var(--cp-bg-0)",
+                        background: "var(--primary)",
+                        color: "var(--background)",
                         fontFamily: "'Share Tech Mono', monospace",
                       }}
-                      className="w-full px-3 py-2 text-xs font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                      className="w-full px-3 py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                     >
                       <Sparkles size={12} />
                       Neural Recalibration
@@ -1533,17 +1533,17 @@ export function RightPanel({
 
                     <div
                       style={{
-                        background: "var(--cp-bg-2)",
-                        border: "1px solid var(--cp-border)",
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
                         fontFamily: "'Rajdhani', sans-serif",
                         color: "var(--foreground)",
                       }}
-                      className="p-3 text-[10px] leading-relaxed opacity-70"
+                      className="p-3 text-[11px] leading-relaxed opacity-80"
                     >
-                      <p className="mb-2" style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }}>
+                      <p className="mb-2" style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}>
                         // session_summary
                       </p>
-                      <div className="markdown-content text-xs">
+                      <div className="markdown-content text-sm">
                         <ChatMarkdown content={sessionSummary || "Neural state analysis complete. All agents verified and ready for deployment."} />
                       </div>
                     </div>
@@ -1554,12 +1554,12 @@ export function RightPanel({
                   <div className="p-3 space-y-3" onDragOver={e => e.preventDefault()} onDrop={handleFileDrop}>
                     <div
                       style={{
-                        border: "1px dashed rgba(0,229,255,0.25)",
-                        background: "var(--cp-bg-2)",
-                        color: "var(--cp-cyan)",
+                        border: "1px dashed var(--border)",
+                        background: "var(--card)",
+                        color: "var(--primary)",
                         fontFamily: "'Share Tech Mono', monospace",
                       }}
-                      className="p-4 text-center text-[10px] opacity-50"
+                      className="p-4 text-center text-[11px] opacity-60"
                     >
                       <Upload size={16} className="mx-auto mb-1 opacity-40" />
                       drop files or{" "}
@@ -1574,8 +1574,8 @@ export function RightPanel({
                           <div
                             key={`${file.name}-${index}`}
                             style={{
-                              background: "var(--cp-bg-3)",
-                              border: "1px solid var(--cp-border)",
+                              background: "var(--secondary)",
+                              border: "1px solid var(--border)",
                               color: "var(--foreground)",
                               fontFamily: "'Share Tech Mono', monospace",
                               borderRadius: "4px"
@@ -1584,15 +1584,15 @@ export function RightPanel({
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 overflow-hidden flex-1">
-                                <FileText size={10} style={{ color: "var(--cp-cyan)" }} />
+                                <FileText size={10} style={{ color: "var(--primary)" }} />
                                 <span className="truncate opacity-75 font-semibold" title={file.name}>{file.name}</span>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                {file.loading && <span className="text-[10px] text-[var(--cp-yellow)] animate-pulse">(summarizing...)</span>}
+                                {file.loading && <span className="text-[10px] text-[var(--chart-3)] animate-pulse">(summarizing...)</span>}
                                 <button
                                   type="button"
                                   onClick={() => onDeleteSessionFile?.(file.name)}
-                                  className="text-muted-foreground hover:text-[var(--cp-magenta)] transition-colors p-0.5"
+                                  className="text-[var(--muted-foreground)] hover:text-[var(--accent)] transition-colors p-0.5"
                                   title="Delete file"
                                 >
                                   <X size={12} />
@@ -1600,12 +1600,12 @@ export function RightPanel({
                               </div>
                             </div>
                             {file.summary && (
-                              <details className="mt-1 text-[10px] text-muted-foreground">
-                                <summary className="cursor-pointer hover:text-[var(--cp-cyan)] transition-colors select-none font-bold">
+                              <details className="mt-1 text-[10px] text-[var(--muted-foreground)]">
+                                <summary className="cursor-pointer hover:text-[var(--primary)] transition-colors select-none font-bold">
                                   View Summary
                                 </summary>
                                 <div 
-                                  className="mt-1 p-1.5 bg-black/40 border border-[var(--cp-border)] rounded overflow-y-auto select-text max-h-40 whitespace-pre-wrap"
+                                  className="mt-1 p-1.5 bg-[var(--secondary)] border border-[var(--border)] rounded-none overflow-y-auto select-text max-h-40 whitespace-pre-wrap"
                                   style={{ fontFamily: "var(--font-sans)", lineHeight: "1.3" }}
                                 >
                                   {file.summary}
@@ -1626,8 +1626,8 @@ export function RightPanel({
 
       <aside
         style={{
-          background: "var(--cp-bg-1)",
-          borderLeft: "1px solid var(--cp-border)",
+          background: "var(--background)",
+          borderLeft: "1px solid var(--border)",
           width: 40,
         }}
         className="h-full shrink-0 flex flex-col justify-start py-2 z-20"
@@ -1688,9 +1688,9 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
   };
 
   return (
-    <div className="flex flex-row h-full w-full bg-black/10 select-none min-h-0 overflow-hidden">
+    <div className="flex flex-row h-full w-full bg-[var(--background)] select-none min-h-0 overflow-hidden">
       {/* Left side: SVG Visualization */}
-      <div className="flex-1 min-h-0 relative bg-black/30 border border-white/5 overflow-hidden">
+      <div className="flex-1 min-h-0 relative bg-[var(--secondary)] border border-[var(--border)] overflow-hidden">
         <svg 
           ref={containerRef}
           width="100%" height="100%" 
@@ -1725,11 +1725,11 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
               
               const isSelected = selectedEdge?.source === edge.source && selectedEdge?.target === edge.target;
               
-              let strokeColor = "var(--cp-green)";
+              let strokeColor = "var(--good)";
               if (edge.type === 'crosscheck') {
-                strokeColor = "var(--cp-purple)";
+                strokeColor = "var(--chart-5)";
               } else if (edge.type === 'communication') {
-                strokeColor = "var(--cp-cyan)";
+                strokeColor = "var(--primary)";
               }
 
               return (
@@ -1765,17 +1765,17 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
               const opacity = 0.4 + sizeRatio * 0.6;
               const isSelected = selectedNode?.text === node.text;
 
-              let nodeColor = "var(--cp-green)";
+              let nodeColor = "var(--good)";
               let radius = 1.5 + sizeRatio * 2;
               
               if (node.type === 'agent') {
-                nodeColor = "var(--cp-cyan)";
+                nodeColor = "var(--primary)";
                 radius = 3.0 + sizeRatio * 1.5;
               } else if (node.type === 'fact') {
-                nodeColor = "var(--cp-yellow)";
+                nodeColor = "var(--chart-3)";
                 radius = 2.0 + sizeRatio * 1.0;
               } else if (node.type === 'crosscheck') {
-                nodeColor = "var(--cp-purple)";
+                nodeColor = "var(--chart-5)";
                 radius = 2.0 + sizeRatio * 1.0;
               }
 
@@ -1832,7 +1832,7 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
               <text 
                 x="100" y="100" 
                 textAnchor="middle" 
-                fill="var(--cp-green)" 
+                fill="var(--good)" 
                 opacity="0.2" 
                 fontSize="8"
                 fontFamily="'Share Tech Mono', monospace"
@@ -1845,14 +1845,14 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
       </div>
 
       {/* Right side: Interactive inspector panel */}
-      <div className="flex-shrink-0 w-[680px] border-l border-[var(--cp-border)] bg-black/60 flex flex-col min-h-0 h-full text-[10px] font-mono">
+      <div className="flex-shrink-0 w-[680px] border-l border-[var(--border)] bg-[var(--background)] flex flex-col min-h-0 h-full text-[10px] font-mono">
         {/* Tab Headers (Symmetric 2x2 grid + full width Facts row) */}
-        <div className="flex flex-wrap border-b border-[var(--cp-border)] bg-black/40 text-[11px] font-bold tracking-widest flex-shrink-0">
+        <div className="flex flex-wrap border-b border-[var(--border)] bg-[var(--secondary)] text-[11px] font-bold tracking-widest flex-shrink-0">
           <button
             onClick={() => setActiveSubTab('inspector')}
             style={{ width: '50%' }}
-            className={`text-center py-1 border-r border-b border-[var(--cp-border)] uppercase transition-colors ${
-              activeSubTab === 'inspector' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            className={`text-center py-1 border-r border-b border-[var(--border)] uppercase transition-colors ${
+              activeSubTab === 'inspector' ? 'text-[var(--primary)] bg-[var(--card)] font-bold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }`}
           >
             INSPECT
@@ -1860,8 +1860,8 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           <button
             onClick={() => setActiveSubTab('whispers')}
             style={{ width: '50%' }}
-            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
-              activeSubTab === 'whispers' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            className={`text-center py-1 border-b border-[var(--border)] uppercase transition-colors ${
+              activeSubTab === 'whispers' ? 'text-[var(--primary)] bg-[var(--card)] font-bold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }`}
           >
             WHISP ({data.whispers?.length || 0})
@@ -1869,8 +1869,8 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           <button
             onClick={() => setActiveSubTab('forwards')}
             style={{ width: '50%' }}
-            className={`text-center py-1 border-r border-b border-[var(--cp-border)] uppercase transition-colors ${
-              activeSubTab === 'forwards' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            className={`text-center py-1 border-r border-b border-[var(--border)] uppercase transition-colors ${
+              activeSubTab === 'forwards' ? 'text-[var(--primary)] bg-[var(--card)] font-bold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }`}
           >
             FWD ({data.forwards?.length || 0})
@@ -1878,8 +1878,8 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           <button
             onClick={() => setActiveSubTab('crosschecks')}
             style={{ width: '50%' }}
-            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
-              activeSubTab === 'crosschecks' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            className={`text-center py-1 border-b border-[var(--border)] uppercase transition-colors ${
+              activeSubTab === 'crosschecks' ? 'text-[var(--primary)] bg-[var(--card)] font-bold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }`}
           >
             CROSS ({data.crosschecks?.length || 0})
@@ -1887,8 +1887,8 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           <button
             onClick={() => setActiveSubTab('facts')}
             style={{ width: '100%' }}
-            className={`text-center py-1 border-b border-[var(--cp-border)] uppercase transition-colors ${
-              activeSubTab === 'facts' ? 'text-[var(--cp-cyan)] bg-white/5 font-bold' : 'text-white/40 hover:text-white/70'
+            className={`text-center py-1 border-b border-[var(--border)] uppercase transition-colors ${
+              activeSubTab === 'facts' ? 'text-[var(--primary)] bg-[var(--card)] font-bold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }`}
           >
             FACTS ({data.facts?.length || 0})
@@ -1896,56 +1896,56 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
         </div>
 
         {/* Tab Body */}
-        <div className="flex-1 overflow-y-auto p-1.5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(0,229,255,0.1) transparent' }}>
+        <div className="flex-1 overflow-y-auto p-1.5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--primary) transparent' }}>
           {activeSubTab === 'inspector' && (
             <div className="space-y-1.5">
               {selectedNode ? (
                 <div>
-                  <div className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
-                    <span className="font-bold text-[var(--cp-cyan)] uppercase text-[12px] truncate">{selectedNode.text}</span>
-                    <span className="px-1.5 py-0.5 text-[9px] bg-white/5 border border-white/10 uppercase shrink-0" style={{ color: selectedNode.type === 'agent' ? 'var(--cp-cyan)' : selectedNode.type === 'fact' ? 'var(--cp-yellow)' : selectedNode.type === 'crosscheck' ? 'var(--cp-purple)' : 'var(--cp-green)' }}>
+                  <div className="flex justify-between items-center border-b border-[var(--border)] pb-1 mb-1">
+                    <span className="font-bold text-[var(--primary)] uppercase text-[12px] truncate">{selectedNode.text}</span>
+                    <span className="px-1.5 py-0.5 text-[9px] bg-[var(--secondary)] border border-[var(--border)] uppercase shrink-0" style={{ color: selectedNode.type === 'agent' ? 'var(--primary)' : selectedNode.type === 'fact' ? 'var(--chart-3)' : selectedNode.type === 'crosscheck' ? 'var(--chart-5)' : 'var(--good)' }}>
                       {selectedNode.type}
                     </span>
                   </div>
                   <div className="space-y-0.5 text-[10px] opacity-80">
-                    <div>Occurrences: <span className="font-bold text-white">{selectedNode.count}</span></div>
+                    <div>Occurrences: <span className="font-bold text-[var(--foreground)]">{selectedNode.count}</span></div>
                     {selectedNode.type === 'agent' && (
                       <>
-                        <div>Whispers: <span className="font-bold text-white">{(data.whispers || []).filter(w => w.from === selectedNode.text).length}</span></div>
-                        <div>Forwards: <span className="font-bold text-white">{(data.forwards || []).filter(f => f.to === selectedNode.text).length}</span></div>
+                        <div>Whispers: <span className="font-bold text-[var(--foreground)]">{(data.whispers || []).filter(w => w.from === selectedNode.text).length}</span></div>
+                        <div>Forwards: <span className="font-bold text-[var(--foreground)]">{(data.forwards || []).filter(f => f.to === selectedNode.text).length}</span></div>
                       </>
                     )}
                   </div>
                   {selectedNode.type === 'fact' && (
-                    <div className="mt-2 p-1.5 bg-yellow-500/5 border border-[var(--cp-yellow)]/20 text-[10px] rounded">
-                      <div className="text-[var(--cp-yellow)] font-bold mb-0.5 text-[10px]">FACT DETAILS</div>
-                      <div className="text-white/95 italic">"{(data.facts || []).find(f => f.label === selectedNode.text)?.content || 'No text extracted.'}"</div>
+                    <div className="mt-2 p-1.5 bg-[var(--secondary)] border border-[var(--chart-3)]/20 text-[10px] rounded-none">
+                      <div className="text-[var(--chart-3)] font-bold mb-0.5 text-[10px]">FACT DETAILS</div>
+                      <div className="text-[var(--foreground)] italic">"{(data.facts || []).find(f => f.label === selectedNode.text)?.content || 'No text extracted.'}"</div>
                       <div className="text-[9px] mt-0.5 opacity-55">Source: {(data.facts || []).find(f => f.label === selectedNode.text)?.source || 'Unknown'}</div>
                     </div>
                   )}
                 </div>
               ) : selectedEdge ? (
                 <div>
-                  <div className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
-                    <span className="font-bold text-[var(--cp-cyan)] uppercase text-[11px] truncate">{selectedEdge.source} ⇄ {selectedEdge.target}</span>
-                    <span className="px-1.5 py-0.5 text-[9px] bg-white/5 border border-white/10 uppercase shrink-0" style={{ color: selectedEdge.type === 'communication' ? 'var(--cp-cyan)' : selectedEdge.type === 'crosscheck' ? 'var(--cp-purple)' : 'var(--cp-green)' }}>
+                  <div className="flex justify-between items-center border-b border-[var(--border)] pb-1 mb-1">
+                    <span className="font-bold text-[var(--primary)] uppercase text-[11px] truncate">{selectedEdge.source} ⇄ {selectedEdge.target}</span>
+                    <span className="px-1.5 py-0.5 text-[9px] bg-[var(--secondary)] border border-[var(--border)] uppercase shrink-0" style={{ color: selectedEdge.type === 'communication' ? 'var(--primary)' : selectedEdge.type === 'crosscheck' ? 'var(--chart-5)' : 'var(--good)' }}>
                       {selectedEdge.type}
                     </span>
                   </div>
                   <div className="text-[10px] opacity-80">
-                    <div>Weight: <span className="font-bold text-white">{selectedEdge.weight.toFixed(1)}</span></div>
+                    <div>Weight: <span className="font-bold text-[var(--foreground)]">{selectedEdge.weight.toFixed(1)}</span></div>
                   </div>
                   {selectedEdge.type === 'crosscheck' && (
-                    <div className="mt-2 p-1.5 bg-purple-500/5 border border-[var(--cp-purple)]/20 text-[10px] rounded">
-                      <div className="text-[var(--cp-purple)] font-bold mb-0.5 text-[10px]">CROSS-CHECK</div>
-                      <div className="text-white/95 italic">
+                    <div className="mt-2 p-1.5 bg-[var(--secondary)] border border-[var(--chart-5)]/20 text-[10px] rounded-none">
+                      <div className="text-[var(--chart-5)] font-bold mb-0.5 text-[10px]">CROSS-CHECK</div>
+                      <div className="text-[var(--foreground)] italic">
                         "{(data.crosschecks || []).find(c => (c.from === selectedEdge.source && c.target === selectedEdge.target) || (c.from === selectedEdge.target && c.target === selectedEdge.source))?.feedback || 'Feedback logged.'}"
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-center text-white/30 py-4 italic text-[10.5px]">
+                <div className="text-center text-[var(--muted-foreground)] py-4 italic text-[10.5px]">
                   Click node/edge to inspect paths.
                 </div>
               )}
@@ -1955,13 +1955,13 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           {activeSubTab === 'whispers' && (
             <div className="space-y-1">
               {(data.whispers || []).length === 0 ? (
-                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No whispers.</div>
+                <div className="text-center text-[var(--muted-foreground)] py-4 italic text-[10.5px]">No whispers.</div>
               ) : (data.whispers || []).map((w, idx) => (
-                <div key={idx} className="p-1 bg-cyan-500/5 border border-[var(--cp-cyan)]/10 text-[10px] rounded">
-                  <div className="flex justify-between text-[var(--cp-cyan)] font-bold mb-0.5">
+                <div key={idx} className="p-1 bg-[var(--secondary)] border border-[var(--primary)]/10 text-[10px] rounded-none">
+                  <div className="flex justify-between text-[var(--primary)] font-bold mb-0.5">
                     <span>{w.from} ➔ {w.to}</span>
                   </div>
-                  <div className="text-white/95">{w.content}</div>
+                  <div className="text-[var(--foreground)]">{w.content}</div>
                 </div>
               ))}
             </div>
@@ -1970,13 +1970,13 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           {activeSubTab === 'forwards' && (
             <div className="space-y-1">
               {(data.forwards || []).length === 0 ? (
-                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No forwards.</div>
+                <div className="text-center text-[var(--muted-foreground)] py-4 italic text-[10.5px]">No forwards.</div>
               ) : (data.forwards || []).map((f, idx) => (
-                <div key={idx} className="p-1 bg-green-500/5 border border-[var(--cp-green)]/10 text-[10px] rounded">
-                  <div className="text-[var(--cp-green)] font-bold mb-0.5">
+                <div key={idx} className="p-1 bg-[var(--secondary)] border border-[var(--good)]/10 text-[10px] rounded-none">
+                  <div className="text-[var(--good)] font-bold mb-0.5">
                     <span>{f.from} ➔ {f.to}</span>
                   </div>
-                  <div className="text-white/80 line-clamp-3 hover:line-clamp-none transition-all cursor-pointer bg-black/25 p-1 border border-white/5 mt-0.5">
+                  <div className="text-[var(--foreground)] line-clamp-3 hover:line-clamp-none transition-all cursor-pointer bg-[var(--secondary)] p-1 border border-[var(--border)] mt-0.5">
                     {f.content}
                   </div>
                 </div>
@@ -1987,13 +1987,13 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           {activeSubTab === 'crosschecks' && (
             <div className="space-y-1">
               {(data.crosschecks || []).length === 0 ? (
-                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No cross-checks.</div>
+                <div className="text-center text-[var(--muted-foreground)] py-4 italic text-[10.5px]">No cross-checks.</div>
               ) : (data.crosschecks || []).map((c, idx) => (
-                <div key={idx} className="p-1 bg-purple-500/5 border border-[var(--cp-purple)]/10 text-[10px] rounded">
-                  <div className="flex justify-between text-[var(--cp-purple)] font-bold mb-0.5">
+                <div key={idx} className="p-1 bg-[var(--secondary)] border border-[var(--chart-5)]/10 text-[10px] rounded-none">
+                  <div className="flex justify-between text-[var(--chart-5)] font-bold mb-0.5">
                     <span>{c.from} ➔ {c.target}</span>
                   </div>
-                  <div className="text-white/95 italic">"{c.feedback}"</div>
+                  <div className="text-[var(--foreground)] italic">"{c.feedback}"</div>
                 </div>
               ))}
             </div>
@@ -2002,13 +2002,13 @@ function NeuralFactNetwork({ data }: { data: { nodes: any[], edges: any[], whisp
           {activeSubTab === 'facts' && (
             <div className="space-y-1">
               {(data.facts || []).length === 0 ? (
-                <div className="text-center text-white/30 py-4 italic text-[10.5px]">No facts.</div>
+                <div className="text-center text-[var(--muted-foreground)] py-4 italic text-[10.5px]">No facts.</div>
               ) : (data.facts || []).map((f, idx) => (
-                <div key={idx} className="p-1 bg-yellow-500/5 border border-[var(--cp-yellow)]/10 text-[10px] rounded">
-                  <div className="flex justify-between text-[var(--cp-yellow)] font-bold mb-0.5">
+                <div key={idx} className="p-1 bg-[var(--secondary)] border border-[var(--chart-3)]/10 text-[10px] rounded-none">
+                  <div className="flex justify-between text-[var(--chart-3)] font-bold mb-0.5">
                     <span className="font-bold truncate">{f.label}</span>
                   </div>
-                  <div className="text-white/95">{f.content}</div>
+                  <div className="text-[var(--foreground)]">{f.content}</div>
                 </div>
               ))}
             </div>
@@ -2126,19 +2126,19 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
   const radius = Math.min(width, height) / 2 - 15;
 
   const actorColors: Record<string, string> = {
-    "you": "var(--cp-cyan)",
-    "user": "var(--cp-cyan)",
-    "moderator": "var(--cp-green)",
-    "architect": "var(--cp-yellow)",
-    "engineer": "var(--cp-purple)",
-    "security": "var(--cp-magenta)",
-    "system": "var(--cp-border)",
+    "you": "var(--primary)",
+    "user": "var(--primary)",
+    "moderator": "var(--good)",
+    "architect": "var(--chart-3)",
+    "engineer": "var(--chart-5)",
+    "security": "var(--accent)",
+    "system": "var(--border)",
     "other": "#a173d1"
   };
 
   const getActorColor = (name: string) => {
     const norm = name.toLowerCase();
-    return actorColors[norm] || "var(--cp-yellow)";
+    return actorColors[norm] || "var(--chart-3)";
   };
 
   const root = d3.hierarchy<SunburstNode>(hierarchyData)
@@ -2194,14 +2194,14 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-black/10 select-none relative p-3 font-mono">
+    <div className="flex flex-col h-full w-full bg-[var(--background)] select-none relative p-3 font-mono">
       {/* Breadcrumbs Trail */}
       <div 
-        className="flex-shrink-0 h-[32px] flex items-center border border-[var(--cp-border)] bg-black/40 px-2 rounded overflow-x-auto overflow-y-hidden"
+        className="flex-shrink-0 h-[32px] flex items-center border border-[var(--border)] bg-[var(--secondary)] px-2 rounded-none overflow-x-auto overflow-y-hidden"
         style={{ scrollbarWidth: "none" }}
       >
         {ancestors.length === 0 ? (
-          <div className="text-[9px] text-white/30 uppercase tracking-widest font-mono">
+          <div className="text-[9px] text-[var(--muted-foreground)] uppercase tracking-widest font-mono">
             // HOVER_OVER_ARC_TO_EXPLORE_ROUTING_FLOWS
           </div>
         ) : (
@@ -2214,7 +2214,7 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
                   <svg width={breadcrumbW + breadcrumbTip} height={breadcrumbH}>
                     <polygon
                       points={getBreadcrumbPoints(idx)}
-                      fill="var(--cp-bg-3)"
+                      fill="var(--secondary)"
                       stroke={color}
                       strokeWidth="0.8"
                     />
@@ -2238,11 +2238,11 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
             <div 
               style={{
                 background: "rgba(0, 229, 255, 0.1)",
-                border: "1px solid var(--cp-cyan)",
-                color: "var(--cp-cyan)",
+                border: "1px solid var(--primary)",
+                color: "var(--primary)",
                 fontFamily: "'Share Tech Mono', monospace"
               }}
-              className="px-2 py-0.5 text-[8px] font-bold rounded ml-2 uppercase shrink-0"
+              className="px-2 py-0.5 text-[8px] font-bold rounded-none ml-2 uppercase shrink-0"
             >
               {percentage}% OF RUNS
             </div>
@@ -2259,7 +2259,7 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
           className="max-w-full max-h-full"
         >
           <g transform={`translate(${width / 2}, ${height / 2})`}>
-            <circle r={radius} fill="none" stroke="rgba(0, 229, 255, 0.03)" strokeWidth="0.5" />
+            <circle r={radius} fill="none" stroke="var(--border)" strokeWidth="0.5" />
             
             {nodes.map((node, idx) => {
               const isHighlighted = hoveredNode ? ancestors.includes(node) : true;
@@ -2270,13 +2270,13 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
                   key={idx}
                   d={arcGenerator(node) || ""}
                   fill={fill}
-                  stroke="var(--cp-bg-1)"
+                  stroke="var(--background)"
                   strokeWidth="1.5"
                   opacity={isHighlighted ? 0.95 : 0.2}
                   style={{
                     cursor: "pointer",
                     transition: "opacity 0.25s, transform 0.2s",
-                    filter: hoveredNode === node ? "drop-shadow(0px 0px 4px rgba(255,255,255,0.25))" : undefined
+                    filter: hoveredNode === node ? "none" : undefined
                   }}
                   onMouseEnter={() => setHoveredNode(node)}
                   onMouseLeave={() => setHoveredNode(null)}
@@ -2284,8 +2284,8 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
               );
             })}
 
-            <circle r="55" fill="var(--cp-bg-0)" stroke="var(--cp-border)" strokeWidth="1" />
-            <circle r="51" fill="var(--cp-bg-2)" />
+            <circle r="55" fill="var(--background)" stroke="var(--border)" strokeWidth="1" />
+            <circle r="51" fill="var(--card)" />
             
             {hoveredNode && (
               <circle 
@@ -2359,7 +2359,7 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
                   <text
                     y="22"
                     textAnchor="middle"
-                    fill="var(--cp-green)"
+                    fill="var(--good)"
                     fontSize="7.5"
                     fontWeight="bold"
                     fontFamily="'Share Tech Mono', monospace"
@@ -2374,19 +2374,19 @@ function NeuralPathSunburst({ messages, thinking }: NeuralPathSunburstProps) {
         </svg>
 
         <div 
-          className="absolute bottom-2 left-2 p-2 rounded border border-[var(--cp-border)] bg-black/80 flex flex-col gap-1 text-[8px] font-mono"
+          className="absolute bottom-2 left-2 p-2 rounded-none border border-[var(--border)] bg-[var(--background)] flex flex-col gap-1 text-[8px] font-mono"
           style={{ width: "90px" }}
         >
-          <div className="text-[var(--cp-cyan)] font-bold mb-1">// ROSTER</div>
+          <div className="text-[var(--primary)] font-bold mb-1">// ROSTER</div>
           {Object.entries(actorColors)
             .filter(([k]) => k !== 'system' && k !== 'other')
             .map(([actor, color]) => (
               <div key={actor} className="flex items-center gap-1.5">
                 <span 
-                  className="w-2 h-2 rounded-sm inline-block shrink-0" 
+                  className="w-2 h-2 rounded-none inline-block shrink-0" 
                   style={{ backgroundColor: color, border: `1px solid ${color}` }}
                 />
-                <span className="text-white/80 uppercase truncate">{actor}</span>
+                <span className="text-[var(--foreground)] uppercase truncate">{actor}</span>
               </div>
             ))
           }
@@ -2552,14 +2552,14 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
       label: id.toUpperCase(),
       x: total === 1 ? 300 : 300 + 200 * Math.cos(angle + Math.PI / 2),
       y: total === 1 ? 360 : 320 + 100 * Math.sin(angle + Math.PI / 2),
-      color: "var(--cp-yellow)",
+      color: "var(--chart-3)",
       type: "agent"
     };
   });
 
   const topologyNodes = [
-    { id: "user", label: "USER", x: 300, y: 60, color: "var(--cp-cyan)", type: "user" },
-    { id: "moderator", label: "MODERATOR", x: 300, y: 190, color: "var(--cp-green)", type: "moderator" },
+    { id: "user", label: "USER", x: 300, y: 60, color: "var(--primary)", type: "user" },
+    { id: "moderator", label: "MODERATOR", x: 300, y: 190, color: "var(--good)", type: "moderator" },
     ...agentNodes
   ];
 
@@ -2633,11 +2633,11 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
     const x = getXOffset(evt.agent);
     const y = 60 + idx * 70;
     
-    let color = "var(--cp-cyan)";
-    if (agent === 'you' || agent === 'user') color = "var(--cp-cyan)";
-    else if (agent === 'moderator') color = "var(--cp-green)";
-    else if (agent === 'system') color = "var(--cp-purple)";
-    else color = "var(--cp-yellow)";
+    let color = "var(--primary)";
+    if (agent === 'you' || agent === 'user') color = "var(--primary)";
+    else if (agent === 'moderator') color = "var(--good)";
+    else if (agent === 'system') color = "var(--chart-5)";
+    else color = "var(--chart-3)";
 
     return {
       id: evt.id,
@@ -2712,15 +2712,15 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-black/10 select-none relative">
+    <div className="flex flex-col h-full w-full bg-[var(--background)] select-none relative">
       {/* Mode Selectors */}
-      <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--cp-border)] bg-black/40 px-2 py-1">
+      <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--border)] bg-[var(--secondary)] px-2 py-1">
         <div className="flex gap-1.5 items-center">
           <button
             onClick={() => { setGraphMode("topology"); resetZoom(); }}
             style={{ fontFamily: "'Share Tech Mono', monospace" }}
-            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
-              graphMode === "topology" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            className={`px-2 py-0.5 border border-[var(--border)] rounded-none text-[8px] uppercase font-bold transition-all ${
+              graphMode === "topology" ? 'bg-[var(--card)] text-[var(--primary)] border-[var(--primary)]' : 'text-[var(--muted-foreground)] border-[var(--border)] hover:text-[var(--foreground)]'
             }`}
           >
             [TOPOLOGY]
@@ -2728,8 +2728,8 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
           <button
             onClick={() => { setGraphMode("tree"); resetZoom(); }}
             style={{ fontFamily: "'Share Tech Mono', monospace" }}
-            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
-              graphMode === "tree" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            className={`px-2 py-0.5 border border-[var(--border)] rounded-none text-[8px] uppercase font-bold transition-all ${
+              graphMode === "tree" ? 'bg-[var(--card)] text-[var(--primary)] border-[var(--primary)]' : 'text-[var(--muted-foreground)] border-[var(--border)] hover:text-[var(--foreground)]'
             }`}
           >
             [COGNITIVE TRACE]
@@ -2737,8 +2737,8 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
           <button
             onClick={() => { setGraphMode("sunburst"); resetZoom(); }}
             style={{ fontFamily: "'Share Tech Mono', monospace" }}
-            className={`px-2 py-0.5 border border-[var(--cp-border)] rounded text-[8px] uppercase font-bold transition-all ${
-              graphMode === "sunburst" ? 'bg-[rgba(0,229,255,0.15)] text-[var(--cp-cyan)] border-[var(--cp-cyan)]' : 'text-white/40 border-white/5 hover:text-white/70'
+            className={`px-2 py-0.5 border border-[var(--border)] rounded-none text-[8px] uppercase font-bold transition-all ${
+              graphMode === "sunburst" ? 'bg-[var(--card)] text-[var(--primary)] border-[var(--primary)]' : 'text-[var(--muted-foreground)] border-[var(--border)] hover:text-[var(--foreground)]'
             }`}
           >
             [PATH SUNBURST]
@@ -2748,14 +2748,14 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
 
       {/* Sub tabs for Cognitive Trace */}
       {graphMode === "tree" && (
-        <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--cp-border)] bg-black/20 px-3 py-1">
+        <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--border)] bg-[var(--card)] px-3 py-1">
           <div className="flex gap-4">
             <button
               onClick={() => { setViewMode("single"); resetZoom(); }}
               className={`text-[9px] uppercase font-bold tracking-wider py-1 border-b-2 transition-all ${
                 viewMode === "single"
-                  ? 'border-[var(--cp-cyan)] text-[var(--cp-cyan)]'
-                  : 'border-transparent text-white/40 hover:text-white/70'
+                  ? 'border-[var(--primary)] text-[var(--primary)]'
+                  : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
               }`}
               style={{ fontFamily: "'Share Tech Mono', monospace" }}
             >
@@ -2765,8 +2765,8 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
               onClick={() => { setViewMode("full"); resetZoom(); }}
               className={`text-[9px] uppercase font-bold tracking-wider py-1 border-b-2 transition-all ${
                 viewMode === "full"
-                  ? 'border-[var(--cp-cyan)] text-[var(--cp-cyan)]'
-                  : 'border-transparent text-white/40 hover:text-white/70'
+                  ? 'border-[var(--primary)] text-[var(--primary)]'
+                  : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
               }`}
               style={{ fontFamily: "'Share Tech Mono', monospace" }}
             >
@@ -2775,11 +2775,11 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
           </div>
 
           {viewMode === "single" && turns.length > 0 && (
-            <div className="flex items-center gap-2 text-[9px] font-mono text-white/60">
+            <div className="flex items-center gap-2 text-[9px] font-mono text-[var(--muted-foreground)]">
               <button
                 onClick={() => setActiveTurnIdx(prev => Math.max(prev - 1, 0))}
                 disabled={activeTurnIdx === 0}
-                className="px-1.5 py-0.5 border border-white/10 rounded disabled:opacity-20 hover:text-[var(--cp-cyan)] hover:border-[var(--cp-cyan)]/50 transition-colors"
+                className="px-1.5 py-0.5 border border-[var(--border)] rounded-none disabled:opacity-20 hover:text-[var(--primary)] hover:border-[var(--primary)]/50 transition-colors"
               >
                 &lt;
               </button>
@@ -2789,7 +2789,7 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
               <button
                 onClick={() => setActiveTurnIdx(prev => Math.min(prev + 1, turns.length - 1))}
                 disabled={activeTurnIdx === turns.length - 1}
-                className="px-1.5 py-0.5 border border-white/10 rounded disabled:opacity-20 hover:text-[var(--cp-cyan)] hover:border-[var(--cp-cyan)]/50 transition-colors"
+                className="px-1.5 py-0.5 border border-[var(--border)] rounded-none disabled:opacity-20 hover:text-[var(--primary)] hover:border-[var(--primary)]/50 transition-colors"
               >
                 &gt;
               </button>
@@ -2801,18 +2801,18 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
       {/* Floating Canvas Controls */}
       {graphMode !== "sunburst" && (
         <div className="absolute right-2 top-10 flex flex-col gap-1.5 z-10 opacity-30 hover:opacity-100 transition-opacity">
-          <button onClick={zoomIn} title="Zoom In" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[11px] rounded font-mono">+</button>
-          <button onClick={zoomOut} title="Zoom Out" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[11px] rounded font-mono">-</button>
-          <button onClick={resetZoom} title="Reset Canvas" className="w-5 h-5 bg-black/60 border border-[var(--cp-border)] text-white hover:text-[var(--cp-cyan)] flex items-center justify-center text-[9px] rounded font-mono">↺</button>
+          <button onClick={zoomIn} title="Zoom In" className="w-5 h-5 bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] hover:text-[var(--primary)] flex items-center justify-center text-[11px] rounded-none font-mono">+</button>
+          <button onClick={zoomOut} title="Zoom Out" className="w-5 h-5 bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] hover:text-[var(--primary)] flex items-center justify-center text-[11px] rounded-none font-mono">-</button>
+          <button onClick={resetZoom} title="Reset Canvas" className="w-5 h-5 bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] hover:text-[var(--primary)] flex items-center justify-center text-[9px] rounded-none font-mono">↺</button>
         </div>
       )}
 
       {/* SVG Canvas */}
-      <div className="flex-1 min-h-0 relative bg-black/20 overflow-hidden">
+      <div className="flex-1 min-h-0 relative bg-[var(--card)] overflow-hidden">
         {graphMode === "sunburst" ? (
           <NeuralPathSunburst messages={messages} thinking={thinking} />
         ) : currentNodes.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center text-white/30 text-[10px]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          <div className="absolute inset-0 flex items-center justify-center text-[var(--muted-foreground)] text-[10px]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
             // NO_ACTIVE_SESSION_DATA
           </div>
         ) : (
@@ -2829,19 +2829,19 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
           >
             <defs>
               <pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0, 229, 255, 0.02)" strokeWidth="0.5" />
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--border)" strokeWidth="0.5" />
               </pattern>
               <marker id="arrow-cyan" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-cyan)" />
+                <polygon points="0 0, 8 3, 0 6" fill="var(--primary)" />
               </marker>
               <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-green)" />
+                <polygon points="0 0, 8 3, 0 6" fill="var(--good)" />
               </marker>
               <marker id="arrow-yellow" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-yellow)" />
+                <polygon points="0 0, 8 3, 0 6" fill="var(--chart-3)" />
               </marker>
               <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="40" refY="3" orient="auto">
-                <polygon points="0 0, 8 3, 0 6" fill="var(--cp-purple)" />
+                <polygon points="0 0, 8 3, 0 6" fill="var(--chart-5)" />
               </marker>
               <marker id="arrow-tree" markerWidth="6" markerHeight="4" refX="32" refY="2" orient="auto">
                 <polygon points="0 0, 6 2, 0 4" fill="rgba(0, 229, 255, 0.4)" />
@@ -2870,11 +2870,11 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
 
                 if (graphMode === "topology") {
                   if (edge.count > 0) {
-                    if (edge.type === 'input') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
-                    else if (edge.type === 'delegate') { strokeColor = "var(--cp-green)"; markerId = "arrow-green"; dashArray = "3,3"; }
-                    else if (edge.type === 'whisper') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
-                    else if (edge.type === 'crosscheck') { strokeColor = "var(--cp-purple)"; markerId = "arrow-purple"; dashArray = "1,1"; }
-                    else if (edge.type === 'output') { strokeColor = "var(--cp-cyan)"; markerId = "arrow-cyan"; }
+                    if (edge.type === 'input') { strokeColor = "var(--primary)"; markerId = "arrow-cyan"; }
+                    else if (edge.type === 'delegate') { strokeColor = "var(--good)"; markerId = "arrow-green"; dashArray = "3,3"; }
+                    else if (edge.type === 'whisper') { strokeColor = "var(--primary)"; markerId = "arrow-cyan"; }
+                    else if (edge.type === 'crosscheck') { strokeColor = "var(--chart-5)"; markerId = "arrow-purple"; dashArray = "1,1"; }
+                    else if (edge.type === 'output') { strokeColor = "var(--primary)"; markerId = "arrow-cyan"; }
                   }
                 } else {
                   // Tree Waterfall mode
@@ -2911,7 +2911,7 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
                     />
                     {graphMode === "topology" && edge.count > 0 && (
                       <g transform={`translate(${(fromPos.x + toPos.x) / 2}, ${(fromPos.y + toPos.y) / 2})`}>
-                        <rect x="-16" y="-6" width="32" height="12" fill="var(--cp-bg-3)" stroke={strokeColor} strokeWidth="0.5" rx="2" />
+                        <rect x="-16" y="-6" width="32" height="12" fill="var(--secondary)" stroke={strokeColor} strokeWidth="0.5" rx="2" />
                         <text y="2.5" textAnchor="middle" fill={strokeColor} fontSize="7" fontWeight="bold" fontFamily="'Share Tech Mono', monospace">
                           {edge.count}
                         </text>
@@ -2977,13 +2977,13 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
                       y={-h / 2}
                       width={w}
                       height={h}
-                      fill={isThought ? "rgba(182, 36, 255, 0.08)" : "var(--cp-bg-3)"}
+                      fill={isThought ? "rgba(182, 36, 255, 0.08)" : "var(--secondary)"}
                       stroke={node.color}
                       strokeWidth={draggedNodeId === node.id ? 1.5 : 0.8}
                       strokeDasharray={isThought ? "3,3" : undefined}
                       rx={3}
                       style={{
-                        filter: draggedNodeId === node.id ? "drop-shadow(0px 0px 8px rgba(0, 229, 255, 0.4))" : undefined,
+                        filter: draggedNodeId === node.id ? "none" : undefined,
                         transition: 'stroke 0.2s, filter 0.2s'
                       }}
                     />
@@ -3033,16 +3033,16 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
 
       {/* Interactive Turn Details Footer for Tree Mode */}
       {graphMode === "tree" && (
-        <div className="flex-shrink-0 h-[100px] border-t border-[var(--cp-border)] bg-black/60 p-2 text-[10px] font-mono overflow-y-auto">
-          <div className="text-[var(--cp-cyan)] font-bold mb-1">
+        <div className="flex-shrink-0 h-[100px] border-t border-[var(--border)] bg-[var(--background)] p-2 text-[10px] font-mono overflow-y-auto">
+          <div className="text-[var(--primary)] font-bold mb-1">
             {viewMode === "full" ? "// FULL_SESSION_TRACE" : "// ACTIVE_TURN_QUERY"}
           </div>
-          <div className="text-white/80 italic p-1 bg-white/5 border border-white/5 mb-1 select-text">
+          <div className="text-[var(--foreground)] italic p-1 bg-[var(--secondary)] border border-[var(--border)] mb-1 select-text">
             {viewMode === "full" 
               ? `Displaying entire session sequence containing ${allEvents.length} events across ${turns.length} turns.`
               : `"${turns[activeTurnIdx]?.userQuery || ''}"`}
           </div>
-          <div className="text-[8px] text-white/40">
+          <div className="text-[8px] text-[var(--muted-foreground)]">
             Click any node in the tree flow map above to inspect the full contents of that reasoning stage.
           </div>
         </div>
@@ -3050,29 +3050,28 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
 
       {/* Inspector Modal Overlay */}
       {selectedNode && (
-        <div className="absolute inset-0 bg-black/85 flex items-center justify-center p-3 z-50">
+        <div className="absolute inset-0 bg-[var(--background)]/90 flex items-center justify-center p-3 z-50">
           <div
             style={{
-              background: "var(--cp-bg-1)",
-              border: "1px solid var(--cp-cyan)",
-              boxShadow: "0 0 20px rgba(0,229,255,0.25)",
+              background: "var(--background)",
+              border: "1px solid var(--primary)",
               fontFamily: "var(--font-sans)",
               borderRadius: "4px"
             }}
             className="w-full max-w-md p-4 flex flex-col max-h-[85%] select-text"
           >
-            <div style={{ fontFamily: "'Share Tech Mono', monospace" }} className="flex justify-between items-center border-b border-[var(--cp-border)] pb-1.5 mb-2">
-              <span className="text-[var(--cp-cyan)] uppercase text-[10px] font-bold tracking-wider">
+            <div style={{ fontFamily: "'Share Tech Mono', monospace" }} className="flex justify-between items-center border-b border-[var(--border)] pb-1.5 mb-2">
+              <span className="text-[var(--primary)] uppercase text-[10px] font-bold tracking-wider">
                 // INSPECT: {selectedNode.agent}
               </span>
-              <span className="text-[8px] text-muted-foreground opacity-60">
+              <span className="text-[8px] text-[var(--muted-foreground)] opacity-60">
                 {selectedNode.type.toUpperCase()} · {new Date(selectedNode.timestamp).toLocaleTimeString()}
               </span>
             </div>
             
             <div
-              className="flex-1 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap pr-1 bg-black/40 border border-white/5 p-2"
-              style={{ maxHeight: "300px", scrollbarWidth: "thin", fontFamily: "var(--font-sans)", scrollbarColor: 'rgba(0,229,255,0.1) transparent' }}
+              className="flex-1 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap pr-1 bg-[var(--secondary)] border border-[var(--border)] p-2"
+              style={{ maxHeight: "300px", scrollbarWidth: "thin", fontFamily: "var(--font-sans)", scrollbarColor: 'var(--primary) transparent' }}
             >
               {selectedNode.content}
             </div>
@@ -3081,12 +3080,12 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
               <button
                 onClick={() => setSelectedNode(null)}
                 style={{
-                  background: "rgba(0, 229, 255, 0.15)",
-                  border: "1px solid var(--cp-cyan)",
-                  color: "var(--cp-cyan)",
-                  fontFamily: "'Share Tech Mono', monospace",
-                }}
-                className="px-3 py-1 text-[10px] hover:bg-[var(--cp-cyan)] hover:text-black transition-colors"
+                background: "var(--card)",
+                border: "1px solid var(--primary)",
+                color: "var(--primary)",
+                fontFamily: "'Share Tech Mono', monospace",
+              }}
+                className="px-3 py-1 text-[10px] hover:bg-[var(--primary)] hover:text-[var(--background)] transition-colors"
               >
                 CLOSE
               </button>
@@ -3097,4 +3096,3 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
     </div>
   );
 }
-

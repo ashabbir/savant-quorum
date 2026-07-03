@@ -81,7 +81,7 @@ async function initDb() {
 
     console.log('[QUORUM] SQLite engine initialized.')
   } catch (e) {
-    console.error('Failed to initialize Savant Quorum database:', e)
+    console.error('Failed to initialize Quorum database:', e)
   }
 }
 
@@ -231,7 +231,7 @@ function createTray() {
     { label: 'Quit', click: () => { app.quit(); } }
   ])
 
-  tray.setToolTip('Savant Quorum')
+  tray.setToolTip('Quorum')
   tray.setContextMenu(contextMenu)
 }
 

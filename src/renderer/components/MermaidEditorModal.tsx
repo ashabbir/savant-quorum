@@ -29,18 +29,18 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
   }, [open, initialCode]);
 
   useEffect(() => {
-    mermaid.initialize({
+      mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
       fontFamily: "'Share Tech Mono', monospace",
       themeVariables: {
-        primaryColor: '#00f2ff',
-        primaryTextColor: '#fff',
-        primaryBorderColor: '#00f2ff',
-        lineColor: '#ff00ff',
-        secondaryColor: '#f4ea00',
-        tertiaryColor: '#0a0a0a'
+        primaryColor: '#00e5ff',
+        primaryTextColor: '#e1ecf8',
+        primaryBorderColor: '#00e5ff',
+        lineColor: '#ff00aa',
+        secondaryColor: '#0f1929',
+        tertiaryColor: '#080b12'
       }
     });
   }, []);
@@ -86,14 +86,14 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
     <Dialog.Root open={open} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay
-          style={{ background: "rgba(0, 0, 0, 0.75)" }}
+          style={{ background: "var(--background)", opacity: 0.9 }}
           className="fixed inset-0 z-[100]"
         />
         <Dialog.Content
           style={{
-            background: "var(--cp-bg-2)",
-            border: "1px solid var(--cp-border)",
-            boxShadow: "0 0 25px rgba(0, 229, 255, 0.25)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            boxShadow: "none",
             maxHeight: "85vh",
           }}
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[95vw] max-w-6xl p-6 flex flex-col rounded-none"
@@ -103,7 +103,7 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
             <div>
               <Dialog.Title
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Orbitron', sans-serif",
                   letterSpacing: "0.05em",
                 }}
@@ -123,7 +123,7 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
             </div>
             <Dialog.Close asChild>
               <button
-                style={{ color: "var(--cp-cyan)" }}
+                style={{ color: "var(--primary)" }}
                 className="opacity-60 hover:opacity-100 transition-opacity p-1 cursor-pointer"
               >
                 <X size={18} />
@@ -138,10 +138,10 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
               <div 
                 style={{ 
                   fontFamily: "'Share Tech Mono', monospace", 
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   borderBottom: "none"
                 }} 
-                className="text-xs uppercase px-3 py-1 bg-[var(--cp-bg-3)] border border-[var(--cp-border)]"
+                className="text-xs uppercase px-3 py-1 bg-[var(--secondary)] border border-[var(--border)]"
               >
                 diagram_source.mermaid
               </div>
@@ -149,14 +149,14 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 style={{
-                  background: "rgba(5, 10, 18, 0.85)",
-                  border: "1px solid var(--cp-border)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                   color: "var(--foreground)",
                   fontFamily: "'JetBrains Mono', 'Share Tech Mono', monospace",
                   fontSize: "0.85rem",
                   lineHeight: "1.5",
                 }}
-                className="flex-1 w-full p-4 resize-none focus:outline-none focus:border-[var(--cp-cyan)] overflow-auto"
+                className="flex-1 w-full p-4 resize-none focus:outline-none focus:border-[var(--primary)] overflow-auto"
                 placeholder="graph TD..."
                 spellCheck={false}
               />
@@ -167,25 +167,25 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
               <div 
                 style={{ 
                   fontFamily: "'Share Tech Mono', monospace", 
-                  color: "var(--cp-magenta)",
+                  color: "var(--accent)",
                   borderBottom: "none"
                 }} 
-                className="text-xs uppercase px-3 py-1 bg-[var(--cp-bg-3)] border border-[var(--cp-border)]"
+                className="text-xs uppercase px-3 py-1 bg-[var(--secondary)] border border-[var(--border)]"
               >
                 neural_compile_preview
               </div>
               <div
                 style={{
-                  background: "rgba(5, 10, 18, 0.95)",
-                  border: "1px solid var(--cp-border)",
+                background: "var(--background)",
+                  border: "1px solid var(--border)",
                 }}
                 className="flex-1 overflow-auto p-4 flex items-center justify-center relative min-h-0"
               >
                 {error ? (
                   <div 
                     style={{ 
-                      background: 'rgba(255,0,170,0.05)', 
-                      border: '1px solid rgba(255,0,170,0.2)',
+                      background: 'var(--secondary)', 
+                      border: '1px solid var(--border)',
                       padding: '12px 16px',
                       fontFamily: "'Share Tech Mono', monospace",
                       width: '100%',
@@ -194,10 +194,10 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
                     }}
                     className="self-start"
                   >
-                    <div style={{ color: 'var(--cp-magenta)', fontSize: '11px', fontWeight: 'bold' }} className="mb-2">
+                    <div style={{ color: 'var(--accent)', fontSize: '11px', fontWeight: 'bold' }} className="mb-2">
                       NEURAL_RENDER_FAILED: MERMAID_SYNTAX_ERROR
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ color: 'var(--foreground)', opacity: 0.7, fontSize: '11px', whiteSpace: 'pre-wrap' }}>
                       {errorMsg}
                     </div>
                   </div>
@@ -218,11 +218,11 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
               onClick={onClose}
               style={{
                 background: "transparent",
-                border: "1px solid var(--cp-border)",
+                border: "1px solid var(--border)",
                 color: "var(--foreground)",
                 fontFamily: "'Share Tech Mono', monospace",
               }}
-              className="px-4 py-2 text-xs hover:bg-[rgba(255,255,255,0.05)] transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs hover:bg-[var(--secondary)] transition-colors cursor-pointer"
             >
               CANCEL
             </button>
@@ -230,15 +230,15 @@ export function MermaidEditorModal({ open, onClose, initialCode, onSave }: Merma
               onClick={handleSave}
               disabled={error || !code.trim()}
               style={{
-                background: "var(--cp-cyan)",
-                border: "1px solid var(--cp-cyan)",
+                background: "var(--primary)",
+                border: "1px solid var(--primary)",
                 color: "#080b12",
                 fontFamily: "'Share Tech Mono', monospace",
                 fontWeight: "bold",
                 opacity: error || !code.trim() ? 0.5 : 1,
                 cursor: error || !code.trim() ? "not-allowed" : "pointer"
               }}
-              className="px-4 py-2 text-xs hover:bg-[rgba(0,229,255,0.8)] transition-colors"
+              className="px-4 py-2 text-xs hover:bg-[var(--primary)] hover:text-[var(--background)] transition-colors"
             >
               SAVE CHANGES
             </button>

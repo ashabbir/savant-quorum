@@ -37,13 +37,13 @@ interface ChatAreaProps {
 const getRoleIcon = (role: Message['role']) => {
   switch (role) {
     case 'user': return <User size={13} style={{ color: "rgba(120,180,255,0.8)" }} />;
-    case 'moderator': return <Shield size={13} style={{ color: "var(--cp-green)" }} />;
+    case 'moderator': return <Shield size={13} style={{ color: "var(--good)" }} />;
     case 'engineer': return <Code size={13} style={{ color: "var(--muted-foreground)" }} />;
     case 'architect': return <Layout size={13} style={{ color: "var(--muted-foreground)" }} />;
     case 'security': return <Shield size={13} style={{ color: "var(--muted-foreground)" }} />;
-    case 'system': return <Settings size={13} style={{ color: "var(--cp-purple)" }} />;
-    case 'error': return <AlertTriangle size={13} style={{ color: "var(--cp-magenta)" }} />;
-    case 'internal': return <Terminal size={13} style={{ color: "var(--cp-cyan)" }} />;
+    case 'system': return <Settings size={13} style={{ color: "var(--chart-5)" }} />;
+    case 'error': return <AlertTriangle size={13} style={{ color: "var(--accent)" }} />;
+    case 'internal': return <Terminal size={13} style={{ color: "var(--primary)" }} />;
     default: return <Bot size={13} style={{ color: "var(--muted-foreground)" }} />;
   }
 }
@@ -75,7 +75,7 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Savant Quorum - ${sessionTitle}</title>
+    <title>Quorum - ${sessionTitle}</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -86,33 +86,33 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
         }
         body {
             font-family: 'Rajdhani', sans-serif;
-            background-color: var(--cp-bg);
-            color: var(--foreground);
+            background-color: #080b12;
+            color: #e0e0e0;
             line-height: 1.6;
             padding: 40px;
             max-width: 900px;
             margin: 0 auto;
         }
         .header {
-            border-bottom: 1px solid var(--cp-border);
+            border-bottom: 1px solid var(--border);
             margin-bottom: 30px;
             padding-bottom: 10px;
         }
-        h1 { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
+        h1 { color: #00e5ff; font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
         .session-title { opacity: 0.6; font-size: 0.9rem; }
-        #content { background: rgba(255,255,255,0.02); border: 1px solid var(--cp-border); padding: 20px; }
+        #content { background: var(--background); border: 1px solid var(--border); padding: 20px; }
         pre { background: #1a1a1a; padding: 15px; border-radius: 4px; overflow-x: auto; border: 1px solid #333; }
-        code { font-family: 'Share Tech Mono', monospace; color: var(--cp-cyan); }
+        code { font-family: 'Share Tech Mono', monospace; color: #00e5ff; }
         table { border-collapse: collapse; width: 100%; margin: 20px 0; }
         th, td { border: 1px solid #333; padding: 10px; text-align: left; }
-        th { background-color: #1a1a1a; color: var(--cp-cyan); }
-        .mermaid { background: white !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
-        .fact-marker { color: var(--cp-cyan); font-weight: bold; }
+        th { background-color: #1a1a1a; color: #00e5ff; }
+        .mermaid { background: #080b12 !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
+        .fact-marker { color: #00e5ff; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>// SAVANT_QUORUM_REPORT</h1>
+        <h1>// QUORUM_REPORT</h1>
         <div class="session-title">${sessionTitle}</div>
     </div>
     <div id="content"></div>
@@ -163,7 +163,7 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
             </style>
           </head>
           <body>
-            <h1>Savant Quorum - Fact Report</h1>
+            <h1>Quorum - Fact Report</h1>
             <h2>${sessionTitle}</h2>
             <div id="content"></div>
             <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -396,6 +396,8 @@ export function ChatArea({
   const [isDragOver, setIsDragOver] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const lastMessageCountRef = useRef(messages.length);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -455,7 +457,20 @@ export function ChatArea({
   ];
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = viewportRef.current;
+    const currentCount = messages.length;
+    const previousCount = lastMessageCountRef.current;
+    const isAppending = currentCount > previousCount;
+
+    const nearBottom = viewport
+      ? viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120
+      : true;
+
+    if (isAppending && nearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+
+    lastMessageCountRef.current = currentCount;
   }, [messages]);
 
   // Handle Slash Command Trigger
@@ -602,7 +617,7 @@ export function ChatArea({
       </div>
 
       {/* Messages */}
-      <div className="chat-messages-viewport">
+      <div className="chat-messages-viewport" ref={viewportRef}>
         {filteredMessages.map(msg => {
           if (msg.role === "whisper" || msg.role === "moderator-whisper" || msg.role === "agent-whisper") {
             return <MemoizedWhisperBlock key={msg.id} message={msg} onUpdateMessage={onUpdateMessage} />;

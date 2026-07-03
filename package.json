@@ -1,7 +1,7 @@
 {
   "name": "savant-quorum",
   "version": "5.0.3",
-  "description": "Savant Quorum - A high-security multi-agent collaborative environment.",
+  "description": "Quorum - A high-security multi-agent collaborative environment.",
   "author": "project-x",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -83,7 +83,7 @@
   "build": {
     "electronVersion": "31.0.0",
     "appId": "com.project-x.quorum",
-    "productName": "Savant Quorum",
+    "productName": "Quorum",
     "directories": {
       "output": "dist",
       "buildResources": "build"

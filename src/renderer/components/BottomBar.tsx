@@ -8,9 +8,9 @@ interface StatusDot {
 }
 
 const STATUS_COLORS = {
-  online: "#00ff88",
-  offline: "#ff2244",
-  warning: "#ffe600",
+  online: "var(--good)",
+  offline: "var(--accent)",
+  warning: "var(--chart-3)",
 };
 
 interface BottomBarProps {
@@ -94,9 +94,9 @@ export function BottomBar({ sessionTitle }: BottomBarProps) {
 
   const STATUS_ITEMS: StatusDot[] = [
     { label: "user", status: "online", detail: userName },
-    { label: "chat", status: "online", detail: sessionTitle || "New Session" },
+    { label: "session", status: "online", detail: sessionTitle || "New Session" },
     { label: "gateway", status: gatewayStatus === "online" ? "online" : "offline", detail: gatewayStatus },
-    { label: "savant", status: savantStatus === "online" ? "online" : "offline", detail: savantStatus },
+    { label: "server", status: savantStatus === "online" ? "online" : "offline", detail: savantStatus },
     { label: "dir", status: "online", detail: defaultDir },
     { label: "db", status: dbStatus === "connected" ? "online" : "offline", detail: dbStatus },
   ];
@@ -104,36 +104,36 @@ export function BottomBar({ sessionTitle }: BottomBarProps) {
   return (
     <footer
       style={{
-        background: "var(--cp-bg-1)",
-        borderTop: "1px solid var(--cp-border)",
+        background: "var(--background)",
+        borderTop: "1px solid var(--border)",
         fontFamily: "'Share Tech Mono', monospace",
       }}
-      className="flex items-center gap-0 h-7 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+      className="flex items-center gap-0 h-7 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden text-[10px]"
     >
       {STATUS_ITEMS.map((item, i) => (
         <div
           key={item.label}
           style={{
-            borderRight: "1px solid var(--cp-border)",
+            borderRight: "1px solid var(--border)",
           }}
-          className="flex items-center gap-1.5 px-3 h-full"
+          className="flex items-center gap-1 px-2.5 h-full"
         >
           <Circle
             size={5}
             style={{
               color: STATUS_COLORS[item.status],
               fill: STATUS_COLORS[item.status],
-              filter: `drop-shadow(0 0 3px ${STATUS_COLORS[item.status]})`,
+              filter: "none",
             }}
           />
-          <span style={{ color: "var(--muted-foreground)" }} className="text-xs opacity-50 whitespace-nowrap">
+          <span style={{ color: "var(--muted-foreground)" }} className="opacity-50 whitespace-nowrap uppercase tracking-wider">
             {item.label}:
           </span>
           <span
             style={{
-              color: item.status === "warning" ? "var(--cp-yellow)" : "var(--foreground)",
+              color: item.status === "warning" ? "var(--accent)" : "var(--foreground)",
             }}
-            className="text-xs opacity-60 whitespace-nowrap"
+            className="opacity-85 whitespace-nowrap"
           >
             {item.detail}
           </span>
@@ -142,10 +142,10 @@ export function BottomBar({ sessionTitle }: BottomBarProps) {
 
       {/* right: version + date + timestamp */}
       <div className="ml-auto px-3 flex items-center gap-3">
-        <span style={{ color: "var(--cp-cyan)" }} className="text-xs opacity-20 font-bold whitespace-nowrap">
+        <span style={{ color: "var(--primary)" }} className="opacity-45 font-bold whitespace-nowrap uppercase tracking-wider">
           v{APP_VERSION}
         </span>
-        <span style={{ color: "var(--cp-cyan)" }} className="text-xs opacity-20 whitespace-nowrap">
+        <span style={{ color: "var(--primary)" }} className="opacity-45 whitespace-nowrap">
           {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
       </div>

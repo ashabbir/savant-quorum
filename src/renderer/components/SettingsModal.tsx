@@ -63,14 +63,15 @@ function createId(prefix: string, existingIds: Set<string>) {
 }
 
 const inputStyle = {
-  background: "var(--cp-bg-3)",
-  border: "1px solid var(--cp-border)",
+  background: "var(--secondary)",
+  border: "1px solid var(--border)",
   color: "var(--foreground)",
   fontFamily: "'Share Tech Mono', monospace",
+  borderRadius: 0,
 } as const;
 
 const labelStyle = {
-  color: "var(--cp-cyan)",
+  color: "var(--primary)",
   fontFamily: "'Share Tech Mono', monospace",
 } as const;
 
@@ -103,7 +104,7 @@ function CyberpunkInput({
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       style={inputStyle}
-      className={`px-3 py-2 text-xs w-full focus:outline-none focus:border-[var(--cp-cyan)] placeholder:opacity-30 ${className}`}
+      className={`px-3 py-2 text-xs w-full focus:outline-none focus:border-[var(--primary)] placeholder:opacity-30 ${className}`}
     />
   );
 }
@@ -141,8 +142,8 @@ function ServicePanel({
   }
 
   const statusColor =
-    config.status === "connected" ? "var(--cp-cyan)" :
-    config.status === "failed" ? "var(--cp-magenta)" :
+    config.status === "connected" ? "var(--primary)" :
+    config.status === "failed" ? "var(--accent)" :
     "var(--foreground)";
 
   const StatusIcon =
@@ -163,10 +164,11 @@ function ServicePanel({
         <button
           onClick={() => onChange({ enabled: !config.enabled })}
           style={{
-            background: config.enabled ? "var(--cp-cyan)" : "var(--cp-bg-3)",
-            border: "1px solid var(--cp-border)",
-            color: config.enabled ? "var(--cp-bg-0)" : "var(--foreground)",
+            background: config.enabled ? "var(--primary)" : "var(--secondary)",
+            border: "1px solid var(--border)",
+            color: config.enabled ? "var(--primary-foreground)" : "var(--foreground)",
             fontFamily: "'Share Tech Mono', monospace",
+            borderRadius: 0,
           }}
           className="px-3 py-1 text-xs transition-all"
         >
@@ -188,7 +190,7 @@ function ServicePanel({
       <div>
         <label style={labelStyle} className="block text-xs mb-2 opacity-70">Health Endpoint</label>
         <div
-          style={{ background: "var(--cp-bg-3)", border: "1px solid var(--cp-border)", color: "var(--foreground)", fontFamily: "'Share Tech Mono', monospace" }}
+          style={{ background: "var(--secondary)", border: "1px solid var(--border)", color: "var(--foreground)", fontFamily: "'Share Tech Mono', monospace", borderRadius: 0 }}
           className="px-3 py-2 text-xs opacity-50"
         >
           {normalizeServiceUrl(config.url)}{healthPath}
@@ -201,10 +203,11 @@ function ServicePanel({
           onClick={checkHealth}
           disabled={!config.enabled || config.status === "checking"}
           style={{
-            background: "var(--cp-bg-3)",
-            border: "1px solid var(--cp-cyan)",
-            color: "var(--cp-cyan)",
+            background: "var(--secondary)",
+            border: "1px solid var(--border)",
+            color: "var(--primary)",
             fontFamily: "'Share Tech Mono', monospace",
+            borderRadius: 0,
           }}
           className="px-3 py-1.5 text-xs flex items-center gap-1.5 hover:opacity-80 transition-opacity disabled:opacity-30"
         >
@@ -419,7 +422,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
     setUserApiKey(apiKey || "");
     try {
       if (!apiKey) {
-        throw new Error("Savant API key is required. Add it in Profile before loading abilities.");
+        throw new Error("Quorum API key is required. Add it in Profile before loading abilities.");
       }
       const res = await fetch(`${normalizeServiceUrl(serverConfig.url)}/api/abilities/assets`, {
         headers: {
@@ -450,7 +453,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
       if (allTags.length > 0) setAgentTags(allTags);
     } catch (e: any) {
       const message = e?.message === "Failed to fetch"
-        ? "Cannot reach Savant server abilities. Check that savant-server is running and allows X-API-Key CORS preflight."
+        ? "Cannot reach Quorum server abilities. Check that Quorum server is running and allows X-API-Key CORS preflight."
         : e?.message || "Failed to fetch abilities.";
       setAbilitiesError(message);
       console.error("Failed to fetch abilities:", e);
@@ -514,7 +517,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
   return (
     <Dialog.Root open={open} onOpenChange={onClose}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ background: "rgba(0,0,0,0.7)" }} className="fixed inset-0 z-[100]" />
+        <Dialog.Overlay style={{ background: "var(--background)", opacity: 0.9 }} className="fixed inset-0 z-[100]" />
         <Dialog.Content
           onEscapeKeyDown={(e) => {
             e.preventDefault();
@@ -527,16 +530,17 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
             }
           }}
           style={{
-            background: "var(--cp-bg-2)",
-            border: "1px solid var(--cp-border)",
-            boxShadow: "0 0 20px rgba(0,229,255,0.2)",
-          }}
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+          borderRadius: 0,
+          boxShadow: "none",
+        }}
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[90vw] max-w-3xl max-h-[80vh] flex flex-col"
         >
           {/* header */}
-          <div style={{ borderBottom: "1px solid var(--cp-border)" }} className="flex items-center justify-between p-6 shrink-0">
+          <div style={{ borderBottom: "1px solid var(--border)" }} className="flex items-center justify-between p-5 shrink-0">
             <div>
-              <Dialog.Title style={{ color: "var(--cp-cyan)", fontFamily: "'Orbitron', sans-serif" }} className="text-lg font-medium">
+              <Dialog.Title style={{ color: "var(--primary)", fontFamily: "'Orbitron', sans-serif" }} className="text-base font-medium uppercase tracking-[0.2em]">
                 Settings
               </Dialog.Title>
               <Dialog.Description style={{ color: "var(--foreground)", fontFamily: "'Rajdhani', sans-serif" }} className="text-xs opacity-50 mt-1">
@@ -544,21 +548,21 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
-              <button style={{ color: "var(--cp-cyan)" }} className="opacity-60 hover:opacity-100 transition-opacity">
+              <button style={{ color: "var(--primary)" }} className="opacity-60 hover:opacity-100 transition-opacity">
                 <X size={18} />
               </button>
             </Dialog.Close>
           </div>
 
           {/* tabs */}
-          <div style={{ borderBottom: "1px solid var(--cp-border)" }} className="flex gap-1 px-6 shrink-0 overflow-x-auto">
+          <div style={{ borderBottom: "1px solid var(--border)" }} className="flex gap-1 px-5 shrink-0 overflow-x-auto">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  color: activeTab === tab.id ? "var(--cp-cyan)" : "var(--foreground)",
-                  borderBottom: activeTab === tab.id ? "2px solid var(--cp-cyan)" : "2px solid transparent",
+                  color: activeTab === tab.id ? "var(--primary)" : "var(--foreground)",
+                  borderBottom: activeTab === tab.id ? "1px solid var(--primary)" : "1px solid transparent",
                   fontFamily: "'Share Tech Mono', monospace",
                   opacity: activeTab === tab.id ? 1 : 0.5,
                 }}
@@ -570,7 +574,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
           </div>
 
           {/* content */}
-          <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}>
+          <div className="flex-1 overflow-y-auto p-5" style={{ scrollbarWidth: "thin", scrollbarColor: "var(--primary) transparent" }}>
 
             {/* ── SYSTEM ── */}
             {activeTab === "system" && (
@@ -586,7 +590,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                     </div>
                     <button
                       onClick={() => directoryInputRef.current?.click()}
-                      style={{ background: "var(--cp-cyan)", color: "var(--cp-bg-0)", fontFamily: "'Share Tech Mono', monospace" }}
+                      style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontFamily: "'Share Tech Mono', monospace" }}
                       className="px-3 py-2 text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5 shrink-0"
                     >
                       <Folder size={12} />
@@ -607,7 +611,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                   </p>
                   <button
                     onClick={addProvider}
-                    style={{ background: "var(--cp-cyan)", color: "var(--cp-bg-0)", fontFamily: "'Share Tech Mono', monospace" }}
+                    style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontFamily: "'Share Tech Mono', monospace" }}
                     className="px-3 py-1 text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1"
                   >
                     <Plus size={12} /> Add Provider
@@ -619,22 +623,22 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                     const modelOptions = selectedProvider?.models.length ? selectedProvider.models : MODELS;
 
                     return (
-                      <div key={item.id} style={{ background: "var(--cp-bg-3)", border: "1px solid var(--cp-border)" }} className="flex items-center gap-2 p-2">
-                        <GripVertical size={14} style={{ color: "var(--cp-cyan)", opacity: 0.3 }} className="shrink-0" />
-                        <div style={{ background: "var(--cp-bg-2)", border: "1px solid var(--cp-cyan)", color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="w-6 h-6 flex items-center justify-center text-xs shrink-0">
+                      <div key={item.id} style={{ background: "var(--card)", border: "1px solid var(--border)" }} className="flex items-center gap-2 p-2">
+                        <GripVertical size={14} style={{ color: "var(--primary)", opacity: 0.3 }} className="shrink-0" />
+                        <div style={{ background: "var(--secondary)", border: "1px solid var(--primary)", color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="w-6 h-6 flex items-center justify-center text-xs shrink-0">
                           {index + 1}
                         </div>
-                        <select value={item.provider} onChange={e => updateProvider(item.id, "provider", e.target.value)} style={{ ...inputStyle, background: "var(--cp-bg-2)" }} className="flex-1 px-2 py-1 text-xs focus:outline-none focus:border-[var(--cp-cyan)]">
+                        <select value={item.provider} onChange={e => updateProvider(item.id, "provider", e.target.value)} style={{ ...inputStyle, background: "var(--secondary)" }} className="flex-1 px-2 py-1 text-xs focus:outline-none focus:border-[var(--primary)]">
                           {selectedProviderOptions.map(provider => (
                             <option key={provider.id} value={provider.id}>
                               {provider.label}
                             </option>
                           ))}
                         </select>
-                        <select value={item.model} onChange={e => updateProvider(item.id, "model", e.target.value)} style={{ ...inputStyle, background: "var(--cp-bg-2)" }} className="flex-1 px-2 py-1 text-xs focus:outline-none focus:border-[var(--cp-cyan)]">
+                        <select value={item.model} onChange={e => updateProvider(item.id, "model", e.target.value)} style={{ ...inputStyle, background: "var(--secondary)" }} className="flex-1 px-2 py-1 text-xs focus:outline-none focus:border-[var(--primary)]">
                           {modelOptions.map(model => <option key={model} value={model}>{model}</option>)}
                         </select>
-                        <button onClick={() => removeProvider(item.id)} style={{ color: "var(--cp-magenta)" }} className="shrink-0 p-1 hover:opacity-70 transition-opacity" disabled={providerChain.length === 1}>
+                        <button onClick={() => removeProvider(item.id)} style={{ color: "var(--chart-5)" }} className="shrink-0 p-1 hover:opacity-70 transition-opacity" disabled={providerChain.length === 1}>
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -648,14 +652,14 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                   <button
                     onClick={() => refreshProviders()}
                     disabled={providersLoading}
-                    style={{ border: "1px solid var(--cp-border)", color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }}
+                    style={{ border: "1px solid var(--border)", color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}
                     className="px-2 py-1 text-xs opacity-70 hover:opacity-100 disabled:opacity-30"
                   >
                     {providersLoading ? "scanning..." : "refresh"}
                   </button>
                 </div>
                 {providersError && (
-                  <p style={{ color: "var(--cp-magenta)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-70">
+                  <p style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-70">
                     {providersError}
                   </p>
                 )}
@@ -676,7 +680,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                     placeholder="You are a content moderator. Review all responses for..."
                     rows={10}
                     style={{ ...inputStyle, resize: "vertical" }}
-                    className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--cp-cyan)] placeholder:opacity-30"
+                    className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)] placeholder:opacity-30"
                   />
                   <p style={{ color: "var(--muted-foreground)", fontFamily: "'Rajdhani', sans-serif" }} className="text-xs opacity-40 mt-1">
                     {moderatorPrompt.length} characters
@@ -694,7 +698,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                   </p>
                   <button
                     onClick={addAgent}
-                    style={{ background: "var(--cp-cyan)", color: "var(--cp-bg-0)", fontFamily: "'Share Tech Mono', monospace" }}
+                    style={{ background: "var(--primary)", color: "var(--background)", fontFamily: "'Share Tech Mono', monospace" }}
                     className="px-3 py-1 text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1 shrink-0"
                   >
                     <Plus size={12} /> Add Agent
@@ -705,17 +709,17 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                   {agents.map((agent, idx) => (
                     <div
                       key={agent.id}
-                      style={{ background: "var(--cp-bg-3)", border: "1px solid var(--cp-border)" }}
+                      style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                       className="p-4 space-y-3"
                     >
                       {/* agent header */}
                       <div className="flex items-center justify-between">
-                        <span style={{ color: "var(--cp-cyan)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-60">
+                        <span style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-60">
                           agent_{String(idx + 1).padStart(2, "0")}
                         </span>
                         <button
                           onClick={() => removeAgent(agent.id)}
-                          style={{ color: "var(--cp-magenta)" }}
+                          style={{ color: "var(--chart-5)" }}
                           className="p-1 hover:opacity-70 transition-opacity"
                           disabled={agents.length === 1}
                         >
@@ -739,7 +743,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                             value={agent.persona}
                             onChange={e => updateAgent(agent.id, { persona: e.target.value })}
                             style={{ ...inputStyle }}
-                            className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--cp-cyan)]"
+                            className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)]"
                           >
                             {personas.map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
@@ -755,7 +759,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                           placeholder="Define this agent's behavior and responsibilities..."
                           rows={3}
                           style={{ ...inputStyle, resize: "vertical" }}
-                          className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--cp-cyan)] placeholder:opacity-30"
+                          className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)] placeholder:opacity-30"
                         />
                       </div>
 
@@ -767,8 +771,8 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                             onClick={() => refreshAbilities()}
                             disabled={abilitiesLoading || !server.enabled}
                             style={{
-                              border: "1px solid var(--cp-border)",
-                              color: "var(--cp-cyan)",
+                              border: "1px solid var(--border)",
+                              color: "var(--primary)",
                               fontFamily: "'Share Tech Mono', monospace",
                             }}
                             className="px-2 py-0.5 text-[10px] opacity-70 hover:opacity-100 disabled:opacity-30"
@@ -777,7 +781,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                           </button>
                         </div>
                         {abilitiesError && (
-                          <p style={{ color: "var(--cp-magenta)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-70 mb-2">
+                          <p style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs opacity-70 mb-2">
                             {abilitiesError}
                           </p>
                         )}

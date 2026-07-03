@@ -15,8 +15,8 @@ interface ChatMarkdownProps {
 const codeBlockStyle = {
   margin: '0.6rem 0',
   padding: '0.75rem',
-  background: 'rgba(5, 10, 18, 0.82)',
-  border: '1px solid rgba(0, 229, 255, 0.18)',
+  background: 'var(--background)',
+  border: '1px solid var(--border)',
   borderRadius: 0,
   color: 'var(--foreground)',
   fontFamily: "'JetBrains Mono', 'Share Tech Mono', monospace",
@@ -51,7 +51,7 @@ function DiffBlock({ diffText }: { diffText: string }) {
         <span className="chat-diff-title">{filename}</span>
         {applied ? (
           <span 
-            style={{ color: "var(--cp-green)", fontFamily: "'Share Tech Mono', monospace" }} 
+            style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} 
             className="text-xs flex items-center gap-1 font-bold"
           >
             <Check size={10} /> APPLIED

@@ -13,8 +13,11 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: var(--cp-bg-0);
+  background: var(--background);
   color: var(--foreground);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 0 0.01px currentColor;
 }
 
 #root {
@@ -22,12 +25,137 @@ body {
   width: 100vw;
 }
 
+.app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr 28px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.shell-body {
+  display: grid;
+  grid-template-columns: 40px 220px minmax(0, 1fr) 40px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.02), transparent 18%), var(--background);
+}
+
+.shell-body.left-pane-collapsed {
+  grid-template-columns: 40px 44px minmax(0, 1fr) 40px;
+}
+
+.rail {
+  background: var(--background);
+  border-right: 1px solid var(--border);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.rail-group {
+  display: grid;
+  gap: 6px;
+}
+
+.rail-spacer {
+  flex: 1;
+}
+
+.rail-group-bottom {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.rail-right {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+  gap: 6px;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  flex: 0 0 40px;
+  background: var(--background);
+}
+
+.workspace-pane {
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: width 180ms ease, opacity 180ms ease, transform 180ms ease;
+  border-right: 0 solid transparent;
+}
+
+.workspace-pane.is-open {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  opacity: 1;
+  transform: translateX(0);
+  border-right: 1px solid var(--border);
+}
+
+.workspace-pane.is-closed {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  opacity: 1;
+  transform: translateX(0);
+  border-right: 1px solid var(--border);
+}
+
+.workspace-pane-collapsed-bar {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  border-right: 1px solid var(--border);
+}
+
+.workspace-pane-collapsed-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-family: "Orbitron", "Rajdhani", sans-serif;
+  font-size: 11px;
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+.workspace-pane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 7px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.workspace-pane-head h2 {
+  margin-top: 6px;
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-family: "Orbitron", "Rajdhani", sans-serif;
+}
+
 .chat-markdown {
   color: inherit;
   font-family: 'Rajdhani', sans-serif;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 500;
-  line-height: 1.62;
+  line-height: 1.68;
 }
 
 .chat-markdown > :first-child {
@@ -51,23 +179,23 @@ body {
   margin: 0.75rem 0 0.35rem;
   color: var(--foreground);
   font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  line-height: 1.25;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .chat-markdown h1 {
-  font-size: 1.18rem;
-  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+  font-size: 1.28rem;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.25rem;
 }
 
 .chat-markdown h2 {
-  font-size: 1.08rem;
+  font-size: 1.16rem;
 }
 
 .chat-markdown h3,
 .chat-markdown h4 {
-  font-size: 1rem;
+  font-size: 1.05rem;
 }
 
 .chat-markdown ul,
@@ -92,11 +220,11 @@ body {
 }
 
 .chat-markdown em {
-  color: rgba(200, 216, 232, 0.88);
+  color: var(--foreground);
 }
 
 .chat-markdown a {
-  color: var(--cp-cyan);
+  color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -104,9 +232,9 @@ body {
 .chat-markdown blockquote {
   margin: 0.6rem 0;
   padding: 0.45rem 0.75rem;
-  border-left: 2px solid rgba(0, 229, 255, 0.42);
-  background: rgba(0, 229, 255, 0.06);
-  color: rgba(200, 216, 232, 0.88);
+  border-left: 2px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
 }
 
 .chat-markdown code {
@@ -117,9 +245,9 @@ body {
 
 .chat-markdown :not(pre) > code {
   padding: 0.08rem 0.28rem;
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  background: rgba(0, 229, 255, 0.08);
-  color: rgba(222, 246, 255, 0.96);
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
 }
 
 .chat-markdown table {
@@ -132,22 +260,22 @@ body {
 
 .chat-markdown th,
 .chat-markdown td {
-  border: 1px solid rgba(0, 229, 255, 0.16);
+  border: 1px solid var(--border);
   padding: 0.38rem 0.5rem;
   text-align: left;
 }
 
 .chat-markdown th {
-  background: rgba(0, 229, 255, 0.08);
+  background: var(--secondary);
   color: var(--foreground);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .chat-markdown .mermaid {
   margin: 0.65rem 0;
   padding: 0.65rem;
-  border: 1px solid rgba(0, 229, 255, 0.16);
-  background: rgba(5, 10, 18, 0.72);
+  border: 1px solid var(--border);
+  background: var(--background);
 }
 
 .chat-markdown .mermaid svg {

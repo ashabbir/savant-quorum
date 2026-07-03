@@ -14,18 +14,18 @@ const Mermaid = ({ chart, onUpdate }: { chart: string; onUpdate?: (newChart: str
   const id = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`)
 
   useEffect(() => {
-    mermaid.initialize({
+      mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
       fontFamily: "'Share Tech Mono', monospace",
       themeVariables: {
-        primaryColor: '#00f2ff',
-        primaryTextColor: '#fff',
-        primaryBorderColor: '#00f2ff',
-        lineColor: '#ff00ff',
-        secondaryColor: '#f4ea00',
-        tertiaryColor: '#0a0a0a'
+            primaryColor: '#00e5ff',
+            primaryTextColor: '#e1ecf8',
+            primaryBorderColor: '#00e5ff',
+            lineColor: '#ff00aa',
+            secondaryColor: '#0f1929',
+            tertiaryColor: '#080b12'
       }
     })
 
@@ -71,16 +71,16 @@ const Mermaid = ({ chart, onUpdate }: { chart: string; onUpdate?: (newChart: str
         <div className="flex flex-col gap-2 my-2">
           <div 
             style={{ 
-              background: 'rgba(255,0,170,0.05)', 
-              border: '1px solid rgba(255,0,170,0.2)',
+              background: 'var(--secondary)', 
+              border: '1px solid var(--border)',
               padding: '8px 12px',
               fontFamily: "'Share Tech Mono', monospace"
             }}
           >
-            <div style={{ color: 'var(--cp-magenta)', fontSize: '10px', fontWeight: 'bold' }} className="mb-1">
+            <div style={{ color: 'var(--accent)', fontSize: '10px', fontWeight: 'bold' }} className="mb-1">
               NEURAL_RENDER_FAILED: MERMAID_SYNTAX_ERROR
             </div>
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px' }}>
+            <div style={{ color: 'var(--foreground)', opacity: 0.6, fontSize: '11px' }}>
               {errorMsg}
             </div>
           </div>
