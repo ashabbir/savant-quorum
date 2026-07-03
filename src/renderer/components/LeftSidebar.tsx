@@ -47,12 +47,12 @@ function NavIcon({
     <Tooltip.Provider delayDuration={300}>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <button
+            <button
             onClick={onClick}
             style={{
-              color: "var(--cp-cyan)",
+              color: "var(--primary)",
               opacity: isActive ? 1 : 0.45,
-              borderLeft: isActive ? "2px solid var(--cp-cyan)" : "2px solid transparent",
+              borderLeft: isActive ? "2px solid var(--primary)" : "2px solid transparent",
             }}
             className="w-10 h-10 flex items-center justify-center hover:opacity-100 transition-all"
           >
@@ -63,9 +63,9 @@ function NavIcon({
           <Tooltip.Content
             side="right"
             style={{
-              background: "var(--cp-bg-3)",
-              border: "1px solid var(--cp-border)",
-              color: "var(--cp-cyan)",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              color: "var(--primary)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
             className="px-2 py-1 text-xs z-50"
@@ -120,8 +120,8 @@ export function LeftSidebar({
   return (
     <aside
       style={{
-        background: "var(--cp-bg-1)",
-        borderRight: "1px solid var(--cp-border)",
+        background: "var(--background)",
+        borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "row",
       }}
@@ -129,7 +129,7 @@ export function LeftSidebar({
     >
       {/* icon rail */}
       <div
-        style={{ borderRight: "1px solid var(--cp-border)", width: 40 }}
+        style={{ borderRight: "1px solid var(--border)", width: 40 }}
         className="flex flex-col justify-between py-2"
       >
         <div className="flex flex-col items-center">
@@ -150,7 +150,7 @@ export function LeftSidebar({
             <DropdownMenu.Trigger asChild>
               <button
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   opacity: 0.45,
                 }}
                 className="w-10 h-10 flex items-center justify-center hover:opacity-100 transition-all"
@@ -163,9 +163,8 @@ export function LeftSidebar({
                 side="right"
                 align="end"
                 style={{
-                  background: "var(--cp-bg-3)",
-                  border: "1px solid var(--cp-border)",
-                  boxShadow: "0 0 10px rgba(0,229,255,0.15)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                 }}
                 className="min-w-[140px] z-50"
               >
@@ -175,13 +174,13 @@ export function LeftSidebar({
                     color: "var(--foreground)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="px-3 py-2 text-xs cursor-pointer hover:bg-[rgba(0,229,255,0.08)] outline-none flex items-center gap-2"
+                  className="px-3 py-2 text-xs cursor-pointer hover:bg-[var(--secondary)] outline-none flex items-center gap-2"
                 >
-                  <UserCog size={12} style={{ color: "var(--cp-cyan)" }} />
+                  <UserCog size={12} style={{ color: "var(--primary)" }} />
                   Edit Profile
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator
-                  style={{ background: "var(--cp-border)" }}
+                  style={{ background: "var(--border)" }}
                   className="h-[1px] my-1"
                 />
                 <DropdownMenu.Item
@@ -190,9 +189,9 @@ export function LeftSidebar({
                     color: "var(--foreground)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="px-3 py-2 text-xs cursor-pointer hover:bg-[rgba(255,0,170,0.08)] outline-none flex items-center gap-2"
+                  className="px-3 py-2 text-xs cursor-pointer hover:bg-[var(--secondary)] outline-none flex items-center gap-2"
                 >
-                  <LogOut size={12} style={{ color: "var(--cp-magenta)" }} />
+                  <LogOut size={12} style={{ color: "var(--accent)" }} />
                   Logout
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
@@ -203,7 +202,7 @@ export function LeftSidebar({
 
       {/* chat tree — animated collapse */}
       <AnimatePresence initial={false}>
-        {sessionPanelOpen && (
+        {sessionPanelOpen ? (
           <motion.div
             key="session-panel"
             initial={{ width: 0, opacity: 0 }}
@@ -216,17 +215,31 @@ export function LeftSidebar({
         {/* tree header */}
         <div
           style={{
-            borderBottom: "1px solid var(--cp-border)",
-            color: "var(--cp-cyan)",
+            borderBottom: "1px solid var(--border)",
+            color: "var(--primary)",
             fontFamily: "'Share Tech Mono', monospace",
           }}
           className="flex items-center justify-between px-2 py-1.5"
         >
-          <span className="text-xs opacity-50 uppercase tracking-widest">sessions</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setSessionPanelOpen(false)}
+              style={{ color: "var(--primary)" }}
+              className="opacity-45 hover:opacity-100 transition-opacity shrink-0"
+              title="Collapse sessions panel"
+              aria-label="Collapse sessions panel"
+            >
+              <PanelLeftClose size={12} />
+            </button>
+            <span className="text-base opacity-70 uppercase tracking-widest truncate">sessions</span>
+          </div>
           <button
             onClick={onAddFolder}
-            style={{ color: "var(--cp-cyan)" }}
+            style={{ color: "var(--primary)" }}
             className="opacity-40 hover:opacity-100 transition-opacity"
+            title="New folder"
+            aria-label="New folder"
           >
             <Plus size={11} />
           </button>
@@ -285,23 +298,23 @@ export function LeftSidebar({
               >
                 <div
                   style={{
-                    background: isDragTarget ? "rgba(0,229,255,0.12)" : undefined,
-                    border: isDragTarget ? "1px solid var(--cp-cyan)" : "1px solid transparent",
-                    boxShadow: isDragTarget ? "0 0 8px rgba(0,229,255,0.2)" : undefined,
-                    color: "var(--cp-cyan)",
+                    background: isDragTarget ? "var(--secondary)" : undefined,
+                    border: isDragTarget ? "1px solid var(--primary)" : "1px solid transparent",
+                    boxShadow: isDragTarget ? "none" : undefined,
+                    color: "var(--primary)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-[rgba(0,229,255,0.04)] transition-colors"
+                  className="flex items-center gap-1 px-2 py-1.5 cursor-pointer hover:bg-[var(--secondary)] transition-colors"
                   onClick={() => toggleFolder(folder.id)}
                 >
-                  <span className="opacity-40 text-xs">
+                  <span className="opacity-60 text-[12px]">
                     {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                   </span>
                   <span className="opacity-60">
                     {isExpanded ? <FolderOpen size={11} /> : <Folder size={11} />}
                   </span>
                   <span
-                    className="text-xs opacity-70 truncate flex-1"
+                    className="text-[15px] opacity-90 truncate flex-1"
                     onDoubleClick={(e) => {
                       e.stopPropagation();
                       setRenameFolderId(folder.id);
@@ -310,12 +323,12 @@ export function LeftSidebar({
                   >
                     {folder.name}
                   </span>
-                  <span className="text-xs opacity-30">{folderChats.length}</span>
+                  <span className="text-[12px] opacity-55">{folderChats.length}</span>
                   {isEmpty && (
                     <button
                       onClick={e => { e.stopPropagation(); onDeleteFolder(folder.id); }}
                       className="opacity-0 group-hover/folder:opacity-30 hover:!opacity-80 transition-opacity shrink-0"
-                      style={{ color: "var(--cp-magenta)" }}
+                      style={{ color: "var(--accent)" }}
                     >
                       <Trash2 size={9} />
                     </button>
@@ -343,14 +356,14 @@ export function LeftSidebar({
           {draggedChat && chats.find(c => c.id === draggedChat)?.folderId && (
             <div
               style={{
-                border: dragOverFolder === "__root__" ? "1px dashed var(--cp-magenta)" : "1px dashed rgba(255,0,170,0.3)",
-                color: "var(--cp-magenta)",
+                border: dragOverFolder === "__root__" ? "1px dashed var(--accent)" : "1px dashed var(--border)",
+                color: "var(--accent)",
                 fontFamily: "'Share Tech Mono', monospace",
-                background: dragOverFolder === "__root__" ? "rgba(255,0,170,0.15)" : undefined,
-                boxShadow: dragOverFolder === "__root__" ? "0 0 8px rgba(255,0,170,0.2)" : undefined,
+                background: dragOverFolder === "__root__" ? "var(--secondary)" : undefined,
+                boxShadow: dragOverFolder === "__root__" ? "none" : undefined,
                 opacity: dragOverFolder === "__root__" ? 1 : 0.5,
               }}
-              className="mx-2 my-1 px-2 py-1 text-xs text-center transition-all"
+              className="mx-2 my-1 px-2 py-1.5 text-[12px] text-center transition-all"
               onDragOver={e => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -369,6 +382,25 @@ export function LeftSidebar({
         </div>
       </div>
           </motion.div>
+        ) : (
+          <motion.div
+            key="session-panel-collapsed"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 44, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="workspace-pane-collapsed-bar"
+          >
+            <button
+              type="button"
+              onClick={() => setSessionPanelOpen(true)}
+              className="w-full h-full flex items-center justify-center hover:bg-[var(--secondary)] transition-colors"
+              aria-label="Expand sessions panel"
+              title="Expand sessions panel"
+            >
+              <span className="workspace-pane-collapsed-label">Sessions</span>
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -378,21 +410,20 @@ export function LeftSidebar({
       <Dialog.Root open={renameFolderId !== null} onOpenChange={(open) => !open && setRenameFolderId(null)}>
         <Dialog.Portal>
           <Dialog.Overlay
-            style={{ background: "rgba(0, 0, 0, 0.7)" }}
+            style={{ background: "var(--background)", opacity: 0.9 }}
             className="fixed inset-0 z-[100]"
           />
           <Dialog.Content
             style={{
-              background: "var(--cp-bg-2)",
-              border: "1px solid var(--cp-border)",
-              boxShadow: "0 0 20px rgba(0, 229, 255, 0.2)",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
             }}
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[90vw] max-w-sm p-6"
           >
             <div className="flex items-center justify-between mb-4">
               <Dialog.Title
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Orbitron', sans-serif",
                 }}
                 className="text-md font-medium"
@@ -401,7 +432,7 @@ export function LeftSidebar({
               </Dialog.Title>
               <Dialog.Close asChild>
                 <button
-                  style={{ color: "var(--cp-cyan)" }}
+                style={{ color: "var(--primary)" }}
                   className="opacity-60 hover:opacity-100 transition-opacity"
                 >
                   <X size={16} />
@@ -413,10 +444,10 @@ export function LeftSidebar({
               <div>
                 <label
                   style={{
-                    color: "var(--cp-cyan)",
+                    color: "var(--primary)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="block text-xs mb-2 opacity-70"
+                  className="block text-[15px] mb-2 opacity-70"
                 >
                   New Folder Name
                 </label>
@@ -431,12 +462,12 @@ export function LeftSidebar({
                     }
                   }}
                   style={{
-                    background: "var(--cp-bg-3)",
-                    border: "1px solid var(--cp-border)",
+                    background: "var(--secondary)",
+                    border: "1px solid var(--border)",
                     color: "var(--foreground)",
                     fontFamily: "'Rajdhani', sans-serif",
                   }}
-                  className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--cp-cyan)]"
+                  className="w-full px-3 py-2 text-[15px] focus:outline-none focus:border-[var(--primary)]"
                   autoFocus
                 />
               </div>
@@ -480,22 +511,22 @@ function ChatRow({
       style={{
         paddingLeft: indent ? 28 : 12,
         background: isActive
-          ? "rgba(0,229,255,0.1)"
+          ? "var(--secondary)"
           : undefined,
-        borderLeft: isActive ? "2px solid var(--cp-cyan)" : "2px solid transparent",
+        borderLeft: isActive ? "2px solid var(--primary)" : "2px solid transparent",
         opacity: isDragging ? 0.4 : 1,
         fontFamily: "'Share Tech Mono', monospace",
-        color: isActive ? "var(--cp-cyan)" : "var(--foreground)",
+        color: isActive ? "var(--primary)" : "var(--foreground)",
       }}
-      className="flex items-center gap-1.5 pr-2 py-1 cursor-grab active:cursor-grabbing hover:bg-[rgba(0,229,255,0.05)] group transition-colors"
+      className="flex items-center gap-1.5 pr-2 py-1 cursor-grab active:cursor-grabbing hover:bg-[var(--secondary)] group transition-colors"
     >
       <GripVertical size={9} className="opacity-30 group-hover:opacity-85 transition-opacity shrink-0" />
       <MessageSquare size={10} className="shrink-0 opacity-50" />
-      <span className="text-xs truncate flex-1 opacity-80">{chat.name}</span>
+      <span className="text-[15px] truncate flex-1 opacity-95">{chat.name}</span>
       <button
         onClick={e => { e.stopPropagation(); onDelete(); }}
         className="opacity-0 group-hover:opacity-30 hover:!opacity-80 transition-opacity shrink-0"
-        style={{ color: "var(--cp-magenta)" }}
+        style={{ color: "var(--accent)" }}
       >
         <Trash2 size={9} />
       </button>

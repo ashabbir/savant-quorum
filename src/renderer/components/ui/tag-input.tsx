@@ -78,9 +78,9 @@ export function TagInput({ tags, suggestions, onTagsChange, placeholder = "Add t
           <Badge
             key={tag}
             style={{
-              background: "rgba(0,229,255,0.1)",
-              border: "1px solid var(--cp-cyan)",
-              color: "var(--cp-cyan)",
+              background: "var(--secondary)",
+              border: "1px solid var(--primary)",
+              color: "var(--primary)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
             className="flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-wider"
@@ -88,7 +88,7 @@ export function TagInput({ tags, suggestions, onTagsChange, placeholder = "Add t
             {tag}
             <button
               onClick={() => handleUnselect(tag)}
-              className="hover:text-[var(--cp-magenta)] transition-colors cursor-pointer"
+              className="hover:text-[var(--chart-5)] transition-colors cursor-pointer"
             >
               <X className="h-3 w-3" />
             </button>
@@ -115,8 +115,8 @@ export function TagInput({ tags, suggestions, onTagsChange, placeholder = "Add t
               }}
               placeholder={tags.length === 0 ? placeholder : "Add more..."}
               style={{
-                background: "var(--cp-bg-2)",
-                border: `1px solid ${open ? "var(--cp-cyan)" : "var(--cp-border)"}`,
+                background: "var(--secondary)",
+                border: `1px solid ${open ? "var(--primary)" : "var(--border)"}`,
                 color: "var(--foreground)",
                 fontFamily: "'Share Tech Mono', monospace",
               }}
@@ -125,7 +125,7 @@ export function TagInput({ tags, suggestions, onTagsChange, placeholder = "Add t
           </div>
         </PopoverAnchor>
         <PopoverContent 
-          className="p-0 border-[var(--cp-border)] bg-[var(--cp-bg-2)] shadow-[0_10px_40px_rgba(0,0,0,0.9)] z-[1000]" 
+          className="p-0 border-[var(--border)] bg-[var(--secondary)] shadow-none z-[1000]" 
           align="start"
           sideOffset={5}
           style={{ width: containerWidth }}
@@ -141,7 +141,7 @@ export function TagInput({ tags, suggestions, onTagsChange, placeholder = "Add t
                     style={{
                       fontFamily: "'Share Tech Mono', monospace",
                     }}
-                    className="text-xs py-2 px-3 data-[selected=true]:bg-[rgba(0,229,255,0.1)] data-[selected=true]:text-[var(--cp-cyan)] cursor-pointer transition-colors"
+                    className="text-xs py-2 px-3 data-[selected=true]:bg-[var(--card)] data-[selected=true]:text-[var(--primary)] cursor-pointer transition-colors"
                   >
                     {suggestion}
                   </CommandItem>

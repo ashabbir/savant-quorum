@@ -39,8 +39,8 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
   return (
     <div
       style={{
-        background: "var(--cp-bg-2)",
-        borderBottom: "1px solid var(--cp-border)",
+        background: "var(--background)",
+        borderBottom: "1px solid var(--border)",
       }}
       className="flex items-center gap-2 px-3 h-9 shrink-0"
     >
@@ -49,33 +49,32 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
         <Dialog.Trigger asChild>
           <button
             style={{
-              background: "var(--cp-bg-3)",
-              border: "1px solid var(--cp-cyan)",
-              color: "var(--cp-cyan)",
+              background: "var(--secondary)",
+              border: "1px solid var(--border)",
+              color: "var(--primary)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
-            className="flex items-center gap-1 px-2 py-0.5 text-xs hover:brightness-125 transition-all"
+            className="flex items-center gap-1 px-2 py-0.5 text-xs hover:opacity-90 transition-all"
           >
           <Plus size={11} />
           </button>
         </Dialog.Trigger>
         <Dialog.Portal>
           <Dialog.Overlay
-            style={{ background: "rgba(8,11,18,0.8)", backdropFilter: "blur(4px)" }}
+            style={{ background: "var(--background)" }}
             className="fixed inset-0 z-50"
           />
           <Dialog.Content
             style={{
-              background: "var(--cp-bg-2)",
-              border: "1px solid var(--cp-cyan)",
-              boxShadow: "var(--cp-glow-cyan), 0 20px 60px rgba(0,0,0,0.8)",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 p-5"
           >
             <Dialog.Title
-              style={{ color: "var(--cp-cyan)", fontFamily: "'Orbitron', monospace" }}
-              className="text-xs font-bold uppercase tracking-widest mb-2"
+              style={{ color: "var(--primary)", fontFamily: "'Orbitron', monospace" }}
+            className="text-xs font-bold uppercase tracking-[0.15em] mb-2"
             >
               // initialize chat session
             </Dialog.Title>
@@ -85,7 +84,7 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
             >
               Create a new chat session
             </Dialog.Description>
-            <label style={{ color: "var(--cp-cyan)", opacity: 0.6 }} className="text-xs block mb-1">
+            <label style={{ color: "var(--primary)", opacity: 0.6 }} className="text-xs block mb-1">
               session_name:
             </label>
             <input
@@ -95,23 +94,23 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
               onKeyDown={e => e.key === "Enter" && handleCreate()}
               placeholder="enter session name..."
               style={{
-                background: "var(--cp-bg-3)",
-                border: "1px solid rgba(0,229,255,0.3)",
-                color: "var(--cp-cyan)",
+                background: "var(--secondary)",
+                border: "1px solid var(--border)",
+                color: "var(--foreground)",
                 fontFamily: "'Share Tech Mono', monospace",
                 outline: "none",
               }}
-              className="w-full px-3 py-2 text-xs mb-4 focus:border-[var(--cp-cyan)]"
+              className="w-full px-3 py-2 text-xs mb-4 focus:border-[var(--primary)]"
             />
             <div className="flex gap-2 justify-end">
               <Dialog.Close asChild>
                 <button
                   style={{
-                    border: "1px solid rgba(0,229,255,0.2)",
-                    color: "var(--cp-muted-foreground)",
+                    border: "1px solid var(--border)",
+                    color: "var(--muted-foreground)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="px-3 py-1 text-xs text-[var(--muted-foreground)] hover:opacity-70 transition-opacity"
+                  className="px-3 py-1 text-xs hover:bg-[var(--secondary)] transition-opacity"
                 >
                   abort
                 </button>
@@ -119,8 +118,8 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
               <button
                 onClick={handleCreate}
                 style={{
-                  background: "var(--cp-cyan)",
-                  color: "#080b12",
+                  background: "var(--primary)",
+                  color: "var(--primary-foreground)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="px-3 py-1 text-xs font-bold hover:brightness-110 transition-all"
@@ -136,11 +135,11 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
       <button
         onClick={() => setSessionModalOpen(true)}
         style={{
-          background: "var(--cp-bg-3)",
-          border: "1px solid rgba(0,229,255,0.3)",
-          color: "var(--cp-cyan)",
+          background: "var(--secondary)",
+          border: "1px solid var(--border)",
+          color: "var(--primary)",
         }}
-        className="flex items-center gap-1 px-2 py-0.5 text-xs hover:border-[var(--cp-cyan)] transition-all"
+        className="flex items-center gap-1 px-2 py-0.5 text-xs hover:border-[var(--primary)] transition-all"
         title="Session Configuration"
       >
         <Settings2 size={11} />
@@ -150,18 +149,18 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
       <button
         onClick={onExport}
         style={{
-          background: "var(--cp-bg-3)",
-          border: "1px solid rgba(0,229,255,0.3)",
-          color: "var(--cp-cyan)",
+          background: "var(--secondary)",
+          border: "1px solid var(--border)",
+          color: "var(--primary)",
         }}
-        className="flex items-center gap-1 px-2 py-0.5 text-xs hover:border-[var(--cp-cyan)] transition-all"
+        className="flex items-center gap-1 px-2 py-0.5 text-xs hover:border-[var(--primary)] transition-all"
         title="Export Session as HTML"
       >
         <Download size={11} />
       </button>
 
       {/* divider */}
-      <div style={{ width: 1, background: "var(--cp-border)", height: 16 }} />
+      <div style={{ width: 1, background: "var(--border)", height: 16 }} />
 
       {/* current chat name — click to rename */}
       <Dialog.Root open={renameOpen} onOpenChange={open => { setRenameOpen(open); if (open) setRenameValue(currentChatName); }}>
@@ -179,21 +178,20 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
         </Dialog.Trigger>
         <Dialog.Portal>
           <Dialog.Overlay
-            style={{ background: "rgba(8,11,18,0.8)", backdropFilter: "blur(4px)" }}
+            style={{ background: "var(--background)" }}
             className="fixed inset-0 z-50"
           />
           <Dialog.Content
             style={{
-              background: "var(--cp-bg-2)",
-              border: "1px solid var(--cp-magenta)",
-              boxShadow: "var(--cp-glow-magenta), 0 20px 60px rgba(0,0,0,0.8)",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
               fontFamily: "'Share Tech Mono', monospace",
             }}
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 p-5"
           >
             <Dialog.Title
-              style={{ color: "var(--cp-magenta)", fontFamily: "'Orbitron', monospace" }}
-              className="text-xs font-bold uppercase tracking-widest mb-2"
+              style={{ color: "var(--primary)", fontFamily: "'Orbitron', monospace" }}
+              className="text-xs font-bold uppercase tracking-[0.15em] mb-2"
             >
               // rename session
             </Dialog.Title>
@@ -210,9 +208,9 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
               onBlur={handleRename}
               onKeyDown={e => e.key === "Enter" && handleRename()}
               style={{
-                background: "var(--cp-bg-3)",
-                border: "1px solid rgba(255,0,170,0.3)",
-                color: "var(--cp-magenta)",
+                background: "var(--secondary)",
+                border: "1px solid var(--border)",
+                color: "var(--foreground)",
                 fontFamily: "'Share Tech Mono', monospace",
                 outline: "none",
               }}

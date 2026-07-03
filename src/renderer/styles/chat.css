@@ -3,6 +3,8 @@
 .chat-container {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
   background-color: var(--cp-bg-0);
@@ -382,7 +384,6 @@
 
 .chat-input-footer-row .active-state {
   opacity: 1;
-  animation: pulse-glow 1.5s infinite alternate;
 }
 
 /* Agent Direct Selection Toolbar */
@@ -730,7 +731,6 @@
 
 .mermaid-edit-btn:hover {
   background-color: rgba(0, 229, 255, 0.15);
-  box-shadow: var(--cp-glow-cyan);
 }
 
 .mermaid-preview-container svg {
@@ -793,7 +793,7 @@
   background: rgba(0, 229, 255, 0.05);
   border: 1px solid rgba(0, 229, 255, 0.15);
   padding: 0.25rem 0.5rem;
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 
 .collapsible-summary-title {
@@ -837,7 +837,6 @@
 .draft-attachment-loading-hint {
   font-size: 8px;
   opacity: 0.6;
-  animation: pulse-glow 1s infinite alternate;
 }
 
 .draft-attachment-details {
@@ -849,7 +848,7 @@
   font-size: 8px;
   background: rgba(0, 229, 255, 0.15);
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: 0;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -876,7 +875,7 @@
   line-height: 1.4;
   white-space: pre-wrap;
   z-index: 60;
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+  box-shadow: none;
 }
 
 /* Cyberpunk Active Agent Processing Indicator */
@@ -895,14 +894,13 @@
   padding: 0.4rem 0.65rem;
   background: var(--cp-bg-2);
   border: 1px solid rgba(0, 229, 255, 0.15);
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.05);
+  box-shadow: none;
   font-family: 'Share Tech Mono', monospace;
   font-size: 11px;
 }
 
 .processing-text {
   color: var(--cp-cyan);
-  animation: pulse-glow 1.5s infinite alternate;
 }
 
 .typing-dots {

@@ -1404,7 +1404,7 @@ export default function App() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Savant Quorum - ${sessionTitle}</title>
+    <title>Quorum - ${sessionTitle}</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1445,7 +1445,7 @@ export default function App() {
 </head>
 <body>
     <div class="header">
-        <h1>// SAVANT_QUORUM_SESSION_EXPORT</h1>
+        <h1>// QUORUM_SESSION_EXPORT</h1>
         <div class="session-title">${sessionTitle}</div>
     </div>
     <div id="messages"></div>
@@ -1578,7 +1578,7 @@ export default function App() {
           onLogout={handleLogout}
         />
 
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
           {currentSessionId ? (
             <ChatArea 
               messages={messages} 

@@ -45,7 +45,7 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
     <Dialog.Root open={open} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay
-          style={{ background: "rgba(0, 0, 0, 0.7)" }}
+          style={{ background: "var(--background)", opacity: 0.9 }}
           className="fixed inset-0 z-[100]"
         />
         <Dialog.Content
@@ -54,9 +54,9 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
             handleCancel();
           }}
           style={{
-            background: "var(--cp-bg-2)",
-            border: "1px solid var(--cp-border)",
-            boxShadow: "0 0 20px rgba(0, 229, 255, 0.2)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            boxShadow: "none",
           }}
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[90vw] max-w-md p-6"
         >
@@ -64,7 +64,7 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title
               style={{
-                color: "var(--cp-cyan)",
+                color: "var(--primary)",
                 fontFamily: "'Orbitron', sans-serif",
               }}
               className="text-lg font-medium"
@@ -73,7 +73,7 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
-                style={{ color: "var(--cp-cyan)" }}
+                style={{ color: "var(--primary)" }}
                 className="opacity-60 hover:opacity-100 transition-opacity"
               >
                 <X size={18} />
@@ -88,7 +88,7 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
             }}
             className="text-sm opacity-60 mb-6"
           >
-            Update your profile information and API credentials
+            Update your profile information and Quorum credentials
           </Dialog.Description>
 
           {/* form */}
@@ -96,7 +96,7 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
             <div>
               <label
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="block text-xs mb-2 opacity-70"
@@ -115,24 +115,24 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
                   }
                 }}
                 style={{
-                  background: "var(--cp-bg-3)",
-                  border: "1px solid var(--cp-border)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                   color: "var(--foreground)",
                   fontFamily: "'Rajdhani', sans-serif",
                 }}
-                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--cp-cyan)]"
+                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--primary)]"
               />
             </div>
 
             <div>
               <label
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="block text-xs mb-2 opacity-70"
               >
-                Savant API Key
+                Quorum API Key
               </label>
               <input
                 type="password"
@@ -147,12 +147,12 @@ export function ProfileModal({ open, onClose, onProfileChanged }: ProfileModalPr
                 }}
                 placeholder="••••••••••••••••"
                 style={{
-                  background: "var(--cp-bg-3)",
-                  border: "1px solid var(--cp-border)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                   color: "var(--foreground)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
-                className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--cp-cyan)]"
+                className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)]"
               />
             </div>
           </div>

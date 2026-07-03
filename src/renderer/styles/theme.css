@@ -1,19 +1,19 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 13px;
+  --font-size: 14px;
   --background: #080b12;
-  --foreground: #c8d8e8;
+  --foreground: #e1ecf8;
   --card: #0d1220;
-  --card-foreground: #c8d8e8;
+  --card-foreground: #e1ecf8;
   --popover: #0d1220;
-  --popover-foreground: #c8d8e8;
+  --popover-foreground: #e1ecf8;
   --primary: #00e5ff;
   --primary-foreground: #080b12;
   --secondary: #0f1929;
-  --secondary-foreground: #c8d8e8;
+  --secondary-foreground: #e1ecf8;
   --muted: #111a2a;
-  --muted-foreground: #5a7a9a;
+  --muted-foreground: #7f98b2;
   --accent: #ff00aa;
   --accent-foreground: #080b12;
   --destructive: #ff2244;
@@ -32,11 +32,11 @@
   --chart-5: #7b2fff;
   --radius: 0.125rem;
   --sidebar: #0a0e18;
-  --sidebar-foreground: #c8d8e8;
+  --sidebar-foreground: #e1ecf8;
   --sidebar-primary: #00e5ff;
   --sidebar-primary-foreground: #080b12;
   --sidebar-accent: #0f1929;
-  --sidebar-accent-foreground: #c8d8e8;
+  --sidebar-accent-foreground: #e1ecf8;
   --sidebar-border: rgba(0, 229, 255, 0.1);
   --sidebar-ring: #00e5ff;
 
@@ -51,8 +51,8 @@
   --cp-bg-2: #0d1220;
   --cp-bg-3: #0f1929;
   --cp-border: rgba(0, 229, 255, 0.15);
-  --cp-glow-cyan: 0 0 8px rgba(0, 229, 255, 0.4);
-  --cp-glow-magenta: 0 0 8px rgba(255, 0, 170, 0.4);
+  --cp-glow-cyan: none;
+  --cp-glow-magenta: none;
 }
 
 .dark {

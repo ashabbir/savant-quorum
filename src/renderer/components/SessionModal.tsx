@@ -58,26 +58,26 @@ export function SessionModal({
     <Dialog.Root open={open} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay
-          style={{ background: "rgba(0, 0, 0, 0.7)" }}
+          style={{ background: "var(--background)", opacity: 0.9 }}
           className="fixed inset-0 z-[100]"
         />
         <Dialog.Content
           style={{
-            background: "var(--cp-bg-2)",
-            border: "1px solid var(--cp-border)",
-            boxShadow: "0 0 20px rgba(0, 229, 255, 0.2)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            boxShadow: "none",
           }}
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[90vw] max-w-2xl max-h-[85vh] flex flex-col"
         >
           {/* header */}
           <div
-            style={{ borderBottom: "1px solid var(--cp-border)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
             className="flex items-center justify-between p-6 shrink-0"
           >
             <div>
               <Dialog.Title
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Orbitron', sans-serif",
                 }}
                 className="text-lg font-medium"
@@ -96,7 +96,7 @@ export function SessionModal({
             </div>
             <Dialog.Close asChild>
               <button
-                style={{ color: "var(--cp-cyan)" }}
+                style={{ color: "var(--primary)" }}
                 className="opacity-60 hover:opacity-100 transition-opacity"
               >
                 <X size={18} />
@@ -107,13 +107,13 @@ export function SessionModal({
           {/* content */}
           <div
             className="flex-1 overflow-y-auto p-6 space-y-5"
-            style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,229,255,0.1) transparent" }}
+            style={{ scrollbarWidth: "thin", scrollbarColor: "var(--primary) transparent" }}
           >
             {/* session name */}
             <div>
               <label
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="block text-xs mb-2 opacity-70"
@@ -137,12 +137,12 @@ export function SessionModal({
                   }
                 }}
                 style={{
-                  background: "var(--cp-bg-3)",
-                  border: "1px solid var(--cp-border)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                   color: "var(--foreground)",
                   fontFamily: "'Rajdhani', sans-serif",
                 }}
-                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--cp-cyan)]"
+                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--primary)]"
               />
             </div>
 
@@ -150,7 +150,7 @@ export function SessionModal({
             <div>
               <label
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="block text-xs mb-2 opacity-70"
@@ -164,12 +164,12 @@ export function SessionModal({
                   handleSave();
                 }}
                 style={{
-                  background: "var(--cp-bg-3)",
-                  border: "1px solid var(--cp-border)",
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
                   color: "var(--foreground)",
                   fontFamily: "'Rajdhani', sans-serif",
                 }}
-                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--cp-cyan)]"
+                className="w-full px-3 py-2 text-sm focus:outline-none focus:border-[var(--primary)]"
               >
                 <option value="">No folder</option>
                 {folders.map(folder => (
@@ -184,7 +184,7 @@ export function SessionModal({
             <div>
               <label
                 style={{
-                  color: "var(--cp-cyan)",
+                  color: "var(--primary)",
                   fontFamily: "'Share Tech Mono', monospace",
                 }}
                 className="block text-xs mb-2 opacity-70"
@@ -199,9 +199,9 @@ export function SessionModal({
                     <div
                       key={chat.id}
                       style={{
-                        background: "rgba(0,229,255,0.15)",
-                        border: "1px solid var(--cp-cyan)",
-                        color: "var(--cp-cyan)",
+                        background: "var(--secondary)",
+                        border: "1px solid var(--primary)",
+                        color: "var(--primary)",
                         fontFamily: "'Share Tech Mono', monospace",
                       }}
                       className="flex items-center gap-1.5 px-2 py-1 text-xs"
@@ -232,21 +232,21 @@ export function SessionModal({
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   placeholder="Search previous sessions..."
                   style={{
-                    background: "var(--cp-bg-3)",
-                    border: "1px solid var(--cp-border)",
+                    background: "var(--secondary)",
+                    border: "1px solid var(--border)",
                     color: "var(--foreground)",
                     fontFamily: "'Share Tech Mono', monospace",
                   }}
-                  className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--cp-cyan)]"
+                  className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)]"
                 />
 
                 {/* suggestions dropdown */}
                 {showSuggestions && searchQuery && filteredChats.length > 0 && (
                   <div
                     style={{
-                      background: "var(--cp-bg-3)",
-                      border: "1px solid var(--cp-border)",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                      background: "var(--secondary)",
+                      border: "1px solid var(--border)",
+                      boxShadow: "none",
                     }}
                     className="absolute top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto z-10"
                   >
@@ -258,7 +258,7 @@ export function SessionModal({
                           color: "var(--foreground)",
                           fontFamily: "'Share Tech Mono', monospace",
                         }}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-[rgba(0,229,255,0.08)] transition-colors"
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--secondary)] transition-colors"
                       >
                         {chat.name}
                       </button>
