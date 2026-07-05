@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import electron from 'electron'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const devServerUrl = 'http://127.0.0.1:5173/'
+const devServerUrl = 'http://127.0.0.1:5273/'
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -92,7 +92,7 @@ if (!isConcurrent) {
       '--host',
       '127.0.0.1',
       '--port',
-      '5173',
+      '5273',
       '--strictPort'
     ], {
       cwd: rootDir,

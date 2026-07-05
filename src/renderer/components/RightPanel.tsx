@@ -85,10 +85,143 @@ export function RightPanel({
   thinking, messages, statusText, sessionSummary, onSummarize, settings, sessionFiles = [], onUploadFile, onDeleteSessionFile
 }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
+  const [computingStep, setComputingStep] = useState(0);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (statusText === 'RECALIBRATING...') {
+      setComputingStep(0);
+      interval = setInterval(() => {
+        setComputingStep(prev => (prev + 1) % 6);
+      }, 700);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [statusText]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && activeTab !== null) {
+        setActiveTab(null);
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [activeTab]);
 
   // ── PULSE ANALYTICS DATA CALCULATION ──
   
   // 1. Messages by Role (Engagement)
+  const getTopicAndHealthAnalytics = () => {
+    const stopWords = new Set([
+      'about', 'above', 'after', 'again', 'against', 'along', 'already', 'would', 'could', 'should',
+      'there', 'their', 'these', 'those', 'where', 'which', 'while', 'under', 'after', 'before', 'hello', 'please'
+    ]);
+    const agentNames = new Set(['athena', 'moderator', 'engineer', 'architect', 'security', 'crosscheck', 'system', 'athena-whisper', 'agent-whisper']);
+    
+    const topicCounts: Record<string, number> = {};
+    const messageTopics: string[] = [];
+
+    messages.forEach(m => {
+      if (m.role === 'system' || m.role === 'internal') return;
+      const content = m.content.toLowerCase()
+        .replace(/savant\s+quorum/g, 'savant_quorum')
+        .replace(/savant\s+server/g, 'savant_server')
+        .replace(/savant\s+gateway/g, 'savant_gateway')
+        .replace(/knowledge\s+graph/g, 'knowledge_graph');
+        
+      const words = content.replace(/[^a-zA-Z_\s]/g, ' ').split(/\s+/);
+      const candidates: Record<string, number> = {};
+      
+      words.forEach(w => {
+        if (w.length > 4 && !stopWords.has(w) && !agentNames.has(w)) {
+          candidates[w] = (candidates[w] || 0) + 1;
+          topicCounts[w] = (topicCounts[w] || 0) + 1;
+        }
+      });
+
+      let bestTopic = "";
+      let maxCount = 0;
+      Object.entries(candidates).forEach(([t, count]) => {
+        if (count > maxCount) {
+          maxCount = count;
+          bestTopic = t;
+        }
+      });
+      if (bestTopic) {
+        messageTopics.push(bestTopic);
+      }
+    });
+
+    let dominantTopic = "N/A";
+    let dominantCount = 0;
+    Object.entries(topicCounts).forEach(([t, count]) => {
+      if (count > dominantCount) {
+        dominantCount = count;
+        dominantTopic = t;
+      }
+    });
+
+    const totalTopics = Object.keys(topicCounts).length;
+
+    let deviations = 0;
+    for (let i = 1; i < messageTopics.length; i++) {
+      if (messageTopics[i] !== messageTopics[i - 1]) {
+        deviations++;
+      }
+    }
+
+    let totalWords = 0;
+    const uniqueWords = new Set<string>();
+    let factMarkerCount = 0;
+    
+    messages.forEach(m => {
+      if (m.role === 'system' || m.role === 'internal') return;
+      const content = m.content.toLowerCase();
+      const words = content.replace(/[^a-zA-Z]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+      words.forEach(w => {
+        totalWords++;
+        uniqueWords.add(w);
+      });
+      const matches = content.match(/fact\s*\[\d+\]|\[fact:\d+\]/gi);
+      if (matches) {
+        factMarkerCount += matches.length;
+      }
+    });
+
+    const vocabularyRichness = totalWords > 0 ? (uniqueWords.size / totalWords) : 1;
+    let healthScore = Math.round((vocabularyRichness * 70) + (Math.min(factMarkerCount, 10) * 3));
+    if (messages.length === 0) healthScore = 100;
+    healthScore = Math.min(Math.max(healthScore, 10), 100);
+
+    let status = "STABLE";
+    let statusColor = "var(--good)";
+    if (healthScore < 45) {
+      status = "ROT DETECTED";
+      statusColor = "var(--accent)";
+    } else if (healthScore < 70) {
+      status = "DEGRADED";
+      statusColor = "var(--warning)";
+    }
+
+    const sortedTopics = Object.entries(topicCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([topic]) => topic.replace(/_/g, ' ').toUpperCase());
+
+    return {
+      totalTopics,
+      dominantTopic: dominantTopic.replace(/_/g, ' ').toUpperCase(),
+      deviations,
+      healthScore,
+      status,
+      statusColor,
+      sortedTopics
+    };
+  };
+
   const getMessageEngagement = () => {
     const counts: Record<string, number> = {};
     messages.forEach(m => {
@@ -798,20 +931,32 @@ export function RightPanel({
     return data.length > 0 ? data : [{ name: 'NONE', verified: 0, unverifiedChecks: 0, uncheckedClaims: 0 }];
   };
 
-  const getTreemapData = () => {
-    if (mcpCallStats.length === 0) {
-      return [{ name: 'NO CALLS', size: 1 }];
-    }
-    return mcpCallStats.map(item => ({
-      name: `${item.server.replace('savant-', '')}:${item.tool}`,
-      size: item.count
-    }));
+  const getActionDistributionData = () => {
+    let mcpCalls = 0;
+    let shellExecs = 0;
+    let redecisions = 0;
+    let timeouts = 0;
+    let loopChecks = 0;
+
+    thinking.forEach(t => {
+      if (t.type === 'mcp_call' || t.type === 'mcp_response') mcpCalls++;
+      else if (t.type === 'shell') shellExecs++;
+      else if (t.type === 'redecision') redecisions++;
+      else if (t.type === 'timeout') timeouts++;
+      else if (t.type === 'loop_check') loopChecks++;
+    });
+
+    return [
+      { name: 'MCP', value: mcpCalls, color: 'var(--primary)' },
+      { name: 'SHELL', value: shellExecs, color: 'var(--chart-3)' },
+      { name: 'LOOP', value: loopChecks, color: 'var(--warning)' },
+      { name: 'FAIL', value: timeouts, color: 'rgba(255, 0, 85, 0.95)' }
+    ];
   };
 
   const streamGraphData = getStreamGraphData();
-  const radialBarData = getRadialBarData();
   const stackedBarData = getStackedBarData();
-  const treemapData = getTreemapData();
+  const actionDistributionData = getActionDistributionData();
   function getProviderLeaderboard() {
     const stats: Record<string, {
       provider: string;
@@ -1100,27 +1245,53 @@ export function RightPanel({
                           </div>
 
                           {/* Visual 3: Consensus Ratio */}
-                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 flex flex-col items-center justify-center">
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 flex flex-col justify-between">
                             <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1 opacity-70 w-full">
                               // consensus_balance
                             </div>
-                            <ResponsiveContainer width="100%" height={60}>
-                              <PieChart>
-                                <Pie
-                                  data={consensusData}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={10}
-                                  outerRadius={18}
-                                  paddingAngle={2}
-                                  dataKey="value"
-                                >
-                                  {consensusData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                  ))}
-                                </Pie>
-                              </PieChart>
-                            </ResponsiveContainer>
+                            <div className="flex-1 min-h-0 flex items-center gap-2">
+                              <div className="w-[45%] h-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie
+                                      data={consensusData}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={8}
+                                      outerRadius={16}
+                                      paddingAngle={2}
+                                      dataKey="value"
+                                    >
+                                      {consensusData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                      ))}
+                                    </Pie>
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+                              {(() => {
+                                const agreeObj = consensusData.find(d => d.name === 'AGREEMENT') || { value: 0 };
+                                const frictionObj = consensusData.find(d => d.name === 'FRICTION') || { value: 0 };
+                                const total = agreeObj.value + frictionObj.value;
+                                const ratio = total > 0 ? Math.round((agreeObj.value / total) * 100) : 100;
+                                return (
+                                  <div style={{ fontFamily: "'Share Tech Mono', monospace" }} className="flex-1 text-[8px] flex flex-col justify-center space-y-0.5 opacity-90 leading-tight">
+                                    <div className="flex justify-between text-[var(--good)]">
+                                      <span>AGREE:</span>
+                                      <span>{agreeObj.value}</span>
+                                    </div>
+                                    <div className="flex justify-between text-[rgba(255,0,85,1)]">
+                                      <span>FRICTION:</span>
+                                      <span>{frictionObj.value}</span>
+                                    </div>
+                                    <div className="border-t border-[rgba(255,255,255,0.15)] pt-0.5 flex justify-between font-bold text-[var(--primary)]">
+                                      <span>RATIO:</span>
+                                      <span>{ratio}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
 
                           {/* Visual 4: Factual Stacked Bar */}
@@ -1144,63 +1315,122 @@ export function RightPanel({
 
                         {/* Row 2: Remaining 3 charts (3 per row) */}
                         <div className="grid grid-cols-3 gap-3">
-                          {/* Visual 5: Radial Thought Depth */}
-                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 flex flex-col items-center justify-center">
-                            <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1 opacity-70 w-full">
-                              // radial_thought_depth
-                            </div>
-                            <ResponsiveContainer width="100%" height={60}>
-                              <RadialBarChart 
-                                cx="50%" 
-                                cy="50%" 
-                                innerRadius="30%" 
-                                outerRadius="100%" 
-                                barSize={4} 
-                                data={radialBarData}
-                                startAngle={180}
-                                endAngle={0}
-                              >
-                                <RadialBar
-                                  background
-                                  dataKey="value"
-                                />
-                              </RadialBarChart>
-                            </ResponsiveContainer>
-                          </div>
-
-                          {/* Visual 6: Treemap (MCP Distribution) */}
+                          {/* Visual 5: Agent Average Thought Size */}
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
                             <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
-                              // mcp_distribution_treemap
+                              // agent_average_thought_size
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
-                              <Treemap
-                                data={treemapData}
-                                dataKey="size"
-                                stroke="rgba(0,0,0,0.4)"
-                                fill="var(--chart-5)"
-                              />
+                              <BarChart data={thoughtLatencyData}>
+                                <XAxis dataKey="name" hide />
+                                <YAxis hide />
+                                <RechartsTooltip 
+                                  contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
+                                />
+                                <Bar dataKey="avgLength" fill="var(--chart-5)" radius={[1, 1, 0, 0]} />
+                              </BarChart>
                             </ResponsiveContainer>
                           </div>
 
-                          {/* Visual 7: Visuals (Mermaid Usage) */}
+                          {/* Visual 6: Action Execution Distribution */}
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
-                            <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
-                              // visual_renderings_mermaid
+                            <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
+                              // action_execution_types
                             </div>
                             <ResponsiveContainer width="100%" height={60}>
-                              <BarChart data={mermaidData}>
+                              <BarChart data={actionDistributionData}>
+                                <XAxis dataKey="name" hide />
+                                <YAxis hide />
+                                <RechartsTooltip 
+                                  contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
+                                />
+                                <Bar dataKey="value" fill="var(--primary)" radius={[1, 1, 0, 0]}>
+                                  {actionDistributionData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* Visual 7: Agent Output Volume (Words) */}
+                          <div className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+                            <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[9px] uppercase tracking-widest mb-1.5 opacity-70">
+                              // agent_output_volume_words
+                            </div>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <BarChart data={complexityData}>
                                 <XAxis dataKey="name" hide />
                                 <RechartsTooltip 
                                   contentStyle={{ background: 'var(--secondary)', border: '1px solid var(--border)', fontSize: '8px' }}
-                                  itemStyle={{ color: 'var(--chart-3)' }}
                                 />
-                                <Bar dataKey="value" fill="var(--chart-3)" radius={[1, 1, 0, 0]} />
+                                <Bar dataKey="words" fill="var(--chart-3)" radius={[1, 1, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
                         </div>
                       </div>
+                    </section>
+
+                    {/* Topic & Chat Health Section */}
+                    <section className="bg-[var(--card)] border border-[var(--border)] p-3">
+                      <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] uppercase tracking-widest mb-3 opacity-70 flex items-center gap-1">
+                        <Activity size={11} className="text-[var(--primary)] animate-pulse" />
+                        // TOPIC_AND_CHAT_HEALTH_INSIGHTS
+                      </div>
+
+                      {(() => {
+                        const { totalTopics, dominantTopic, deviations, healthScore, status, statusColor, sortedTopics } = getTopicAndHealthAnalytics();
+                        return (
+                          <div className="grid grid-cols-4 gap-3 text-center">
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-2.5 flex flex-col justify-between">
+                              <div className="text-[9px] opacity-50 uppercase font-bold tracking-wider mb-1">Topics Discussed ({totalTopics})</div>
+                              <div 
+                                style={{ 
+                                  maxHeight: "36px", 
+                                  overflowY: "auto", 
+                                  fontFamily: "'Share Tech Mono', monospace" 
+                                }} 
+                                className="flex flex-wrap gap-1 justify-center p-1 border border-[rgba(0,229,255,0.1)] bg-[rgba(0,0,0,0.2)] scrollbar-thin scrollbar-thumb-[rgba(0,229,255,0.2)] scrollbar-track-transparent"
+                              >
+                                {sortedTopics.length > 0 ? (
+                                  sortedTopics.map(t => (
+                                    <span key={t} className="px-1 py-0.5 bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.15)] rounded-sm text-[8px] text-[var(--primary)] whitespace-nowrap">
+                                      {t}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[8px] opacity-40">NONE</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-2.5 flex flex-col justify-between">
+                              <div className="text-[9px] opacity-50 uppercase font-bold tracking-wider">Dominant Topic</div>
+                              <div style={{ color: "var(--chart-3)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[11px] font-bold truncate mt-2.5 uppercase">
+                                {dominantTopic}
+                              </div>
+                            </div>
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-2.5 flex flex-col justify-between">
+                              <div className="text-[9px] opacity-50 uppercase font-bold tracking-wider">Topic Deviations</div>
+                              <div style={{ color: "rgba(255, 0, 85, 0.9)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xl font-bold mt-1">
+                                {deviations}
+                              </div>
+                            </div>
+                            <div className="bg-[var(--secondary)] border border-[var(--border)] p-2.5 flex flex-col justify-between">
+                              <div className="text-[9px] opacity-50 uppercase font-bold tracking-wider">Chat Health</div>
+                              <div className="mt-1 flex items-center justify-center gap-1.5">
+                                <span style={{ color: statusColor, fontFamily: "'Share Tech Mono', monospace" }} className="text-base font-bold">
+                                  {healthScore}%
+                                </span>
+                                <span style={{ background: statusColor }} className="w-1.5 h-1.5 rounded-full animate-ping shrink-0" />
+                              </div>
+                              <div style={{ color: statusColor, fontSize: '8px' }} className="font-bold tracking-widest uppercase mt-0.5 opacity-80">
+                                {status}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </section>
 
                     {/* 2. DIAGNOSTICS GRIDS (3 per row - most of them) */}
@@ -1517,38 +1747,123 @@ export function RightPanel({
                 )}
 
                 {activeTab === "summary" && (
-                  <div className="p-3 space-y-3">
+                  <div className="p-3 h-full flex flex-col min-h-0 space-y-3">
                     <button
                       onClick={onSummarize}
+                      disabled={statusText === 'RECALIBRATING...'}
                       style={{
                         background: "var(--primary)",
                         color: "var(--background)",
                         fontFamily: "'Share Tech Mono', monospace",
+                        opacity: statusText === 'RECALIBRATING...' ? 0.7 : 1,
+                        cursor: statusText === 'RECALIBRATING...' ? "not-allowed" : "pointer"
                       }}
-                      className="w-full px-3 py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                      className="w-full px-3 py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shrink-0"
                     >
-                      <Sparkles size={12} />
-                      Neural Recalibration
+                      {statusText === 'RECALIBRATING...' ? (
+                        <>
+                          <RefreshCcw size={12} className="animate-spin" />
+                          COMPUTING...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={12} />
+                          Neural Recalibration
+                        </>
+                      )}
                     </button>
 
-                    <div
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        fontFamily: "'Rajdhani', sans-serif",
-                        color: "var(--foreground)",
-                        maxHeight: "400px",
-                        overflowY: "auto",
-                      }}
-                      className="p-3 text-[11px] leading-relaxed opacity-80"
-                    >
-                      <p className="mb-2" style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}>
-                        // session_summary
-                      </p>
-                      <div className="markdown-content text-sm">
-                        <ChatMarkdown content={sessionSummary || "Neural state analysis complete. All agents verified and ready for deployment."} />
+                    {statusText === 'RECALIBRATING...' ? (
+                      <div
+                        style={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          fontFamily: "'Share Tech Mono', monospace",
+                          color: "var(--primary)",
+                          position: "relative",
+                        }}
+                        className="flex-1 min-h-0 p-4 text-[11px] leading-relaxed relative overflow-y-auto"
+                      >
+                        <div 
+                          className="absolute inset-0 pointer-events-none"
+                          style={{
+                            background: "linear-gradient(rgba(0, 229, 255, 0.05) 50%, rgba(0, 0, 0, 0) 50%)",
+                            backgroundSize: "100% 4px",
+                            zIndex: 10
+                          }}
+                        />
+                        
+                        {/* Scanning Line */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            right: 0,
+                            height: "2px",
+                            background: "var(--primary)",
+                            boxShadow: "0 0 8px var(--primary)",
+                            opacity: 0.8,
+                            animation: "scan 2s linear infinite",
+                            zIndex: 20
+                          }}
+                        />
+                        
+                        <style dangerouslySetInnerHTML={{__html: `
+                          @keyframes scan {
+                            0% { top: 0%; }
+                            50% { top: 100%; }
+                            100% { top: 0%; }
+                          }
+                        `}} />
+
+                        <div className="space-y-2 relative z-0">
+                          <div className="flex items-center gap-2 text-xs font-bold text-[var(--primary)] uppercase tracking-wider mb-3">
+                            <Cpu size={14} className="animate-pulse" />
+                            <span>NEURAL RECALIBRATION ACTIVE</span>
+                          </div>
+
+                          <div className="space-y-1 opacity-80 text-xs">
+                            {[
+                              "INITIALIZING NEURAL RECALIBRATION PROTOCOL...",
+                              "CONNECTING TO ATHENA CORE SYNERGY...",
+                              "EVALUATING CHAT SYNAPSES AND INTENTS...",
+                              "EXTRACTING MULTI-AGENT COGNITIVE PATHWAYS...",
+                              "SYNTHESIZING TEMPORAL SUMMARY STATES...",
+                              "FINALIZING NEURAL DEPLOYMENT MATRIX..."
+                            ].slice(0, computingStep + 1).map((step, idx) => (
+                              <div key={idx} className="flex gap-2 items-start">
+                                <span style={{ color: "var(--primary)" }}>&gt;</span>
+                                <span className={idx === computingStep ? "animate-pulse font-bold" : "opacity-60"}>
+                                  {step}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-[rgba(0,229,255,0.15)] flex justify-between items-center text-[10px] opacity-50">
+                            <span>THROUGHPUT: {(Math.random() * 50 + 150).toFixed(1)} GB/S</span>
+                            <span className="animate-ping">●</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div
+                        style={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          fontFamily: "'Rajdhani', sans-serif",
+                          color: "var(--foreground)",
+                        }}
+                        className="flex-1 min-h-0 p-3 text-[11px] leading-relaxed opacity-80 overflow-y-auto"
+                      >
+                        <p className="mb-2" style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}>
+                          // session_summary
+                        </p>
+                        <div className="markdown-content text-sm">
+                          <ChatMarkdown content={sessionSummary || "Neural state analysis complete. All agents verified and ready for deployment."} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
