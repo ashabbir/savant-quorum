@@ -44,7 +44,7 @@ interface SettingsModalProps {
 const TABS = [
   { id: "system", label: "system" },
   { id: "provider-chain", label: "provider chain" },
-  { id: "moderator", label: "moderator" },
+  { id: "moderator", label: "athena" },
   { id: "agents", label: "agents" },
   { id: "gateway", label: "gateway" },
   { id: "server", label: "server" },
@@ -666,18 +666,18 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
               </div>
             )}
 
-            {/* ── MODERATOR ── */}
+            {/* ── ATHENA ── */}
             {activeTab === "moderator" && (
               <div className="space-y-4">
                 <p style={{ color: "var(--foreground)", fontFamily: "'Rajdhani', sans-serif" }} className="text-sm opacity-60">
-                  Moderator AI prompt — injected into every session to guide content filtering
+                  Athena AI prompt — injected into every session to guide content filtering
                 </p>
                 <div>
-                  <label style={labelStyle} className="block text-xs mb-2 opacity-70">Moderator Prompt</label>
+                  <label style={labelStyle} className="block text-xs mb-2 opacity-70">Athena Prompt</label>
                   <textarea
                     value={moderatorPrompt}
                     onChange={e => setModeratorPrompt(e.target.value)}
-                    placeholder="You are a content moderator. Review all responses for..."
+                    placeholder="You are Athena, the master orchestrator. Review all responses for..."
                     rows={10}
                     style={{ ...inputStyle, resize: "vertical" }}
                     className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)] placeholder:opacity-30"

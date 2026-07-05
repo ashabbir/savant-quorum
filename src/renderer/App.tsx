@@ -534,8 +534,9 @@ export default function App() {
           timeoutPromise
         ]);
 
-        // Basic quota/error checks
-        if (/429|QUOTA_EXHAUSTED|rate_limit|rate limit/i.test(responseRaw)) {
+        // Basic quota/error checks (ensure it's actually an error message and not user-facing text containing these words)
+        const isLikelyErrorResponse = responseRaw.startsWith('Error:') || responseRaw.startsWith('Warning:') || responseRaw.length < 200;
+        if (isLikelyErrorResponse && /429|QUOTA_EXHAUSTED|rate_limit|rate limit/i.test(responseRaw)) {
           lastError = new Error(`Quota exhausted on ${adapterName}`);
           attempt++;
           continue;
@@ -546,7 +547,10 @@ export default function App() {
           continue;
         }
         
-        preferredProviderIndexRef.current = chain.findIndex((p: any) => p.id === item.id || (p.provider === item.provider && p.model === item.model));
+        preferredProviderIndexRef.current = chain.findIndex((p: any) => 
+          (item.id !== undefined && p.id === item.id) || 
+          (p.provider === item.provider && p.model === item.model)
+        );
         return { content: responseRaw, provider: adapterName, model };
       } catch (e: any) {
         lastError = e;
@@ -642,11 +646,11 @@ export default function App() {
     if (!currentSessionId || isLoading) return;
     setIsLoading(true);
     setStatusText('RECALIBRATING...');
-    addThinking('Moderator', 'MANUAL_NEURAL_RECALIBRATION_TRIGGERED');
+    addThinking('Athena', 'MANUAL_NEURAL_RECALIBRATION_TRIGGERED');
     
     try {
       const summaryPrompt = `
-        You are the MASTER_CONTROL_MODERATOR. The user has requested a manual neural recalibration of the session state.
+        You are ATHENA, the MASTER_CONTROL_MODERATOR. The user has requested a manual neural recalibration of the session state.
         
         CURRENT_SESSION_SUMMARY:
         "${sessionSummary || "No previous summary available."}"
@@ -655,16 +659,25 @@ export default function App() {
         ${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
         
         TASK: Provide a fresh, comprehensive, and cohesive SESSION_SUMMARY based on the entire history.
-        - Merge existing summary points with any missed details from the full history.
-        - Ensure all key decisions, architectural shifts, and agent findings are represented.
-        - Use concise, technical bullet points.
-        - Return ONLY the updated summary text.
+        The summary MUST be structured chronologically for each turn in the chat history following this exact format:
+
+        - User asked: "[Brief summary of what the user asked]"
+        - Athena: intent is "[Brief summary of identified intent]" and engaged [List of engaged agents, or "Athena (direct/moderator)"]
+        [If agents were engaged in that turn, include one bullet point per engaged agent:
+        - [Agent Name]: "[Extracted key findings/message from this agent]"]
+        - Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
+
+        IMPORTANT RULES:
+        1. Do NOT lose key data, decisions, or facts from the agents' messages or the history.
+        2. Keep the user's question, intent, and clean extracted messages in focus for every turn.
+        3. Format the entire history turn-by-turn.
+        4. Return ONLY the complete updated summary text. Do not include any other conversational text or formatting.
       `;
       
-      const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Moderator');
+      const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Athena');
       setSessionSummary(updatedSummary);
       saveCurrentSession(undefined, undefined, updatedSummary);
-      addThinking('Moderator', 'NEURAL_SUMMARY_RECALIBRATED');
+      addThinking('Athena', 'NEURAL_SUMMARY_RECALIBRATED');
     } catch (e: any) {
       addMessage('error', `Recalibration failed: ${e.message}`);
     } finally {
@@ -800,7 +813,7 @@ export default function App() {
       addMessage('user', text)
       midRunBuffer.current.push(text)
       addMessage(
-        'moderator-whisper' as any,
+        'athena-whisper' as any,
         `I've captured your added intel: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}". I am relaying this to the working agents and integrating it into the current reasoning cycle.`
       );
       return
@@ -836,6 +849,94 @@ export default function App() {
     const firstWordMatch = userQuery.trim().match(/^@([a-zA-Z0-9_-]+)\s+([\s\S]+)$/);
     if (firstWordMatch) {
       const targetId = firstWordMatch[1].toLowerCase();
+      if (targetId === 'athena') {
+        const cleanQuery = firstWordMatch[2].trim();
+        addMessage('user', userQuery);
+        setIsLoading(true);
+        setStatusText(`DIRECT: ATHENA...`);
+        addThinking('Athena', `DIRECT_ATHENA_EXECUTION_TRIGGERED: Bypassing Swarm processing.`);
+        
+        try {
+          const agentLabel = 'Athena';
+          const allowDeepSearch = sessionMetadata.allowDeepSearch === true;
+          const agentTimeout = allowDeepSearch ? 300000 : 90000;
+          
+          const prompt = `
+            You are ATHENA, the MASTER_CONTROL_MODERATOR. The operator has bypassed the Swarm structure and is chatting with you directly.
+            ${fallbackWarning}
+
+            Directive from operator: ${cleanQuery}${filesContext}
+            ${historyContext}
+
+            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
+
+            CORE MANDATE: Communicate ONLY FACTS.
+            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
+            - Mark every verified fact with a superscript marker like Fact[1].
+            - Explain how/where each fact was verified.
+            - Answer with focused Markdown.
+          `;
+
+          const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
+          const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
+          const finalResponse = validationResult.response;
+          const finalAgentProvider = validationResult.provider || agentProvider;
+          const finalAgentModel = validationResult.model || agentModel;
+
+          addMessage('athena', finalResponse, agentLabel, undefined, finalAgentProvider, finalAgentModel);
+          addThinking(agentLabel, `DIRECT_EXECUTION_COMPLETE`, 'worker_end');
+
+          // Update the persistent summary after direct run
+          const directSummaryPrompt = `
+            You are ATHENA, the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
+            ${fallbackWarning}
+            
+            CURRENT_SESSION_SUMMARY:
+            "${sessionSummary || "No previous summary available."}"
+            
+            LATEST_TURN_DATA:
+            - User Asked: "${cleanQuery}"
+            - Intent: "Direct chat with Athena"
+            - Engaged Agents: ["Athena"]
+            - Agent Responses: ${JSON.stringify([{ agentId: 'athena', agentName: 'Athena', persona: 'moderator', content: finalResponse }])}
+            - Final Output Sent to User: "${finalResponse}"
+            
+            TASK:
+            You MUST append a summary of the latest turn to the CURRENT_SESSION_SUMMARY.
+            The summary of this latest turn MUST follow this exact format:
+
+            - User asked: "[Brief summary of what the user asked]"
+            - Athena: intent is "Direct chat" and engaged Athena
+            - Athena: "[Extracted key findings/message]"
+            - Athena synthesized and told the user: "[Brief summary of the final response]"
+
+            IMPORTANT RULES:
+            1. Do NOT lose key data, decisions, or facts from the messages.
+            2. Keep the user's question, intent, and clean extracted messages in focus.
+            3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
+            4. If there is no previous summary, start directly with the new turn summary.
+            5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
+          `;
+          try {
+            const summaryResult = await runWithFallback(directSummaryPrompt, 'Athena');
+            const updatedSummary = summaryResult.content.trim();
+            setSessionSummary(updatedSummary);
+            saveCurrentSession(undefined, undefined, updatedSummary);
+            addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
+          } catch (sumErr) {
+            console.error("Post-run direct agent summarization failed:", sumErr);
+          }
+        } catch (e: any) {
+          addThinking('Athena', `DIRECT_EXECUTION_FAILED: ${e.message}`, 'error');
+          addMessage('error', `Direct agent execution failed: ${e.message}`);
+        } finally {
+          setIsLoading(false);
+          setStatusText('IDLE');
+          setRunningSessionId(null);
+        }
+        return;
+      }
+
       const agent = agentRoster.find(a => 
         a.id.toLowerCase() === targetId || 
         a.name.toLowerCase() === targetId ||
@@ -874,6 +975,7 @@ export default function App() {
           }
 
           const allowDeepSearch = sessionMetadata.allowDeepSearch === true;
+          const agentTimeout = allowDeepSearch ? 300000 : 90000;
 
           const prompt = `
             ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
@@ -886,13 +988,18 @@ export default function App() {
             DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
 
             CORE MANDATE: Communicate ONLY FACTS. 
+            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
             - Mark every verified fact with a superscript marker like Fact[1].
             - Explain how/where each fact was verified.
             - Answer with focused Markdown. Stay inside your persona and only solve the task.
+
+            ANTI-LOOP & PERFORMANCE POLICY:
+            - DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
+            - Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
           `;
 
-          const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, 90000);
-          const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, 90000);
+          const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
+          const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
           const finalResponse = validationResult.response;
           const finalAgentProvider = validationResult.provider || agentProvider;
           const finalAgentModel = validationResult.model || agentModel;
@@ -902,37 +1009,41 @@ export default function App() {
 
           // Update the persistent summary after direct run
           const directSummaryPrompt = `
-            You are the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
+            You are ATHENA, the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
             ${fallbackWarning}
             
             CURRENT_SESSION_SUMMARY:
             "${sessionSummary || "No previous summary available."}"
             
-            NEW_INTEL_FROM_THIS_RUN:
-            ${JSON.stringify([{ agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: finalResponse }])}
+            LATEST_TURN_DATA:
+            - User Asked: "${cleanQuery}"
+            - Intent: "Direct chat with ${agentLabel}"
+            - Engaged Agents: ["${agentLabel}"]
+            - Agent Responses: ${JSON.stringify([{ agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: finalResponse }])}
+            - Final Output Sent to User: "${finalResponse}"
             
-            USER_DIRECTIVE: "${cleanQuery}"
-            
-            TASK: 
-            Compare the NEW_INTEL_FROM_THIS_RUN against the CURRENT_SESSION_SUMMARY.
-            If the new run does not contain any significantly new information, decisions, actions, or details compared to what is already covered in the CURRENT_SESSION_SUMMARY, reply with EXACTLY the word "NO_CHANGE" (case-sensitive, no markdown, no spaces).
-            Otherwise, provide an updated, cohesive SESSION_SUMMARY that merges the new facts/findings.
-            - Integrate new achievements, decisions, and findings from the latest run.
-            - DO NOT blindly add text; perform an intelligent merge.
-            - If new info contradicts or modifies previous summary points, update them accordingly.
-            - Use concise, technical bullet points. Keep it professional.
-            - Return ONLY the updated summary text.
+            TASK:
+            You MUST append a summary of the latest turn to the CURRENT_SESSION_SUMMARY.
+            The summary of this latest turn MUST follow this exact format:
+
+            - User asked: "[Brief summary of what the user asked]"
+            - Athena: intent is "Direct chat with ${agentLabel}" and engaged ${agentLabel}
+            - ${agentLabel}: "[Extracted key findings/message]"
+            - Athena synthesized and told the user: "[Brief summary of the final response]"
+
+            IMPORTANT RULES:
+            1. Do NOT lose key data, decisions, or facts from the messages.
+            2. Keep the user's question, intent, and clean extracted messages in focus.
+            3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
+            4. If there is no previous summary, start directly with the new turn summary.
+            5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
           `;
           try {
-            const summaryResult = await runWithFallback(directSummaryPrompt, 'Moderator');
+            const summaryResult = await runWithFallback(directSummaryPrompt, 'Athena');
             const updatedSummary = summaryResult.content.trim();
-            if (updatedSummary === "NO_CHANGE") {
-              addThinking('Moderator', 'NEURAL_SUMMARY_UNCHANGED: No significant state changes detected in this turn.');
-            } else {
-              setSessionSummary(updatedSummary);
-              saveCurrentSession(undefined, undefined, updatedSummary);
-              addThinking('Moderator', 'NEURAL_SUMMARY_UPDATED');
-            }
+            setSessionSummary(updatedSummary);
+            saveCurrentSession(undefined, undefined, updatedSummary);
+            addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
           } catch (sumErr) {
             console.error("Post-run direct agent summarization failed:", sumErr);
           }
@@ -957,6 +1068,8 @@ export default function App() {
     let allAddedInfo = "";
     let isFinalized = false;
     let hasCrossChecked = false;
+    let latestDecision: any = null;
+    let finalDirResponse = "";
     const agentRosterPrompt = formatAgentRosterForPrompt(agentRoster);
 
     try {
@@ -973,8 +1086,8 @@ export default function App() {
           ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
           : "";
 
-        addThinking('Moderator', `QUORUM_LOOP_TURN_${currentTurn}: Evaluating state...`)
-        addThinking('Moderator', 'CALL_GATEWAY: POST /runs', 'mcp_call')
+        addThinking('Athena', `QUORUM_LOOP_TURN_${currentTurn}: Evaluating state...`)
+        addThinking('Athena', 'CALL_GATEWAY: POST /runs', 'mcp_call')
         
         const turnContext = accumulatedAgentContext.length > 0 
           ? `\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
@@ -983,7 +1096,7 @@ export default function App() {
         const midRunContext = allAddedInfo ? `\n\nADDED_USER_INTEL_DURING_RUN:\n${allAddedInfo}` : "";
 
         const moderatorDecisionPrompt = `
-          You are the MASTER_CONTROL_MODERATOR in a high-security cyber-environment.
+          You are ATHENA, the MASTER_CONTROL_MODERATOR in a high-security cyber-environment.
           
           ROLE DESCRIPTION:
           You are the Gatekeeper. You must first analyze the user request to find the ask intent, formulate a clear reasoning goal, and figure out the best agents for the job.
@@ -1039,12 +1152,12 @@ export default function App() {
           }
         `
         
-        const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Moderator')
+        const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Athena')
         
-        // Whisper the moderator's initial acknowledgment
+        // Whisper Athena's initial acknowledgment
         if (currentTurn === 1) {
           addMessage(
-            'moderator-whisper' as any,
+            'athena-whisper' as any,
             `I've received your directive: "${userQuery.substring(0, 50)}${userQuery.length > 50 ? '...' : ''}". I am analyzing the state and looking at the roster to determine the best approach.`,
             undefined,
             undefined,
@@ -1070,23 +1183,25 @@ export default function App() {
           }
           
           decision = JSON.parse(jsonStr);
+          latestDecision = decision;
         } catch (e: any) {
           // If parsing completely fails, the model likely ignored the system prompt and answered directly.
           // Log the parse error, but display the raw text to the user so the answer isn't lost.
           addThinking('System', `Neural parsing error: ${e.message}. Assuming rogue direct response.`, 'error');
           decision = { action: 'finalize', direct_response: decisionRaw, thought: `Parsing error fallback: ${e.message}` };
+          latestDecision = decision;
         }
 
-        addThinking("Moderator", `TURN_${currentTurn}_THOUGHT: ` + decision.thought); 
+        addThinking("Athena", `TURN_${currentTurn}_THOUGHT: ` + decision.thought); 
 
         if (decision.action === 'finalize' || (decision.engage || []).length === 0) {
           isFinalized = true;
           if (decision.direct_response && currentTurn === 1) {
-             const validationResult = await validateAndCorrectMermaid(decision.direct_response, 'Moderator', moderatorDecisionPrompt, 90000);
-             const finalDirResponse = validationResult.response;
+             const validationResult = await validateAndCorrectMermaid(decision.direct_response, 'Athena', moderatorDecisionPrompt, 90000);
+             finalDirResponse = validationResult.response;
              const finalModProvider = validationResult.provider || modProvider;
              const finalModModel = validationResult.model || modModel;
-             addMessage('moderator', finalDirResponse, undefined, undefined, finalModProvider, finalModModel);
+             addMessage('athena', finalDirResponse, undefined, undefined, finalModProvider, finalModModel);
           }
           break;
         }
@@ -1094,7 +1209,7 @@ export default function App() {
         const agentsToEngage = resolveEngagedAgents(decision.engage, agentRoster);
         setStatusText(`TURN_${currentTurn}: ${agentsToEngage.length} AGENTS`);
         addMessage(
-          'moderator-whisper' as any,
+          'athena-whisper' as any,
           `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`,
           undefined,
           undefined,
@@ -1153,6 +1268,8 @@ export default function App() {
             ? `\n\nCURRENT_SESSION_SUMMARY:\n${sessionSummary || "No previous summary."}\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
             : `${historyContext}\n\n${turnContext}`) + filesContext;
 
+          const agentTimeout = allowDeepSearch ? 300000 : 90000;
+
           const prompt = `
             ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
             ${agent.prompt ? `Standing instruction: ${agent.prompt}` : ""}
@@ -1165,15 +1282,20 @@ export default function App() {
             DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
 
             CORE MANDATE: Communicate ONLY FACTS. 
+            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
             - Mark every verified fact with a superscript marker like Fact[1].
             - Explain how/where each fact was verified.
             - Answer with focused Markdown. Stay inside your persona and only solve the delegated task.
+
+            ANTI-LOOP & PERFORMANCE POLICY:
+            - DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
+            - Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
           `;
 
           try {
-            const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, 90000);
+            const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
             
-            const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, 90000);
+            const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
             const response = validationResult.response;
             const finalAgentProvider = validationResult.provider || agentProvider;
             const finalAgentModel = validationResult.model || agentModel;
@@ -1195,7 +1317,7 @@ export default function App() {
           const monitor = setInterval(() => {
             const pending = taskStatuses.filter(t => !t.done).map(t => t.label);
             if (pending.length > 0) {
-              addMessage('moderator-whisper' as any, `I am checking back on the agents. **${pending.join(', ')}** are still processing. Stand by.`);
+              addMessage('athena-whisper' as any, `I am checking back on the agents. **${pending.join(', ')}** are still processing. Stand by.`);
             }
           }, checkInterval);
 
@@ -1212,10 +1334,10 @@ export default function App() {
 
         const turnResults = await watchSwarm(agentPromises, agentsToEngage.map(a => a.name || a.id));
 
-        // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY MODERATOR) ──
+        // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY ATHENA) ──
         const crossCheckRequests = decision.cross_checks || [];
         if (crossCheckRequests.length > 0 && !hasCrossChecked) {
-          addThinking('Moderator', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
+          addThinking('Athena', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
           setStatusText(`TURN_${currentTurn}: CROSS-CHECK`);
           hasCrossChecked = true;
 
@@ -1263,9 +1385,9 @@ export default function App() {
 
       }
 
-      if (accumulatedAgentContext.length > 0) {
+      if (accumulatedAgentContext.length > 0 || finalDirResponse) {
         setStatusText('SYNTHESIZING...'); 
-        addThinking('Moderator', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS...')
+        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS...')
 
         const currentChain = settings["provider:chain"] || [];
         const activeProvIdx = preferredProviderIndexRef.current;
@@ -1273,109 +1395,124 @@ export default function App() {
           ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
           : "";
 
-        // Update the persistent summary
+        const intentToUse = latestDecision?.intent || "General reasoning task";
+        const engagedList = latestDecision?.engage || [];
+        
         const summaryPrompt = `
-          You are the MASTER_CONTROL_MODERATOR. A reasoning run has just completed.
+          You are ATHENA, the MASTER_CONTROL_MODERATOR. A reasoning run has just completed.
           ${fallbackWarning}
           
           CURRENT_SESSION_SUMMARY:
           "${sessionSummary || "No previous summary available."}"
           
-          NEW_INTEL_FROM_THIS_RUN:
-          ${JSON.stringify(accumulatedAgentContext)}
+          LATEST_TURN_DATA:
+          - User Asked: "${userQuery}"
+          - Intent: "${intentToUse}"
+          - Engaged Agents: ${JSON.stringify(engagedList)}
+          - Agent Responses: ${JSON.stringify(accumulatedAgentContext)}
+          - Final Output Sent to User: "${finalDirResponse || "Athena is generating a final synthesized report based on the agent responses"}"
           
-          USER_DIRECTIVE: "${userQuery}"
-          
-          TASK: 
-          Compare the NEW_INTEL_FROM_THIS_RUN against the CURRENT_SESSION_SUMMARY.
-          If the new run does not contain any significantly new information, decisions, actions, or details compared to what is already covered in the CURRENT_SESSION_SUMMARY, reply with EXACTLY the word "NO_CHANGE" (case-sensitive, no markdown, no spaces).
-          Otherwise, provide an updated, cohesive SESSION_SUMMARY that merges the new facts/findings.
-          - Integrate new achievements, decisions, and findings from the latest run.
-          - DO NOT blindly add text; perform an intelligent merge.
-          - If new info contradicts or modifies previous summary points, update them accordingly.
-          - Use concise, technical bullet points. Keep it professional.
-          - Return ONLY the updated summary text.
-        `;
-        
-        addThinking('Moderator', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
+          TASK:
+          You MUST append a summary of the latest turn to the CURRENT_SESSION_SUMMARY.
+          The summary of this latest turn MUST follow this exact format:
 
-        const finalPrompt = `
-          You are the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
+          - User asked: "[Brief summary of what the user asked]"
+          - Athena: intent is "${intentToUse}" and engaged ${engagedList.length > 0 ? engagedList.join(', ') : 'Athena (direct/moderator)'}
+          ${accumulatedAgentContext.map(r => `- ${r.agentName}: "[Extracted key findings/message from this agent]"`).join('\n          ')}
+          - Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
 
-          USER'S ORIGINAL REQUEST: "${userQuery}"
-          PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
-          LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
-          ${fallbackWarning}
-
-          YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
-
-          ## 1. RESTATE THE ASK
-          In your own words, rephrase what the user asked for. Make sure the user knows you fully understood their intent. Start with something like "You asked..." or "The question was...". Be specific.
-
-          ## 2. THE ANSWER
-          Give a clear, direct, definitive answer. Do not hedge. If there is a recommendation, make it. If there is a result, present it. The user should be able to read ONLY this section and know the answer.
-
-          ## 3. HOW IT WORKS — Full Explanation
-          Now explain the "how" in depth. Assume the reader has ZERO prior knowledge about this topic. Walk through:
-          - What each component/concept is
-          - How the pieces connect to each other
-          - What happens step-by-step when the system/process runs
-          - Why it was designed or works this way
-
-          Use **Mermaid diagrams** liberally. You MUST include at least one diagram. Choose the most appropriate type:
-          - \`\`\`mermaid graph TD\`\`\` for architecture/dependency maps
-          - \`\`\`mermaid sequenceDiagram\`\`\` for step-by-step flows
-          - \`\`\`mermaid flowchart LR\`\`\` for decision trees or pipelines
-          - \`\`\`mermaid classDiagram\`\`\` for data models or type hierarchies
-          - \`\`\`mermaid stateDiagram-v2\`\`\` for state machines or lifecycle flows
-
-          Use multiple diagrams if the topic has multiple dimensions (e.g., architecture + data flow).
-
-          IMPORTANT MERMAID RULES:
-          - For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
-          - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
-
-          ## 4. WHY — Rationale & Context
-          Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
-
-          ## 5. KEY DETAILS & EVIDENCE
-          Present the important technical details, configuration specifics, code references, or data points. Use tables, code blocks, and structured formatting for clarity. Every fact MUST be marked with a superscript index (e.g., Fact[1]).
-
-          ## 6. FACT_GLOSSARY
-          At the very end, list each Fact[N] index and explain how/where each fact was verified (e.g., "Fact[1]: Confirmed via analysis of src/renderer/App.tsx, lines 644-670").
-
-          FORMATTING RULES:
-          - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
-          - Write in clear, plain language. Avoid unnecessary jargon. When you must use technical terms, define them inline.
-          - Be thorough. The user should NOT need to ask a follow-up question. If they read this report, they should fully understand the topic.
-          - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
-          - Do NOT summarize — EXPLAIN. The difference is critical.
+          IMPORTANT RULES:
+          1. Do NOT lose key data, decisions, or facts from the agents' messages.
+          2. Keep the user's question, intent, and clean extracted messages in focus.
+          3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
+          4. If there is no previous summary, start directly with the new turn summary.
+          5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
         `;
 
-        const [summaryResult, finalResult] = await Promise.all([
-          runWithFallback(summaryPrompt, 'Moderator'),
-          runWithFallback(finalPrompt, 'Moderator')
-        ]);
+        if (accumulatedAgentContext.length > 0) {
+          addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
 
-        const updatedSummary = summaryResult.content.trim();
-        if (updatedSummary === "NO_CHANGE") {
-          addThinking('Moderator', 'NEURAL_SUMMARY_UNCHANGED: No significant state changes detected in this turn.');
-        } else {
+          const finalPrompt = `
+            You are ATHENA, the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
+
+            USER'S ORIGINAL REQUEST: "${userQuery}"
+            PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
+            LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
+            ${fallbackWarning}
+
+            YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
+
+            ## 1. RESTATE THE ASK
+            In your own words, rephrase what the user asked for. Make sure the user knows you fully understood their intent. Start with something like "You asked..." or "The question was...". Be specific.
+
+            ## 2. THE ANSWER
+            Give a clear, direct, definitive answer. Do not hedge. If there is a recommendation, make it. If there is a result, present it. The user should be able to read ONLY this section and know the answer.
+
+            ## 3. HOW IT WORKS — Full Explanation
+            Now explain the "how" in depth. Assume the reader has ZERO prior knowledge about this topic. Walk through:
+            - What each component/concept is
+            - How the pieces connect to each other
+            - What happens step-by-step when the system/process runs
+            - Why it was designed or works this way
+
+            Use **Mermaid diagrams** liberally. You MUST include at least one diagram. Choose the most appropriate type:
+            - \`\`\`mermaid graph TD\`\`\` for architecture/dependency maps
+            - \`\`\`mermaid sequenceDiagram\`\`\` for step-by-step flows
+            - \`\`\`mermaid flowchart LR\`\`\` for decision trees or pipelines
+            - \`\`\`mermaid classDiagram\`\`\` for data models or type hierarchies
+            - \`\`\`mermaid stateDiagram-v2\`\`\` for state machines or lifecycle flows
+
+            Use multiple diagrams if the topic has multiple dimensions (e.g., architecture + data flow).
+
+            IMPORTANT MERMAID RULES:
+            - For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
+            - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
+
+            ## 4. WHY — Rationale & Context
+            Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
+
+            ## 5. KEY DETAILS & EVIDENCE
+            Present the important technical details, configuration specifics, code references, or data points. Use tables, code blocks, and structured formatting for clarity. Every fact MUST be marked with a superscript index (e.g., Fact[1]).
+
+            ## 6. FACT_GLOSSARY
+            At the very end, list each Fact[N] index and explain how/where each fact was verified (e.g., "Fact[1]: Confirmed via analysis of src/renderer/App.tsx, lines 644-670").
+
+            FORMATTING RULES:
+            - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
+            - Write in clear, plain language. Avoid unnecessary jargon. When you must use technical terms, define them inline.
+            - Be thorough. The user should NOT need to ask a follow-up question. If they read this report, they should fully understand the topic.
+            - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
+            - Do NOT summarize — EXPLAIN. The difference is critical.
+          `;
+
+          const [summaryResult, finalResult] = await Promise.all([
+            runWithFallback(summaryPrompt, 'Athena'),
+            runWithFallback(finalPrompt, 'Athena')
+          ]);
+
+          const updatedSummary = summaryResult.content.trim();
           setSessionSummary(updatedSummary);
           saveCurrentSession(undefined, undefined, updatedSummary);
-          addThinking('Moderator', 'NEURAL_SUMMARY_UPDATED');
+          addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
+
+          const finalResponseRaw = finalResult.content;
+          let finalProvider = finalResult.provider;
+          let finalModel = finalResult.model;
+
+          const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Athena', finalPrompt, 90000);
+          const finalResponseCombined = validationResult.response;
+          finalProvider = validationResult.provider || finalProvider;
+          finalModel = validationResult.model || finalModel;
+
+          addMessage('athena', finalResponseCombined, undefined, undefined, finalProvider, finalModel);
+        } else {
+          // If finalized on Turn 1 without agents, we just update the summary
+          const summaryResult = await runWithFallback(summaryPrompt, 'Athena');
+          const updatedSummary = summaryResult.content.trim();
+          setSessionSummary(updatedSummary);
+          saveCurrentSession(undefined, undefined, updatedSummary);
+          addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
         }
-
-        const finalResponseRaw = finalResult.content;
-        let finalProvider = finalResult.provider;
-        let finalModel = finalResult.model;
-
-        const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Moderator', finalPrompt, 90000);
-        const finalResponse = validationResult.response;
-        finalProvider = validationResult.provider || finalProvider;
-        finalModel = validationResult.model || finalModel;
-
-        addMessage('moderator', finalResponse, undefined, undefined, finalProvider, finalModel);
       }
     } catch (error: any) {
       addMessage('error', `CRITICAL_EXCEPTION: ${error.message}`)
@@ -1591,9 +1728,10 @@ export default function App() {
               onDeleteMessage={handleDeleteMessage}
               isLoading={isLoading && currentSessionId === runningSessionId}
               statusText={statusText}
+              thinking={thinking}
               onSummarize={handleSummarize}
               onClearSession={startNewSession}
-              onEditMessage={(id, newContent) => {
+              onEditMessage={(id: string, newContent: string) => {
                 const msgIdx = messages.findIndex(m => m.id === id);
                 if (msgIdx !== -1) {
                   // Roll back the conversation context to this message, and re-send the edited text
@@ -1602,11 +1740,11 @@ export default function App() {
                   handleSend(newContent);
                 }
               }}
-              onUpdateMessage={(id, newContent) => {
+              onUpdateMessage={(id: string, newContent: string) => {
                 setMessages(prev => prev.map(m => m.id === id ? { ...m, content: newContent } : m));
               }}
               allowDeepSearch={sessionMetadata.allowDeepSearch || false}
-              onToggleDeepSearch={(enabled) => {
+              onToggleDeepSearch={(enabled: boolean) => {
                 const updatedMeta = { ...sessionMetadataRef.current, allowDeepSearch: enabled };
                 updateSessionMetadata(updatedMeta);
                 saveCurrentSession(undefined, undefined, undefined, updatedMeta);
@@ -1637,7 +1775,11 @@ export default function App() {
         />
       </div>
 
-      <BottomBar sessionTitle={sessionTitle} />
+      <BottomBar 
+        sessionTitle={sessionTitle} 
+        folders={folders}
+        sessions={sessions}
+      />
       <Toaster />
     </div>
   );

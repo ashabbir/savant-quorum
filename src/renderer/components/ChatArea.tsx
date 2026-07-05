@@ -4,7 +4,7 @@ import { ChatMarkdown } from './ChatMarkdown';
 
 export interface Message {
   id: string;
-  role: 'user' | 'moderator' | 'engineer' | 'architect' | 'security' | 'system' | 'error' | 'internal' | 'ai' | 'whisper' | 'moderator-whisper' | 'agent-whisper';
+  role: 'user' | 'moderator' | 'engineer' | 'architect' | 'security' | 'system' | 'error' | 'internal' | 'ai' | 'whisper' | 'moderator-whisper' | 'agent-whisper' | 'athena' | 'athena-whisper';
   content: string;
   from?: string;
   to?: string;
@@ -29,15 +29,17 @@ interface ChatAreaProps {
   onUpdateMessage?: (id: string, newContent: string) => void;
   allowDeepSearch?: boolean;
   onToggleDeepSearch?: (enabled: boolean) => void;
-  agents?: { id: string; name: string }[];
+  agents?: { id: string; name: string; persona?: string }[];
   sessionFiles?: { name: string; content: string; summary?: string; loading?: boolean }[];
   onDeleteSessionFile?: (name: string) => void;
+  thinking?: any[];
 }
 
 const getRoleIcon = (role: Message['role']) => {
   switch (role) {
     case 'user': return <User size={13} style={{ color: "rgba(120,180,255,0.8)" }} />;
-    case 'moderator': return <Shield size={13} style={{ color: "var(--good)" }} />;
+    case 'moderator':
+    case 'athena': return <Shield size={13} style={{ color: "var(--good)" }} />;
     case 'engineer': return <Code size={13} style={{ color: "var(--muted-foreground)" }} />;
     case 'architect': return <Layout size={13} style={{ color: "var(--muted-foreground)" }} />;
     case 'security': return <Shield size={13} style={{ color: "var(--muted-foreground)" }} />;
@@ -215,7 +217,7 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
 
 const MemoizedWhisperBlock = memo(({ message, onUpdateMessage }: { message: Message, onUpdateMessage?: (id: string, newContent: string) => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const isModerator = message.role === "moderator-whisper";
+  const isModerator = message.role === "moderator-whisper" || message.role === "athena-whisper";
   const isAgent = message.role === "agent-whisper";
   
   const label = isModerator ? message.to : isAgent ? message.from : "";
@@ -260,6 +262,47 @@ const MemoizedWhisperBlock = memo(({ message, onUpdateMessage }: { message: Mess
   );
 });
 
+const WhisperGroupBlock = ({ 
+  messages, 
+  onUpdateMessage 
+}: { 
+  messages: Message[], 
+  onUpdateMessage?: (id: string, newContent: string) => void 
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="whisper-group-container">
+      <div 
+        className={`whisper-group-header ${isExpanded ? 'expanded' : ''}`}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Terminal size={12} className="text-[var(--cp-cyan)]" />
+          <span className="whisper-group-title">
+            // CHATTER ({messages.length} log lines)
+          </span>
+        </div>
+        <span className="whisper-group-toggle-hint">
+          {isExpanded ? "collapse logs" : "expand logs"}
+        </span>
+      </div>
+      
+      {isExpanded && (
+        <div className="whisper-group-content">
+          {messages.map(msg => (
+            <MemoizedWhisperBlock 
+              key={msg.id} 
+              message={msg} 
+              onUpdateMessage={onUpdateMessage} 
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMessage, onUpdateMessage }: { msg: Message, sessionTitle: string, onDeleteMessage?: (id: string) => void, onEditMessage?: (id: string, newContent: string) => void, onUpdateMessage?: (id: string, newContent: string) => void }) => {
   const isUser = msg.role === 'user';
   const timestamp = typeof msg.timestamp === 'number' ? new Date(msg.timestamp) : msg.timestamp;
@@ -275,14 +318,14 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
 
   let bubbleClass = "message-bubble-body";
   if (isUser) bubbleClass += " user";
-  else if (msg.role === 'moderator') bubbleClass += " moderator";
+  else if (msg.role === 'moderator' || msg.role === 'athena') bubbleClass += " moderator";
   else if (['engineer', 'architect', 'security', 'ai'].includes(msg.role)) bubbleClass += " agent";
   else bubbleClass += " system-meta";
 
   return (
     <div className={`message-item-wrapper group ${isUser ? 'user' : 'agent'}`}>
       {!isUser && (
-        <div className={`message-avatar-box ${msg.role === 'moderator' ? 'moderator' : ''}`}>
+        <div className={`message-avatar-box ${msg.role === 'moderator' || msg.role === 'athena' ? 'moderator' : ''}`}>
           {getRoleIcon(msg.role)}
         </div>
       )}
@@ -290,7 +333,7 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
         <div className={`message-meta-header ${isUser ? 'user' : 'agent'}`}>
           {!isUser && (
             <span className="flex items-center gap-2">
-              {msg.role.toUpperCase()}
+              {msg.role === 'moderator' || msg.role === 'athena' ? 'ATHENA' : msg.role.toUpperCase()}
               {msg.provider && msg.model && (
                 <span className="message-meta-badge">
                   &lt;{msg.provider}:{msg.model}&gt;
@@ -368,6 +411,8 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
   );
 });
 
+
+
 export function ChatArea({ 
   messages, 
   sessionTitle, 
@@ -384,7 +429,8 @@ export function ChatArea({
   onToggleDeepSearch, 
   agents = [],
   sessionFiles = [],
-  onDeleteSessionFile
+  onDeleteSessionFile,
+  thinking = []
 }: ChatAreaProps) {
   const [input, setInput] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -590,6 +636,49 @@ export function ChatArea({
     return m.content.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  // Group contiguous whispers (if more than 2) under a single collapsible header
+  const groupedMessages: { type: 'single' | 'whisper-group'; messages: Message[]; id: string }[] = [];
+  for (let i = 0; i < filteredMessages.length; i++) {
+    const msg = filteredMessages[i];
+    const isWhisper = msg.role === "whisper" || msg.role === "moderator-whisper" || msg.role === "agent-whisper" || msg.role === "athena-whisper";
+    if (isWhisper) {
+      const whispers: Message[] = [msg];
+      let j = i + 1;
+      while (j < filteredMessages.length) {
+        const nextMsg = filteredMessages[j];
+        const nextIsWhisper = nextMsg.role === "whisper" || nextMsg.role === "moderator-whisper" || nextMsg.role === "agent-whisper" || nextMsg.role === "athena-whisper";
+        if (nextIsWhisper) {
+          whispers.push(nextMsg);
+          j++;
+        } else {
+          break;
+        }
+      }
+      if (whispers.length > 2) {
+        groupedMessages.push({
+          type: 'whisper-group',
+          messages: whispers,
+          id: whispers[0].id + '-group'
+        });
+      } else {
+        whispers.forEach(w => {
+          groupedMessages.push({
+            type: 'single',
+            messages: [w],
+            id: w.id
+          });
+        });
+      }
+      i = j - 1;
+    } else {
+      groupedMessages.push({
+        type: 'single',
+        messages: [msg],
+        id: msg.id
+      });
+    }
+  }
+
   return (
     <div className="chat-container">
       {/* Search Bar */}
@@ -618,8 +707,18 @@ export function ChatArea({
 
       {/* Messages */}
       <div className="chat-messages-viewport" ref={viewportRef}>
-        {filteredMessages.map(msg => {
-          if (msg.role === "whisper" || msg.role === "moderator-whisper" || msg.role === "agent-whisper") {
+        {groupedMessages.map(group => {
+          if (group.type === 'whisper-group') {
+            return (
+              <WhisperGroupBlock
+                key={group.id}
+                messages={group.messages}
+                onUpdateMessage={onUpdateMessage}
+              />
+            );
+          }
+          const msg = group.messages[0];
+          if (msg.role === "whisper" || msg.role === "moderator-whisper" || msg.role === "agent-whisper" || msg.role === "athena-whisper") {
             return <MemoizedWhisperBlock key={msg.id} message={msg} onUpdateMessage={onUpdateMessage} />;
           }
           return (
@@ -663,10 +762,10 @@ export function ChatArea({
               ⚛ SWARM
             </span>
             <span
-              className={`agent-selector-pill ${selectedAgent === "MODERATOR" ? 'active' : ''}`}
-              onClick={() => setSelectedAgent("MODERATOR")}
+              className={`agent-selector-pill ${selectedAgent === "ATHENA" ? 'active' : ''}`}
+              onClick={() => setSelectedAgent("ATHENA")}
             >
-              @moderator
+              @athena
             </span>
             {agents.map(agent => {
               const agentNameNormalized = agent.name.toLowerCase().replace(/\s+/g, '-');
