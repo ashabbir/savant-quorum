@@ -94,8 +94,8 @@ export function RightPanel({
     messages.forEach(m => {
       let role: string = m.role;
       if (role === 'agent-whisper' && m.from) role = m.from;
-      if (role === 'moderator-whisper') role = 'moderator';
-      if (role === 'whisper') role = 'moderator';
+      if (role === 'moderator-whisper' || role === 'athena-whisper') role = 'athena';
+      if (role === 'moderator' || role === 'whisper' || role === 'athena') role = 'athena';
       if (role === 'user') role = 'YOU';
       
       const label = role.toUpperCase();
@@ -108,8 +108,8 @@ export function RightPanel({
 
   // 2. Whisper vs Message Ratio
   const getWhisperRatio = () => {
-    const whispers = messages.filter(m => ['whisper', 'moderator-whisper', 'agent-whisper'].includes(m.role)).length;
-    const publics = messages.filter(m => !['whisper', 'moderator-whisper', 'agent-whisper', 'system', 'internal'].includes(m.role)).length;
+    const whispers = messages.filter(m => ['whisper', 'moderator-whisper', 'agent-whisper', 'athena-whisper'].includes(m.role)).length;
+    const publics = messages.filter(m => !['whisper', 'moderator-whisper', 'agent-whisper', 'athena-whisper', 'system', 'internal'].includes(m.role)).length;
     return [
       { name: 'WHISPERS', value: whispers, color: '#ff00aa' },
       { name: 'PUBLIC', value: publics, color: '#00e5ff' }
@@ -218,14 +218,14 @@ export function RightPanel({
         allWhispers.push({
           id: m.id || `w-${idx}`,
           from: m.from,
-          to: 'Moderator',
+          to: 'Athena',
           content: m.content,
           timestamp: m.timestamp
         });
-      } else if (m.role === 'moderator-whisper') {
+      } else if (m.role === 'moderator-whisper' || m.role === 'athena-whisper') {
         allWhispers.push({
           id: m.id || `w-${idx}`,
-          from: 'Moderator',
+          from: 'Athena',
           to: m.to || 'Swarm/User',
           content: m.content,
           timestamp: m.timestamp
@@ -251,21 +251,21 @@ export function RightPanel({
     const allForwards: { from: string; to: string; content: string; trigger: string }[] = [];
     const agentOutputs: Record<string, string> = {};
     messages.forEach((m) => {
-      let sender = 'Moderator';
+      let sender = 'Athena';
       if (m.role === 'user') sender = 'YOU';
       else if (m.role === 'agent-whisper' && m.from) sender = m.from;
-      else if (m.role === 'moderator-whisper') sender = 'Moderator';
-      else if (m.role === 'moderator') sender = 'Moderator';
+      else if (m.role === 'moderator-whisper' || m.role === 'athena-whisper') sender = 'Athena';
+      else if (m.role === 'moderator' || m.role === 'athena') sender = 'Athena';
 
       if (m.role === 'agent-whisper' && m.from) {
         agentOutputs[m.from] = m.content;
       }
 
-      if (m.role === 'moderator-whisper') {
+      if (m.role === 'moderator-whisper' || m.role === 'athena-whisper') {
         // Find who is engaged
         const engaged: string[] = [];
         agentsList.forEach(agent => {
-          if (agent !== 'Moderator' && agent !== 'YOU' && agent !== 'CrossCheck') {
+          if (agent !== 'Athena' && agent !== 'YOU' && agent !== 'CrossCheck') {
             const regex = new RegExp(`\\b${agent}\\b`, 'i');
             if (m.content.match(regex)) {
               engaged.push(agent);
@@ -314,7 +314,7 @@ export function RightPanel({
     // Facts list
     const allFacts: { label: string; content: string; source: string; timestamp: Date | number }[] = [];
     messages.forEach(m => {
-      const sender = m.role === 'user' ? 'YOU' : (m.role === 'agent-whisper' && m.from ? m.from : (m.role === 'moderator' || m.role === 'moderator-whisper' ? 'Moderator' : m.role));
+      const sender = m.role === 'user' ? 'YOU' : (m.role === 'agent-whisper' && m.from ? m.from : (m.role === 'moderator' || m.role === 'moderator-whisper' || m.role === 'athena' || m.role === 'athena-whisper' ? 'Athena' : m.role));
       const sentences = m.content.split(/[.!?\n]/);
       sentences.forEach(s => {
         const match = s.match(/fact\s*\[\d+\]|\[fact:\d+\]/i);
@@ -334,19 +334,19 @@ export function RightPanel({
 
     // 1. Process all messages (whispers, user queries, final reports) for Graph Nodes & Edges
     messages.forEach(m => {
-      let sender = 'Moderator';
+      let sender = 'Athena';
       if (m.role === 'user') sender = 'YOU';
       else if (m.role === 'agent-whisper' && m.from) sender = m.from;
-      else if (m.role === 'moderator-whisper') sender = 'Moderator';
-      else if (m.role === 'moderator') sender = 'Moderator';
+      else if (m.role === 'moderator-whisper' || m.role === 'athena-whisper') sender = 'Athena';
+      else if (m.role === 'moderator' || m.role === 'athena') sender = 'Athena';
 
       addNode(sender, 'agent', 1);
 
       // Check for whispers: who said what to moderator
       if (m.role === 'agent-whisper' && m.from) {
-        addEdge(m.from, 'Moderator', 'communication', 1);
+        addEdge(m.from, 'Athena', 'communication', 1);
       } else if (m.role === 'user') {
-        addEdge('YOU', 'Moderator', 'communication', 1);
+        addEdge('YOU', 'Athena', 'communication', 1);
       }
 
       // Check for cross-check messages
@@ -360,13 +360,13 @@ export function RightPanel({
       }
 
       // Check for forwards
-      if (sender === 'Moderator') {
+      if (sender === 'Athena') {
         agentsList.forEach(otherAgent => {
-          if (otherAgent !== 'Moderator' && otherAgent !== 'YOU' && otherAgent !== 'CrossCheck') {
+          if (otherAgent !== 'Athena' && otherAgent !== 'YOU' && otherAgent !== 'CrossCheck') {
             if (m.content.includes(otherAgent)) {
-              addEdge('Moderator', otherAgent, 'communication', 1);
+              addEdge('Athena', otherAgent, 'communication', 1);
               messages.filter(prev => prev.role === 'agent-whisper' && prev.from === otherAgent).forEach(() => {
-                addEdge(otherAgent, 'Moderator', 'communication', 1);
+                addEdge(otherAgent, 'Athena', 'communication', 1);
               });
             }
           }
@@ -384,13 +384,13 @@ export function RightPanel({
         });
       }
 
-      const isUserOrWhisper = ['user', 'moderator-whisper', 'agent-whisper'].includes(m.role);
+      const isUserOrWhisper = ['user', 'moderator-whisper', 'agent-whisper', 'athena-whisper'].includes(m.role);
       extractFromText(m.content, !isUserOrWhisper, sender);
     });
 
     // 2. Process all thinking traces (neural trace)
     thinking.forEach(t => {
-      const agent = t.agent || 'Moderator';
+      const agent = t.agent || 'Athena';
       addNode(agent, 'agent', 1);
 
       // Check for forwards/communication in thoughts
@@ -457,8 +457,8 @@ export function RightPanel({
     const getAgentName = (m: Message): string => {
       let role = m.role;
       if (role === 'agent-whisper' && m.from) return m.from;
-      if (role === 'moderator-whisper') return 'moderator';
-      if (role === 'whisper') return 'moderator';
+      if (role === 'moderator-whisper' || role === 'athena-whisper') return 'athena';
+      if (role === 'whisper') return 'athena';
       if (role === 'user') return 'YOU';
       return role;
     };
@@ -623,8 +623,8 @@ export function RightPanel({
     const getAgentName = (m: Message): string => {
       let role = m.role;
       if (role === 'agent-whisper' && m.from) return m.from;
-      if (role === 'moderator-whisper') return 'moderator';
-      if (role === 'whisper') return 'moderator';
+      if (role === 'moderator-whisper' || role === 'athena-whisper') return 'athena';
+      if (role === 'whisper') return 'athena';
       if (role === 'user') return 'YOU';
       return role;
     };
@@ -826,8 +826,8 @@ export function RightPanel({
     const getAgentName = (m: Message): string => {
       let role = m.role;
       if (role === 'agent-whisper' && m.from) return m.from;
-      if (role === 'moderator-whisper') return 'moderator';
-      if (role === 'whisper') return 'moderator';
+      if (role === 'moderator-whisper' || role === 'athena-whisper') return 'athena';
+      if (role === 'whisper') return 'athena';
       if (role === 'user') return 'YOU';
       return role;
     };
@@ -1537,6 +1537,8 @@ export function RightPanel({
                         border: "1px solid var(--border)",
                         fontFamily: "'Rajdhani', sans-serif",
                         color: "var(--foreground)",
+                        maxHeight: "400px",
+                        overflowY: "auto",
                       }}
                       className="p-3 text-[11px] leading-relaxed opacity-80"
                     >
@@ -2476,7 +2478,9 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
       agent: m.role === 'user' ? 'YOU' : (m.from || m.role),
       type: "message" as const,
       content: m.content,
-      timestamp: typeof m.timestamp === 'object' ? (m.timestamp as Date).getTime() : m.timestamp
+      timestamp: typeof m.timestamp === 'object' ? (m.timestamp as Date).getTime() : m.timestamp,
+      provider: m.provider,
+      model: m.model
     })),
     ...thinking.map(t => ({
       id: t.id,
@@ -2484,7 +2488,9 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
       agent: t.agent,
       type: "thought" as const,
       content: t.thought,
-      timestamp: t.timestamp
+      timestamp: t.timestamp,
+      provider: undefined,
+      model: undefined
     }))
   ].sort((a, b) => a.timestamp - b.timestamp);
 
@@ -2559,7 +2565,7 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
 
   const topologyNodes = [
     { id: "user", label: "USER", x: 300, y: 60, color: "var(--primary)", type: "user" },
-    { id: "moderator", label: "MODERATOR", x: 300, y: 190, color: "var(--good)", type: "moderator" },
+    { id: "athena", label: "ATHENA", x: 300, y: 190, color: "var(--good)", type: "moderator" },
     ...agentNodes
   ];
 
@@ -2569,11 +2575,11 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
     const fromLower = m.from?.toLowerCase() || m.role.toLowerCase();
     
     if (m.role === 'user') {
-      edgeCounts["user->moderator"] = (edgeCounts["user->moderator"] || 0) + 1;
-    } else if (m.role === 'moderator') {
-      edgeCounts["moderator->user"] = (edgeCounts["moderator->user"] || 0) + 1;
-    } else if (m.role === 'moderator-whisper' && m.to) {
-      const key = `moderator->${m.to.toLowerCase()}`;
+      edgeCounts["user->athena"] = (edgeCounts["user->athena"] || 0) + 1;
+    } else if (m.role === 'moderator' || m.role === 'athena') {
+      edgeCounts["athena->user"] = (edgeCounts["athena->user"] || 0) + 1;
+    } else if ((m.role === 'moderator-whisper' || m.role === 'athena-whisper') && m.to) {
+      const key = `athena->${m.to.toLowerCase()}`;
       edgeCounts[key] = (edgeCounts[key] || 0) + 1;
     } else if (m.role === 'agent-whisper' && m.from) {
       const from = m.from.toLowerCase();
@@ -2583,11 +2589,11 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
         const key = `${from}->${to}`;
         edgeCounts[key] = (edgeCounts[key] || 0) + 1;
       } else {
-        const key = `${from}->moderator`;
+        const key = `${from}->athena`;
         edgeCounts[key] = (edgeCounts[key] || 0) + 1;
       }
-    } else if (m.from && !['user', 'moderator', 'system'].includes(m.from.toLowerCase())) {
-      const key = `${m.from.toLowerCase()}->moderator`;
+    } else if (m.from && !['user', 'moderator', 'system', 'athena'].includes(m.from.toLowerCase())) {
+      const key = `${m.from.toLowerCase()}->athena`;
       edgeCounts[key] = (edgeCounts[key] || 0) + 1;
     }
   });
@@ -2598,27 +2604,27 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
     let type = "whisper";
     if (from === 'user') type = "input";
     else if (to === 'user') type = "output";
-    else if (from === 'moderator') type = "delegate";
-    else if (from !== 'moderator' && to !== 'moderator') type = "crosscheck";
+    else if (from === 'athena') type = "delegate";
+    else if (from !== 'athena' && to !== 'athena') type = "crosscheck";
     
     topologyEdges.push({ from, to, label: `${count} msg`, count, type });
   });
 
   if (topologyEdges.length === 0) {
-    topologyEdges.push({ from: "user", to: "moderator", label: "0 msg", count: 0, type: "input" });
-    topologyEdges.push({ from: "moderator", to: "architect", label: "0 msg", count: 0, type: "delegate" });
-    topologyEdges.push({ from: "moderator", to: "engineer", label: "0 msg", count: 0, type: "delegate" });
-    topologyEdges.push({ from: "moderator", to: "security", label: "0 msg", count: 0, type: "delegate" });
-    topologyEdges.push({ from: "architect", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
-    topologyEdges.push({ from: "engineer", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
-    topologyEdges.push({ from: "security", to: "moderator", label: "0 msg", count: 0, type: "whisper" });
+    topologyEdges.push({ from: "user", to: "athena", label: "0 msg", count: 0, type: "input" });
+    topologyEdges.push({ from: "athena", to: "architect", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "athena", to: "engineer", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "athena", to: "security", label: "0 msg", count: 0, type: "delegate" });
+    topologyEdges.push({ from: "architect", to: "athena", label: "0 msg", count: 0, type: "whisper" });
+    topologyEdges.push({ from: "engineer", to: "athena", label: "0 msg", count: 0, type: "whisper" });
+    topologyEdges.push({ from: "security", to: "athena", label: "0 msg", count: 0, type: "whisper" });
   }
 
   // ── 3. COGNITIVE TREE WATERFALL MODE ──
   const getXOffset = (agentName: string) => {
     const name = agentName.toLowerCase();
     if (name === 'you' || name === 'user') return 300;
-    if (name === 'moderator') return 300;
+    if (name === 'moderator' || name === 'athena') return 300;
     if (name === 'engineer') return 180;
     if (name === 'architect') return 420;
     if (name === 'security') return 240;
@@ -2635,7 +2641,7 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
     
     let color = "var(--primary)";
     if (agent === 'you' || agent === 'user') color = "var(--primary)";
-    else if (agent === 'moderator') color = "var(--good)";
+    else if (agent === 'moderator' || agent === 'athena') color = "var(--good)";
     else if (agent === 'system') color = "var(--chart-5)";
     else color = "var(--chart-3)";
 
@@ -2925,8 +2931,16 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
               {currentNodes.map(node => {
                 const pos = customNodePositions[node.id] || { x: node.x, y: node.y };
                 const isTopology = graphMode === "topology";
-                const w = isTopology ? 84 : 110;
-                const h = isTopology ? 24 : 32;
+                
+                // Find last message provider/model for this agent
+                const lastMsg = isTopology ? [...messages].reverse().find(m => 
+                  (m.from?.toLowerCase() === node.id.toLowerCase() || m.role?.toLowerCase() === node.id.toLowerCase()) &&
+                  m.provider
+                ) : null;
+                const activeChainLink = lastMsg ? `${lastMsg.provider}:${lastMsg.model}` : null;
+
+                const w = isTopology ? (activeChainLink ? 96 : 84) : 110;
+                const h = isTopology ? (activeChainLink ? 36 : 24) : 32;
 
                 // For tree node text preview extraction
                 const nodeEvt = (node as any).evt;
@@ -2990,16 +3004,29 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
                     
                     {/* Node text content */}
                     {isTopology ? (
-                      <text
-                        y="3"
-                        textAnchor="middle"
-                        fill={node.color}
-                        fontSize="9"
-                        fontWeight="bold"
-                        fontFamily="'Share Tech Mono', monospace"
-                      >
-                        {node.label}
-                      </text>
+                      <>
+                        <text
+                          y={activeChainLink ? "-3" : "3"}
+                          textAnchor="middle"
+                          fill={node.color}
+                          fontSize="9"
+                          fontWeight="bold"
+                          fontFamily="'Share Tech Mono', monospace"
+                        >
+                          {node.label}
+                        </text>
+                        {activeChainLink && (
+                          <text
+                            y="8"
+                            textAnchor="middle"
+                            fill="rgba(255, 255, 255, 0.45)"
+                            fontSize="6"
+                            fontFamily="'Share Tech Mono', monospace"
+                          >
+                            {activeChainLink}
+                          </text>
+                        )}
+                      </>
                     ) : (
                       <>
                         <text
@@ -3019,7 +3046,7 @@ function AgentGraph({ messages, thinking }: { messages: Message[], thinking: Thi
                           fontSize="6.5"
                           fontFamily="var(--font-sans)"
                         >
-                          {previewText}
+                          {nodeEvt?.provider ? `[${nodeEvt.provider}:${nodeEvt.model}] ${previewText}` : previewText}
                         </text>
                       </>
                     )}

@@ -30,7 +30,7 @@ export default function ChatModeSelector({ onSelect, defaultMode = 'collaborate'
         <div>
           <div style={{ fontWeight: 500 }}>Collaborate</div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Moderator decides how many agents respond and gives final summary
+            Athena decides how many agents respond and gives final summary
           </div>
         </div>
       </label>
@@ -47,7 +47,7 @@ export default function ChatModeSelector({ onSelect, defaultMode = 'collaborate'
         <div>
           <div style={{ fontWeight: 500 }}>Debate</div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-            3 agents debate across 3 rounds with moderator evaluation. Best answer wins.
+            3 agents debate across 3 rounds with Athena evaluation. Best answer wins.
           </div>
         </div>
       </label>

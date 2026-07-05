@@ -23,6 +23,12 @@ describe('Mermaid Sanitizer Utility', () => {
     expect(sanitizeMermaidCode(input)).toBe(expected);
   });
 
+  it('handles nested parenthesis inside a single parenthesis shape', () => {
+    const input = 'A(Savant Quorum Client (Electron App))';
+    const expected = 'A("Savant Quorum Client (Electron App)")';
+    expect(sanitizeMermaidCode(input)).toBe(expected);
+  });
+
   it('sanitizes sequence diagram participant/actor aliases', () => {
     const input = 'participant A as Client App\nactor B as Secure (IPC) Gateway';
     const expected = 'participant A as "Client App"\nactor B as "Secure (IPC) Gateway"';
