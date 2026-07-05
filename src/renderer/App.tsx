@@ -193,13 +193,16 @@ export default function App() {
     }
 
     let metadataStr = null;
+    let existingSummary = "";
     if (sessionId === currentSessionIdRef.current) {
       metadataStr = JSON.stringify(sessionMetadataRef.current);
+      existingSummary = sessionSummary;
     } else {
       try {
         const data = await window.sessions.load(sessionId);
-        if (data && data.metadata) {
-          metadataStr = data.metadata;
+        if (data) {
+          if (data.metadata) metadataStr = data.metadata;
+          if (data.summary) existingSummary = data.summary;
         }
       } catch (e) {}
     }
@@ -209,7 +212,7 @@ export default function App() {
       title,
       messages: msgs,
       thinking: thinks,
-      summary: sessionId === currentSessionIdRef.current ? sessionSummary : "", 
+      summary: existingSummary, 
       metadata: metadataStr
     });
     
@@ -368,7 +371,7 @@ export default function App() {
     init()
   }, [])
 
-  const handleLogin = async (apiKey: string) => {
+  const handleLogin = async (apiKey: string, serverUrl?: string) => {
     const trimmed = apiKey.trim();
     const loadedSettings = await window.system.getSettings();
     if (loadedSettings["system:folders"]) {
@@ -376,6 +379,11 @@ export default function App() {
     }
     if (loadedSettings["system:sessionFolders"]) {
       setSessionFolders(loadedSettings["system:sessionFolders"]);
+    }
+    if (serverUrl) {
+      const serverConfig = { url: serverUrl.trim(), enabled: true, status: "idle" };
+      await window.system.saveSetting("server:config", serverConfig);
+      loadedSettings["server:config"] = serverConfig;
     }
     const auth = await validateSavantApiKey(trimmed, loadedSettings);
     setStoredApiKey(trimmed);
@@ -809,6 +817,62 @@ export default function App() {
       saveSessionDirectly(sessionForThisRun, runMessages, runThinking);
     };
 
+    // Scan for reference chat in the user query
+    let referencedSession = null;
+    for (const s of sessions) {
+      if (s.id === sessionForThisRun) continue; // Don't reference current session
+      const matchesId = text.includes(`@${s.id}`);
+      const matchesTitle = text.toLowerCase().includes(`@${s.title.toLowerCase()}`) || 
+                           text.toLowerCase().includes(`referencing chat ${s.title.toLowerCase()}`) ||
+                           text.toLowerCase().includes(`reference chat ${s.title.toLowerCase()}`);
+      if (matchesId || matchesTitle) {
+        referencedSession = s;
+        break;
+      }
+    }
+
+    let injectedReferencePrompt = "";
+    if (referencedSession) {
+      addThinking('Athena', `LOADING_REFERENCE_CHAT: "${referencedSession.title}"`);
+      try {
+        const refData = await window.sessions.load(referencedSession.id);
+        if (refData) {
+          let refSummary = refData.summary || "";
+          if (!refSummary.trim() && refData.messages && refData.messages.length > 0) {
+            addThinking('Athena', `GENERATING_SUMMARY_FOR_REFERENCE_CHAT: "${referencedSession.title}"`);
+            const refSummaryPrompt = `
+              You are ATHENA, the MASTER_CONTROL_MODERATOR. The operator has referenced the session "${referencedSession.title}".
+              
+              FULL_CHAT_HISTORY OF REFERENCED SESSION:
+              ${refData.messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
+              
+              TASK: Provide a comprehensive session summary based on the history above.
+              Return ONLY the complete summary text. Do not include any other conversational text or formatting.
+            `;
+            const { content: generatedRefSummary } = await runWithFallback(refSummaryPrompt, 'Athena');
+            refSummary = generatedRefSummary.trim();
+            
+            // Save the newly generated summary to the reference session in the DB
+            await window.sessions.save({
+              id: referencedSession.id,
+              title: refData.title || referencedSession.title,
+              messages: refData.messages,
+              thinking: refData.thinking || [],
+              summary: refSummary,
+              metadata: refData.metadata
+            });
+            addThinking('Athena', `REFERENCE_CHAT_SUMMARY_UPDATED: "${referencedSession.title}"`);
+          }
+          
+          if (refSummary.trim()) {
+            injectedReferencePrompt = `\n\n[INJECTED REFERENCE CONTEXT FROM CHAT "${referencedSession.title}"]: \n${refSummary}\n`;
+          }
+        }
+      } catch (err: any) {
+        addThinking('Athena', `REFERENCE_CHAT_LOAD_FAILED: ${err.message}`, 'error');
+      }
+    }
+
     if (isLoading) {
       addMessage('user', text)
       midRunBuffer.current.push(text)
@@ -835,6 +899,7 @@ export default function App() {
     const historyContext = 
       (sessionSummary ? `\n\nSESSION_SUMMARY_OF_PAST_CONTEXT:\n${sessionSummary}\n` : "") +
       (chatHistory ? `\n\nRECENT_NEW_MESSAGES_CONTEXT:\n${chatHistory}` : "") + 
+      injectedReferencePrompt +
       filesContext;
 
     const agentRoster = getAgentRoster();
@@ -868,13 +933,29 @@ export default function App() {
             Directive from operator: ${cleanQuery}${filesContext}
             ${historyContext}
 
+            [NON-NEGOTIABLE INTENT DIRECTIVE]
+            The identified user intent is: "${cleanQuery}" (Direct chat). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
+
             DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
 
             CORE MANDATE: Communicate ONLY FACTS.
             - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-            - Mark every verified fact with a superscript marker like Fact[1].
-            - Explain how/where each fact was verified.
+            - Mark every verified fact with a superscript marker like [FACT:1].
             - Answer with focused Markdown.
+
+            YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
+
+            ## 5. KEY DETAILS & EVIDENCE
+            Present the facts verified in this response using a Markdown table formatted exactly like this:
+            | Fact ID | Detail |
+            | --- | --- |
+            | [FACT:1] | [Fact detail] |
+
+            ## 6. FACT_GLOSSARY
+            List the verification sources for each fact in a table formatted exactly like this:
+            | Fact ID | Detail & Verification Source |
+            | --- | --- |
+            | [FACT:1] | [Verification source details] |
           `;
 
           const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
@@ -985,13 +1066,29 @@ export default function App() {
             Directive from operator: ${cleanQuery}${filesContext}
             ${historyContext}
 
+            [NON-NEGOTIABLE INTENT DIRECTIVE]
+            The identified user intent is: "${cleanQuery}" (Direct chat with ${agentLabel}). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
+
             DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
 
             CORE MANDATE: Communicate ONLY FACTS. 
             - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-            - Mark every verified fact with a superscript marker like Fact[1].
-            - Explain how/where each fact was verified.
+            - Mark every verified fact with a superscript marker like [FACT:1].
             - Answer with focused Markdown. Stay inside your persona and only solve the task.
+
+            YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
+
+            ## 5. KEY DETAILS & EVIDENCE
+            Present the facts verified in this response using a Markdown table formatted exactly like this:
+            | Fact ID | Detail |
+            | --- | --- |
+            | [FACT:1] | [Fact detail] |
+
+            ## 6. FACT_GLOSSARY
+            List the verification sources for each fact in a table formatted exactly like this:
+            | Fact ID | Detail & Verification Source |
+            | --- | --- |
+            | [FACT:1] | [Verification source details] |
 
             ANTI-LOOP & PERFORMANCE POLICY:
             - DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
@@ -1279,6 +1376,9 @@ export default function App() {
             ${effectiveContext}
             ${midRunContext}
 
+            [NON-NEGOTIABLE INTENT DIRECTIVE]
+            The identified user intent is: "${latestDecision?.intent || query}". This is a non-negotiable instruction that must be strictly followed by all agents. You are not permitted to negotiate, modify, or bypass this intent.
+
             DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
 
             CORE MANDATE: Communicate ONLY FACTS. 
@@ -1472,10 +1572,16 @@ export default function App() {
             Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
 
             ## 5. KEY DETAILS & EVIDENCE
-            Present the important technical details, configuration specifics, code references, or data points. Use tables, code blocks, and structured formatting for clarity. Every fact MUST be marked with a superscript index (e.g., Fact[1]).
+            Present the facts verified in this response using a Markdown table formatted exactly like this:
+            | Fact ID | Detail |
+            | --- | --- |
+            | [FACT:1] | [Fact detail] |
 
             ## 6. FACT_GLOSSARY
-            At the very end, list each Fact[N] index and explain how/where each fact was verified (e.g., "Fact[1]: Confirmed via analysis of src/renderer/App.tsx, lines 644-670").
+            List the verification sources for each fact in a table formatted exactly like this:
+            | Fact ID | Detail & Verification Source |
+            | --- | --- |
+            | [FACT:1] | [Verification source details] |
 
             FORMATTING RULES:
             - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
@@ -1779,6 +1885,7 @@ export default function App() {
         sessionTitle={sessionTitle} 
         folders={folders}
         sessions={sessions}
+        settings={settings}
       />
       <Toaster />
     </div>

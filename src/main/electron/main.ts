@@ -35,7 +35,8 @@ async function initDb() {
         title TEXT,
         created_at INTEGER,
         updated_at INTEGER,
-        metadata TEXT
+        metadata TEXT,
+        summary TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -75,6 +76,11 @@ async function initDb() {
     }
     try {
       db.exec("ALTER TABLE messages ADD COLUMN model TEXT");
+    } catch (e) {
+      // Column may already exist
+    }
+    try {
+      db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");
     } catch (e) {
       // Column may already exist
     }
@@ -335,16 +341,16 @@ ipcMain.handle('load-session', async (_event, sessionId) => {
   }
 })
 
-ipcMain.handle('save-session', async (_event, { id, title, messages, thinking, metadata }) => {
+ipcMain.handle('save-session', async (_event, { id, title, messages, thinking, summary, metadata }) => {
   if (!db) return false
   try {
     const transaction = db.transaction((data: any) => {
       const now = Date.now()
       db.prepare(`
-        INSERT INTO sessions (id, title, created_at, updated_at, metadata) 
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at, metadata=excluded.metadata
-      `).run(data.id, data.title, now, now, data.metadata || null)
+        INSERT INTO sessions (id, title, created_at, updated_at, metadata, summary) 
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at, metadata=excluded.metadata, summary=excluded.summary
+      `).run(data.id, data.title, now, now, data.metadata || null, data.summary || null)
       db.prepare('DELETE FROM messages WHERE session_id = ?').run(data.id)
       db.prepare('DELETE FROM thinking WHERE session_id = ?').run(data.id)
       const insertMsg = db.prepare(`INSERT INTO messages (id, session_id, role, content, from_agent, to_agent, timestamp, provider, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -352,7 +358,7 @@ ipcMain.handle('save-session', async (_event, { id, title, messages, thinking, m
       const insertThink = db.prepare(`INSERT INTO thinking (id, session_id, agent, thought, type, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
       for (const t of data.thinking) insertThink.run(t.id, data.id, t.agent, t.thought, t.type || 'thought', t.timestamp)
     })
-    transaction({ id, title, messages, thinking, metadata })
+    transaction({ id, title, messages, thinking, summary, metadata })
     return true
   } catch (e) {
     return false

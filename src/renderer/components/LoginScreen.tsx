@@ -1,27 +1,42 @@
-import { useState } from "react";
-import { KeyRound, Shield, LogIn, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { KeyRound, Shield, LogIn, AlertTriangle, Server } from "lucide-react";
 
 interface LoginScreenProps {
-  onLogin: (apiKey: string) => Promise<void>;
+  onLogin: (apiKey: string, serverUrl: string) => Promise<void>;
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [apiKey, setApiKey] = useState("");
+  const [serverUrl, setServerUrl] = useState("http://127.0.0.1:8090");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    window.system.getSettings().then((loadedSettings: any) => {
+      const savedUrl = loadedSettings["server:config"]?.url;
+      if (savedUrl) {
+        setServerUrl(savedUrl);
+      }
+    }).catch(() => {});
+  }, []);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const trimmed = apiKey.trim();
-    if (!trimmed) {
+    const trimmedKey = apiKey.trim();
+    const trimmedUrl = serverUrl.trim();
+    if (!trimmedKey) {
       setError("Quorum API key is required.");
+      return;
+    }
+    if (!trimmedUrl) {
+      setError("Server URL is required.");
       return;
     }
 
     setIsSubmitting(true);
     setError("");
     try {
-      await onLogin(trimmed);
+      await onLogin(trimmedKey, trimmedUrl);
     } catch (e: any) {
       setError(e?.message || "Login failed.");
       setIsSubmitting(false);
@@ -63,38 +78,71 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         </div>
 
-        <label
-          style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}
-          className="block text-[10px] mb-2 opacity-70 uppercase tracking-[0.18em]"
-        >
-          Quorum API Key
-        </label>
-        <div
-          style={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 0 }}
-          className="flex items-center gap-2 px-3 py-2"
-        >
-          <KeyRound size={14} style={{ color: "var(--primary)", opacity: 0.7 }} />
-          <input
-            type="password"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            autoFocus
-            placeholder="sk-..."
-            style={{
-              background: "transparent",
-              color: "var(--foreground)",
-              fontFamily: "'Share Tech Mono', monospace",
-              outline: "none",
-              border: "none",
-            }}
-            className="flex-1 text-xs placeholder:opacity-30"
-          />
+        <div className="space-y-4">
+          <div>
+            <label
+              style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}
+              className="block text-[10px] mb-2 opacity-70 uppercase tracking-[0.18em]"
+            >
+              Server URL
+            </label>
+            <div
+              style={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 0 }}
+              className="flex items-center gap-2 px-3 py-2"
+            >
+              <Server size={14} style={{ color: "var(--primary)", opacity: 0.7 }} />
+              <input
+                type="text"
+                value={serverUrl}
+                onChange={e => setServerUrl(e.target.value)}
+                placeholder="http://127.0.0.1:8090"
+                style={{
+                  background: "transparent",
+                  color: "var(--foreground)",
+                  fontFamily: "'Share Tech Mono', monospace",
+                  outline: "none",
+                  border: "none",
+                }}
+                className="flex-1 text-xs placeholder:opacity-30"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label
+              style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}
+              className="block text-[10px] mb-2 opacity-70 uppercase tracking-[0.18em]"
+            >
+              Quorum API Key
+            </label>
+            <div
+              style={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 0 }}
+              className="flex items-center gap-2 px-3 py-2"
+            >
+              <KeyRound size={14} style={{ color: "var(--primary)", opacity: 0.7 }} />
+              <input
+                type="password"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                autoFocus
+                placeholder="sk-..."
+                style={{
+                  background: "transparent",
+                  color: "var(--foreground)",
+                  fontFamily: "'Share Tech Mono', monospace",
+                  outline: "none",
+                  border: "none",
+                }}
+                className="flex-1 text-xs placeholder:opacity-30"
+              />
+            </div>
+          </div>
         </div>
 
         {error && (
           <div
             style={{ color: "var(--accent)", fontFamily: "'Share Tech Mono', monospace" }}
-            className="flex items-center gap-2 mt-3 text-[11px]"
+            className="flex items-center gap-2 mt-4 text-[11px]"
           >
             <AlertTriangle size={13} />
             <span>{error}</span>

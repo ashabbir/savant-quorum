@@ -19,10 +19,12 @@ export function BottomBar({
   sessionTitle,
   folders = [],
   sessions = [],
+  settings,
 }: {
   sessionTitle?: string;
   folders?: Array<{ id: string }>;
   sessions?: Array<{ id: string }>;
+  settings?: Record<string, any>;
 }) {
   const [userName, setUserName] = useState("operator");
   const [gatewayStatus, setGatewayStatus] = useState<"online" | "offline">("offline");
@@ -260,6 +262,19 @@ export function BottomBar({
 
         {/* center/right: runs monitor button */}
         <div className="ml-auto px-3 flex items-center gap-3">
+          {(() => {
+            const providerChain = settings?.["provider:chain"] || [
+              { provider: 'gemini', model: 'gemini-2.0-flash' }
+            ];
+            const activeProvider = providerChain[0] || { provider: 'gemini', model: 'gemini-2.0-flash' };
+            return (
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 border border-[var(--border)] text-[9px] font-bold font-mono tracking-wider text-muted-foreground rounded-sm bg-[rgba(255,255,255,0.02)]">
+                <span style={{ color: "var(--primary)" }} className="opacity-80">ACTIVE ENGINE:</span>
+                <span className="opacity-60">{activeProvider.provider.toUpperCase()} ({activeProvider.model.toUpperCase()})</span>
+              </div>
+            );
+          })()}
+
           <button
             onClick={() => {
               setIsMonitorOpen(!isMonitorOpen);

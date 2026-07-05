@@ -1,17 +1,18 @@
 {
   "name": "savant-quorum",
-  "version": "5.0.18",
+  "version": "5.0.38",
   "description": "Quorum - A high-security multi-agent collaborative environment.",
   "author": "project-x",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
-    "dev:renderer": "QUORUM_RENDERER_ONLY=1 vite --force --host 127.0.0.1 --port 5173 --strictPort",
+    "dev": "electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
+    "dev:renderer": "QUORUM_RENDERER_ONLY=1 vite --force --host 127.0.0.1 --port 5273 --strictPort",
     "dev:electron": "node scripts/start-electron-dev.mjs",
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "defaults write \"$PWD/node_modules/electron/dist/Electron.app/Contents/Info.plist\" CFBundleIdentifier com.github.Electron.Quorum && defaults write \"$PWD/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Info.plist\" CFBundleIdentifier com.github.Electron.Quorum.helper && defaults write \"$PWD/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper (Renderer).app/Contents/Info.plist\" CFBundleIdentifier com.github.Electron.Quorum.helper && defaults write \"$PWD/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper (GPU).app/Contents/Info.plist\" CFBundleIdentifier com.github.Electron.Quorum.helper && defaults write \"$PWD/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper (Plugin).app/Contents/Info.plist\" CFBundleIdentifier com.github.Electron.Quorum.helper && electron-builder install-app-deps || true"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
