@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { ChatMode } from '../services/chatMode'
+import { createAthenaService, type AthenaService } from '../services/athenaService'
 
 interface ChatModeSelectorProps {
   onSelect: (mode: ChatMode) => void
   defaultMode?: ChatMode
+  athenaService?: AthenaService
 }
 
-export default function ChatModeSelector({ onSelect, defaultMode = 'collaborate' }: ChatModeSelectorProps) {
+export default function ChatModeSelector({ onSelect, defaultMode = 'collaborate', athenaService = createAthenaService() }: ChatModeSelectorProps) {
   const [selected, setSelected] = useState<ChatMode>(defaultMode)
 
   const handleChange = (mode: ChatMode) => {
     setSelected(mode)
+    athenaService.setMode(mode).catch(() => {})
     onSelect(mode)
   }
 

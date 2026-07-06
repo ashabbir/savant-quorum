@@ -8,6 +8,7 @@ import { BottomBar } from "./components/BottomBar";
 import StartupScreen from './components/StartupScreen';
 import { LoginScreen } from "./components/LoginScreen";
 import { clearStoredApiKey, getStoredApiKey, setStoredApiKey } from "./services/auth";
+import { createAthenaService } from "./services/athenaService";
 import mermaid from "mermaid";
 import { sanitizeMermaidCode } from "./utils/mermaidSanitizer";
 import { Toaster } from "./components/ui/sonner";
@@ -50,6 +51,7 @@ export default function App() {
   const [sessionSummary, setSessionSummary] = useState<string>("");
   const midRunBuffer = useRef<string[]>([]);
   const resolvedAbilitiesCache = useRef<Record<string, string>>({});
+  const athenaServiceRef = useRef(createAthenaService());
   
   const [sessions, setSessions] = useState<any[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -486,14 +488,6 @@ export default function App() {
       .filter((agent: AgentConfig) => agent.id && agent.name && agent.persona);
   }
 
-  const formatAgentRosterForPrompt = (agents: AgentConfig[]) => {
-    return agents.map(agent => {
-      const tags = agent.tags?.length ? ` tags=${agent.tags.join(", ")}` : "";
-      const prompt = agent.prompt ? ` instruction="${agent.prompt}"` : "";
-      return `- id="${agent.id}" name="${agent.name}" persona="${agent.persona}"${tags}${prompt}`;
-    }).join("\n");
-  }
-
   const resolveEngagedAgents = (requestedAgents: unknown, roster: AgentConfig[]) => {
     const requested = Array.isArray(requestedAgents) ? requestedAgents : [];
     const seen = new Set<string>();
@@ -538,7 +532,7 @@ export default function App() {
         const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('AGENT_TIMEOUT')), timeoutMs));
         
         const responseRaw = await Promise.race([
-          window.agents.run(adapterName, model, prompt),
+          window.system.runAgentViaGateway({ provider: adapterName, model, prompt }),
           timeoutPromise
         ]);
 
@@ -926,37 +920,14 @@ export default function App() {
           const allowDeepSearch = sessionMetadata.allowDeepSearch === true;
           const agentTimeout = allowDeepSearch ? 300000 : 90000;
           
-          const prompt = `
-            You are ATHENA, the MASTER_CONTROL_MODERATOR. The operator has bypassed the Swarm structure and is chatting with you directly.
-            ${fallbackWarning}
-
-            Directive from operator: ${cleanQuery}${filesContext}
-            ${historyContext}
-
-            [NON-NEGOTIABLE INTENT DIRECTIVE]
-            The identified user intent is: "${cleanQuery}" (Direct chat). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
-
-            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
-
-            CORE MANDATE: Communicate ONLY FACTS.
-            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-            - Mark every verified fact with a superscript marker like [FACT:1].
-            - Answer with focused Markdown.
-
-            YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
-
-            ## 5. KEY DETAILS & EVIDENCE
-            Present the facts verified in this response using a Markdown table formatted exactly like this:
-            | Fact ID | Detail |
-            | --- | --- |
-            | [FACT:1] | [Fact detail] |
-
-            ## 6. FACT_GLOSSARY
-            List the verification sources for each fact in a table formatted exactly like this:
-            | Fact ID | Detail & Verification Source |
-            | --- | --- |
-            | [FACT:1] | [Verification source details] |
-          `;
+          const prompt = athenaServiceRef.current.buildDirectAthenaPrompt({
+            query: cleanQuery,
+            historyContext,
+            filesContext,
+            sessionSummary,
+            fallbackWarning,
+            allowDeepSearch,
+          });
 
           const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
           const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
@@ -1040,60 +1011,33 @@ export default function App() {
           addThinking(agentLabel, `RESOLVING_ABILITIES: ${agent.persona}...`);
           
           let resolvedInstructions = "";
-          if (typeof window.system?.callMcpTool === 'function') {
-            try {
-              const res = await window.system.callMcpTool('savant-abilities', 'resolve_abilities', { 
-                persona: agent.persona, 
-                tags: agent.tags || [] 
-              });
-              resolvedInstructions = res.content?.[0]?.text || "";
-              if (resolvedInstructions) {
-                addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response');
-              }
-            } catch (e: any) {
-              addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
+          try {
+            resolvedInstructions = await athenaServiceRef.current.resolveAbilities(agent);
+            if (resolvedInstructions) {
+              addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response');
             }
+          } catch (e: any) {
+            addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
           }
 
           const allowDeepSearch = sessionMetadata.allowDeepSearch === true;
           const agentTimeout = allowDeepSearch ? 300000 : 90000;
 
-          const prompt = `
-            ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
-            ${agent.prompt ? `Standing instruction: ${agent.prompt}` : ""}
-            ${fallbackWarning}
+          const prompt = athenaServiceRef.current.buildDirectAgentPrompt({
+            agent,
+            query: cleanQuery,
+            historyContext,
+            filesContext,
+            sessionSummary,
+            fallbackWarning,
+            allowDeepSearch,
+            resolvedInstructions,
+          }) + `
 
-            Directive from operator: ${cleanQuery}${filesContext}
-            ${historyContext}
-
-            [NON-NEGOTIABLE INTENT DIRECTIVE]
-            The identified user intent is: "${cleanQuery}" (Direct chat with ${agentLabel}). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
-
-            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
-
-            CORE MANDATE: Communicate ONLY FACTS. 
-            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-            - Mark every verified fact with a superscript marker like [FACT:1].
-            - Answer with focused Markdown. Stay inside your persona and only solve the task.
-
-            YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
-
-            ## 5. KEY DETAILS & EVIDENCE
-            Present the facts verified in this response using a Markdown table formatted exactly like this:
-            | Fact ID | Detail |
-            | --- | --- |
-            | [FACT:1] | [Fact detail] |
-
-            ## 6. FACT_GLOSSARY
-            List the verification sources for each fact in a table formatted exactly like this:
-            | Fact ID | Detail & Verification Source |
-            | --- | --- |
-            | [FACT:1] | [Verification source details] |
-
-            ANTI-LOOP & PERFORMANCE POLICY:
-            - DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
-            - Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
-          `;
+ANTI-LOOP & PERFORMANCE POLICY:
+- DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
+- Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
+`;
 
           const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
           const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
@@ -1167,7 +1111,7 @@ export default function App() {
     let hasCrossChecked = false;
     let latestDecision: any = null;
     let finalDirResponse = "";
-    const agentRosterPrompt = formatAgentRosterForPrompt(agentRoster);
+    const agentRosterPrompt = athenaServiceRef.current.buildAgentRosterPrompt(agentRoster);
 
     try {
       while (currentTurn <= maxTurns && !isFinalized) {
@@ -1192,62 +1136,54 @@ export default function App() {
         
         const midRunContext = allAddedInfo ? `\n\nADDED_USER_INTEL_DURING_RUN:\n${allAddedInfo}` : "";
 
-        const moderatorDecisionPrompt = `
-          You are ATHENA, the MASTER_CONTROL_MODERATOR in a high-security cyber-environment.
-          
-          ROLE DESCRIPTION:
-          You are the Gatekeeper. You must first analyze the user request to find the ask intent, formulate a clear reasoning goal, and figure out the best agents for the job.
+        const moderatorDecisionPrompt = athenaServiceRef.current.buildModeratorDecisionPrompt({
+          userQuery,
+          historyContext,
+          turnContext,
+          midRunContext,
+          sessionSummary,
+          filesContext,
+          fallbackWarning,
+          currentTurn,
+          maxTurns,
+          agentRosterPrompt,
+        }) + `
 
-          ${historyContext}
-          ${turnContext}
-          ${midRunContext}
-          ${fallbackWarning}
-          CURRENT_SESSION_SUMMARY: "${sessionSummary || "No previous summary available."}"
-          
-          User directive: "${userQuery}${filesContext}"
-          Current Reasoning Turn: ${currentTurn} of ${maxTurns}
-          Available agents:
-          ${agentRosterPrompt}
+STRATEGY FOR THIS TURN:
+- If this is Turn 2, you MUST prioritize "action": "finalize" unless the agents have provided critically contradicting information that makes a decision impossible.
+- If agents AGREE or provide complementary info, merge their findings and finalize.
+- If you are NOT SURE about any agent claim, you MUST QUESTION that agent directly if you decide to engage for one more turn (only if absolutely necessary).
+- Limit agent exploration: Do NOT allow agents to perform deep search / deep exploration unless you explicitly prompt them to (default should be false).
+- Control agent-to-agent validation: Specify target cross_checks explicitly so agents don't engage in excessive all-to-all cross-checks.
 
-          CORE MANDATE: Communicate ONLY FACTS to the user.
-          1. Anything that isn't a verified fact must remain in your "thought" or "whisper".
-          2. Every fact in your "direct_response" MUST be marked with a superscript index (e.g., Fact[1]).
+AMBIGUITY & UNCERTAINTY:
+- If the user's request or agent responses are AMBIGUOUS, you MUST ask the agents (or user) for more questions/clarification.
 
-          STRATEGY FOR THIS TURN:
-          - If this is Turn 2, you MUST prioritize "action": "finalize" unless the agents have provided critically contradicting information that makes a decision impossible.
-          - If agents AGREE or provide complementary info, merge their findings and finalize.
-          - If you are NOT SURE about any agent claim, you MUST QUESTION that agent directly if you decide to engage for one more turn (only if absolutely necessary).
-          - Limit agent exploration: Do NOT allow agents to perform deep search / deep exploration unless you explicitly prompt them to (default should be false).
-          - Control agent-to-agent validation: Specify target cross_checks explicitly so agents don't engage in excessive all-to-all cross-checks.
+VISUALIZATION REQUIREMENT: Include Mermaid diagrams and visuals as much as possible in your direct_response.
 
-          AMBIGUITY & UNCERTAINTY:
-          - If the user's request or agent responses are AMBIGUOUS, you MUST ask the agents (or user) for more questions/clarification.
+HUMAN_IN_THE_LOOP: If "ADDED_USER_INTEL_DURING_RUN" is present, prioritize this context.
 
-          VISUALIZATION REQUIREMENT: Include Mermaid diagrams and visuals as much as possible in your direct_response.
-          
-          HUMAN_IN_THE_LOOP: If "ADDED_USER_INTEL_DURING_RUN" is present, prioritize this context.
-          
-          Decide which configured agents can materially help. Select by agent id only.
-          Output ONLY valid JSON.
-          {
-            "thought": "description of intent and reasoning path",
-            "intent": "identified user ask intent",
-            "goal": "reasoning goal of this swarm run",
-            "action": "engage" | "finalize",
-            "engage": ["agent_id"],
-            "queries": { 
-              "agent_id": {
-                "task": "specific task for that agent. Instruct agent to identify and mark facts with [FACT:index]",
-                "context_strategy": "full" | "summary",
-                "allow_deep_search": true | false
-              }
-            },
-            "cross_checks": [
-              { "from": "agent_id", "to": "agent_id", "reason": "why they are validating this output" }
-            ],
-            "direct_response": "... (FACTS ONLY. Mark with Fact[index]. EXPLAIN results, do not just summarize.)"
-          }
-        `
+Decide which configured agents can materially help. Select by agent id only.
+Output ONLY valid JSON.
+{
+  "thought": "description of intent and reasoning path",
+  "intent": "identified user ask intent",
+  "goal": "reasoning goal of this swarm run",
+  "action": "engage" | "finalize",
+  "engage": ["agent_id"],
+  "queries": {
+    "agent_id": {
+      "task": "specific task for that agent. Instruct agent to identify and mark facts with [FACT:index]",
+      "context_strategy": "full" | "summary",
+      "allow_deep_search": true | false
+    }
+  },
+  "cross_checks": [
+    { "from": "agent_id", "to": "agent_id", "reason": "why they are validating this output" }
+  ],
+  "direct_response": "... (FACTS ONLY. Mark with Fact[index]. EXPLAIN results, do not just summarize.)"
+}
+`;
         
         const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Athena')
         
@@ -1333,24 +1269,13 @@ export default function App() {
               return { content: [{ text: resolvedAbilitiesCache.current[cacheKey] }] };
             }
 
-            if (typeof window.system.callMcpTool !== 'function') {
-              addThinking(agentLabel, `MCP_BRIDGE_UNAVAILABLE: Falling back to local persona.`);
-              return { content: [] };
-            }
             try {
-              const res = await window.system.callMcpTool('savant-abilities', 'resolve_abilities', { 
-                persona: agent.persona, 
-                tags: agent.tags || [] 
-              });
-              const text = res.content?.[0]?.text;
+              const text = await athenaServiceRef.current.resolveAbilities(agent);
               if (text) {
                 resolvedAbilitiesCache.current[cacheKey] = text;
-                const manifestHash = res.manifest?.hash?.substring(0, 12) || 'n/a';
-                const appliedRules = res.manifest?.applied?.rules?.length || 0;
-                const appliedPolicies = res.manifest?.applied?.policies?.length || 0;
-                addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona} [${appliedRules} rules, ${appliedPolicies} policies, hash:${manifestHash}]`, 'mcp_response')
+                addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response')
               }
-              return res;
+              return { content: [{ text }] };
             } catch (e: any) {
               addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
               return { content: [] };
@@ -1367,30 +1292,23 @@ export default function App() {
 
           const agentTimeout = allowDeepSearch ? 300000 : 90000;
 
-          const prompt = `
-            ${resolvedInstructions || `You are ${agentLabel}, a configured Quorum agent.\nPersona: ${agent.persona}`}
-            ${agent.prompt ? `Standing instruction: ${agent.prompt}` : ""}
-            ${fallbackWarning}
+          const prompt = athenaServiceRef.current.buildDirectAgentPrompt({
+            agent,
+            query,
+            historyContext: `${effectiveContext}${midRunContext}`,
+            sessionSummary,
+            fallbackWarning,
+            allowDeepSearch,
+            resolvedInstructions,
+            filesContext,
+          }) + `
 
-            Task from moderator: ${query}
-            ${effectiveContext}
-            ${midRunContext}
+Task from moderator: ${query}
 
-            [NON-NEGOTIABLE INTENT DIRECTIVE]
-            The identified user intent is: "${latestDecision?.intent || query}". This is a non-negotiable instruction that must be strictly followed by all agents. You are not permitted to negotiate, modify, or bypass this intent.
-
-            DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
-
-            CORE MANDATE: Communicate ONLY FACTS. 
-            - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-            - Mark every verified fact with a superscript marker like Fact[1].
-            - Explain how/where each fact was verified.
-            - Answer with focused Markdown. Stay inside your persona and only solve the delegated task.
-
-            ANTI-LOOP & PERFORMANCE POLICY:
-            - DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
-            - Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
-          `;
+ANTI-LOOP & PERFORMANCE POLICY:
+- DO NOT engage in repetitive tool calls, lookup loops, or recursive file/code checks. If a search or tool command yields duplicate or minimal new data, stop immediately.
+- Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
+`;
 
           try {
             const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
@@ -1498,36 +1416,30 @@ export default function App() {
         const intentToUse = latestDecision?.intent || "General reasoning task";
         const engagedList = latestDecision?.engage || [];
         
-        const summaryPrompt = `
-          You are ATHENA, the MASTER_CONTROL_MODERATOR. A reasoning run has just completed.
-          ${fallbackWarning}
-          
-          CURRENT_SESSION_SUMMARY:
-          "${sessionSummary || "No previous summary available."}"
-          
-          LATEST_TURN_DATA:
-          - User Asked: "${userQuery}"
-          - Intent: "${intentToUse}"
-          - Engaged Agents: ${JSON.stringify(engagedList)}
-          - Agent Responses: ${JSON.stringify(accumulatedAgentContext)}
-          - Final Output Sent to User: "${finalDirResponse || "Athena is generating a final synthesized report based on the agent responses"}"
-          
-          TASK:
-          You MUST append a summary of the latest turn to the CURRENT_SESSION_SUMMARY.
-          The summary of this latest turn MUST follow this exact format:
+        const summaryPrompt = athenaServiceRef.current.buildSummaryPrompt({
+          sessionSummary,
+          intent: intentToUse,
+          userQuery,
+          engagedAgents: engagedList,
+          finalOutput: finalDirResponse || "Athena is generating a final synthesized report based on the agent responses",
+          agentResponses: accumulatedAgentContext,
+          fallbackWarning,
+        }) + `
 
-          - User asked: "[Brief summary of what the user asked]"
-          - Athena: intent is "${intentToUse}" and engaged ${engagedList.length > 0 ? engagedList.join(', ') : 'Athena (direct/moderator)'}
-          ${accumulatedAgentContext.map(r => `- ${r.agentName}: "[Extracted key findings/message from this agent]"`).join('\n          ')}
-          - Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
+The summary of this latest turn MUST follow this exact format:
 
-          IMPORTANT RULES:
-          1. Do NOT lose key data, decisions, or facts from the agents' messages.
-          2. Keep the user's question, intent, and clean extracted messages in focus.
-          3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
-          4. If there is no previous summary, start directly with the new turn summary.
-          5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
-        `;
+- User asked: "[Brief summary of what the user asked]"
+- Athena: intent is "${intentToUse}" and engaged ${engagedList.length > 0 ? engagedList.join(', ') : 'Athena (direct/moderator)'}
+${accumulatedAgentContext.map(r => `- ${r.agentName}: "[Extracted key findings/message from this agent]"`).join('\n')}
+- Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
+
+IMPORTANT RULES:
+1. Do NOT lose key data, decisions, or facts from the agents' messages.
+2. Keep the user's question, intent, and clean extracted messages in focus.
+3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
+4. If there is no previous summary, start directly with the new turn summary.
+5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
+`;
 
         if (accumulatedAgentContext.length > 0) {
           addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');

@@ -35,5 +35,12 @@ interface Window {
     }>
     getDbStatus: () => Promise<string>
     callMcpTool: (serverName: string, toolName: string, args: any) => Promise<any>
+    saveAthenaThread: (thread: any) => Promise<boolean>
+    getAthenaThreads: (sessionId?: string) => Promise<any[]>
+    saveAthenaMessage: (message: any) => Promise<boolean>
+    getAthenaMessages: (threadId: string) => Promise<any[]>
+    saveAthenaRun: (run: any) => Promise<boolean>
+    getAthenaRuns: (threadId?: string) => Promise<any[]>
+    runAgentViaGateway: (payload: { provider: string; model: string; prompt: string }) => Promise<string>
   }
 }

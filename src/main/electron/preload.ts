@@ -41,4 +41,11 @@ contextBridge.exposeInMainWorld('system', {
   saveSetting: (key: string, value: any) => ipcRenderer.invoke('save-setting', { key, value }),
   getDbStatus: () => ipcRenderer.invoke('get-db-status'),
   callMcpTool: (serverName: string, toolName: string, args: any) => ipcRenderer.invoke('call-mcp-tool', { serverName, toolName, args }),
+  saveAthenaThread: (thread: any) => ipcRenderer.invoke('save-athena-thread', thread),
+  getAthenaThreads: (sessionId?: string) => ipcRenderer.invoke('get-athena-threads', sessionId),
+  saveAthenaMessage: (message: any) => ipcRenderer.invoke('save-athena-message', message),
+  getAthenaMessages: (threadId: string) => ipcRenderer.invoke('get-athena-messages', threadId),
+  saveAthenaRun: (run: any) => ipcRenderer.invoke('save-athena-run', run),
+  getAthenaRuns: (threadId?: string) => ipcRenderer.invoke('get-athena-runs', threadId),
+  runAgentViaGateway: (payload: any) => ipcRenderer.invoke('run-agent-via-gateway', payload),
 })
