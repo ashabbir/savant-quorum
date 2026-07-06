@@ -71,6 +71,13 @@ if (!window.system) {
     }),
     getDbStatus: async () => 'connected',
     callMcpTool: async () => ({ content: [] }),
+    saveAthenaThread: async () => true,
+    getAthenaThreads: async () => [],
+    saveAthenaMessage: async () => true,
+    getAthenaMessages: async () => [],
+    saveAthenaRun: async () => true,
+    getAthenaRuns: async () => [],
+    runAgentViaGateway: async (_payload: any) => 'Local browser preview mode. Athena gateway bridge is unavailable.',
   }
 }
 

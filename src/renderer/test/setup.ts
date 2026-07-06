@@ -36,6 +36,14 @@ const mockSystem = {
   saveSetting: vi.fn().mockResolvedValue(true),
   listProviders: vi.fn().mockResolvedValue({ source: 'gateway', providers: [] }),
   getDbStatus: vi.fn().mockResolvedValue('connected'),
+  callMcpTool: vi.fn().mockResolvedValue({ content: [] }),
+  saveAthenaThread: vi.fn().mockResolvedValue(true),
+  getAthenaThreads: vi.fn().mockResolvedValue([]),
+  saveAthenaMessage: vi.fn().mockResolvedValue(true),
+  getAthenaMessages: vi.fn().mockResolvedValue([]),
+  saveAthenaRun: vi.fn().mockResolvedValue(true),
+  getAthenaRuns: vi.fn().mockResolvedValue([]),
+  runAgentViaGateway: vi.fn().mockResolvedValue('Mock gateway response'),
 }
 
 const localStorageMock = (() => {

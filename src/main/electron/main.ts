@@ -66,6 +66,41 @@ async function initDb() {
         key TEXT PRIMARY KEY,
         value TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS athena_threads (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        title TEXT,
+        status TEXT,
+        metadata TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      );
+
+      CREATE TABLE IF NOT EXISTS athena_messages (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT,
+        role TEXT,
+        content TEXT,
+        provider TEXT,
+        model TEXT,
+        timestamp INTEGER,
+        metadata TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS athena_runs (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT,
+        provider TEXT,
+        model TEXT,
+        prompt TEXT,
+        status TEXT,
+        response TEXT,
+        error TEXT,
+        metadata TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      );
     `)
 
     // Migration block for existing messages table
@@ -257,67 +292,80 @@ app.whenReady().then(async () => {
 
 ipcMain.handle('run-agent', async (_event, { provider, model, prompt }) => {
   try {
-    let gatewayUrl = GATEWAY_URL;
-    let apiKey = '';
-    if (db) {
-       try {
-         const gwRow = db.prepare("SELECT value FROM settings WHERE key = 'gateway:config'").get();
-         if (gwRow) {
-           const parsed = JSON.parse(gwRow.value);
-           if (parsed?.url) gatewayUrl = parsed.url;
-         }
-         const akRow = db.prepare("SELECT value FROM settings WHERE key = 'user:apiKey'").get();
-         if (akRow) apiKey = akRow.value;
-       } catch (e) {}
-    }
-    
-    const baseUrl = gatewayUrl.replace(/\/$/, '');
-    const runRes = await fetch(`${baseUrl}/runs`, {
-       method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-         ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
-       },
-       body: JSON.stringify({
-         prompt,
-         chain: [{ provider, model }]
-       })
-    });
-    
-    if (!runRes.ok) {
-       const text = await runRes.text();
-       return `Error: Gateway returned ${runRes.status} - ${text}`;
-    }
-    
-    const { id } = await runRes.json();
-    
-    let pollDelay = 25;
-    while (true) {
-      await new Promise(r => setTimeout(r, pollDelay));
-      if (pollDelay < 100) pollDelay += 15;
-      
-      const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
-        headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
-      });
-      if (!pollRes.ok) continue;
-      const run = await pollRes.json();
-      
-      if (run.status === 'complete') {
-        const responseText = run.result?.response || '';
-        // If the gateway CLI execution succeeded but the output is actually a critical error/warning
-        if (/ModelNotFoundError|An unexpected critical error occurred|Error when talking to API/i.test(responseText) || responseText.trim().startsWith('Warning:')) {
-           return `Error: Gateway execution failed - ${responseText.substring(0, 100)}`;
-        }
-        return responseText;
-      }
-      if (run.status === 'error' || run.status === 'killed') {
-        return `Error: Gateway run failed with status ${run.status} - ${run.error || 'Unknown error'}`;
-      }
-    }
+    return await runAgentViaGateway({ provider, model, prompt })
   } catch (error: any) {
     return `Error: ${error.message}`;
   }
 })
+
+async function runAgentViaGateway(payload: { provider: string; model: string; prompt: string }) {
+  let gatewayUrl = GATEWAY_URL;
+  let apiKey = '';
+  if (db) {
+    try {
+      const gwRow = db.prepare("SELECT value FROM settings WHERE key = 'gateway:config'").get();
+      if (gwRow) {
+        const parsed = JSON.parse(gwRow.value);
+        if (parsed?.url) gatewayUrl = parsed.url;
+      }
+      const akRow = db.prepare("SELECT value FROM settings WHERE key = 'user:apiKey'").get();
+      if (akRow) apiKey = akRow.value;
+    } catch (e) {}
+  }
+
+  const baseUrl = gatewayUrl.replace(/\/$/, '');
+  const runRes = await fetch(`${baseUrl}/runs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+    },
+    body: JSON.stringify({
+      prompt: payload.prompt,
+      chain: [{ provider: payload.provider, model: payload.model }]
+    })
+  });
+
+  if (!runRes.ok) {
+    const text = await runRes.text();
+    throw new Error(`Gateway returned ${runRes.status} - ${text}`);
+  }
+
+  const { id } = await runRes.json();
+  if (db) {
+    db.prepare(`
+      INSERT INTO athena_runs (id, thread_id, provider, model, prompt, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at
+    `).run(id, null, payload.provider, payload.model, payload.prompt, 'running', Date.now(), Date.now());
+  }
+
+  let pollDelay = 25;
+  while (true) {
+    await new Promise(r => setTimeout(r, pollDelay));
+    if (pollDelay < 100) pollDelay += 15;
+
+    const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
+      headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+    });
+    if (!pollRes.ok) continue;
+    const run = await pollRes.json();
+
+    if (run.status === 'complete') {
+      const responseText = run.result?.response || '';
+      if (db) {
+        db.prepare(`UPDATE athena_runs SET status = ?, response = ?, updated_at = ? WHERE id = ?`).run('complete', responseText, Date.now(), id);
+      }
+      return responseText;
+    }
+    if (run.status === 'error' || run.status === 'killed') {
+      if (db) {
+        db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(run.status, run.error || 'Unknown error', Date.now(), id);
+      }
+      throw new Error(`Gateway run failed with status ${run.status} - ${run.error || 'Unknown error'}`);
+    }
+  }
+}
 
 ipcMain.handle('list-sessions', async () => {
   if (!db) return []
@@ -559,4 +607,73 @@ ipcMain.handle('get-db-status', async () => {
   } catch (e) {
     return 'offline'
   }
+})
+
+ipcMain.handle('run-agent-via-gateway', async (_event, payload) => {
+  return runAgentViaGateway(payload)
+})
+
+ipcMain.handle('save-athena-thread', async (_event, thread) => {
+  if (!db || !thread?.id) return false
+  const now = Date.now()
+  try {
+    db.prepare(`
+      INSERT INTO athena_threads (id, session_id, title, status, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET session_id=excluded.session_id, title=excluded.title, status=excluded.status, metadata=excluded.metadata, updated_at=excluded.updated_at
+    `).run(thread.id, thread.sessionId || null, thread.title || 'Athena Thread', thread.status || 'active', thread.metadata ? JSON.stringify(thread.metadata) : null, thread.createdAt || now, now)
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('get-athena-threads', async (_event, sessionId?: string) => {
+  if (!db) return []
+  const rows = sessionId
+    ? db.prepare('SELECT * FROM athena_threads WHERE session_id = ? ORDER BY updated_at DESC').all(sessionId)
+    : db.prepare('SELECT * FROM athena_threads ORDER BY updated_at DESC').all()
+  return rows.map((row: any) => ({ ...row, metadata: row.metadata ? JSON.parse(row.metadata) : undefined }))
+})
+
+ipcMain.handle('save-athena-message', async (_event, message) => {
+  if (!db || !message?.id || !message?.threadId) return false
+  try {
+    db.prepare(`
+      INSERT INTO athena_messages (id, thread_id, role, content, provider, model, timestamp, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET thread_id=excluded.thread_id, role=excluded.role, content=excluded.content, provider=excluded.provider, model=excluded.model, timestamp=excluded.timestamp, metadata=excluded.metadata
+    `).run(message.id, message.threadId, message.role, message.content, message.provider || null, message.model || null, message.timestamp || Date.now(), message.metadata ? JSON.stringify(message.metadata) : null)
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('get-athena-messages', async (_event, threadId: string) => {
+  if (!db) return []
+  return db.prepare('SELECT * FROM athena_messages WHERE thread_id = ? ORDER BY timestamp ASC').all(threadId)
+})
+
+ipcMain.handle('save-athena-run', async (_event, run) => {
+  if (!db || !run?.id) return false
+  try {
+    const now = Date.now()
+    db.prepare(`
+      INSERT INTO athena_runs (id, thread_id, provider, model, prompt, status, response, error, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET thread_id=excluded.thread_id, provider=excluded.provider, model=excluded.model, prompt=excluded.prompt, status=excluded.status, response=excluded.response, error=excluded.error, metadata=excluded.metadata, updated_at=excluded.updated_at
+    `).run(run.id, run.threadId || null, run.provider || null, run.model || null, run.prompt || null, run.status || 'queued', run.response || null, run.error || null, run.metadata ? JSON.stringify(run.metadata) : null, run.createdAt || now, now)
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('get-athena-runs', async (_event, threadId?: string) => {
+  if (!db) return []
+  const rows = threadId
+    ? db.prepare('SELECT * FROM athena_runs WHERE thread_id = ? ORDER BY updated_at DESC').all(threadId)
+    : db.prepare('SELECT * FROM athena_runs ORDER BY updated_at DESC').all()
+  return rows.map((row: any) => ({ ...row, metadata: row.metadata ? JSON.parse(row.metadata) : undefined }))
 })
