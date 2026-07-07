@@ -1,4 +1,6 @@
 import type { ChatMode, ChatModeService } from "./chatMode";
+import { getChatExecutionPolicy } from "./chatExecutionPolicy";
+import { CITATION_CONTRACT_PROMPT } from "./citationContract";
 
 export interface AthenaAgentSpec {
   id: string;
@@ -12,6 +14,7 @@ export interface AthenaRunPayload {
   provider: string;
   model: string;
   prompt: string;
+  timeoutMs?: number;
 }
 
 export interface AthenaThreadRecord {
@@ -114,6 +117,7 @@ export function createAthenaService(deps: { chatModeService?: ChatModeService; s
         .join("\n");
     },
     buildDirectAthenaPrompt({ query, historyContext, filesContext, sessionSummary, fallbackWarning, allowDeepSearch }) {
+      const executionPolicy = getChatExecutionPolicy(allowDeepSearch === true);
       return `
 You are ATHENA, the MASTER_CONTROL_MODERATOR. The operator has bypassed the Swarm structure and is chatting with you directly.
 ${fallbackWarning || ""}
@@ -124,32 +128,20 @@ ${historyContext}
 [NON-NEGOTIABLE INTENT DIRECTIVE]
 The identified user intent is: "${query}" (Direct chat). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
 
-DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
+SEARCH_EXECUTION_POLICY: ${executionPolicy.promptDirective}
 
 CURRENT_SESSION_SUMMARY:
 "${sessionSummary || "No previous summary available."}"
 
 CORE MANDATE: Communicate ONLY FACTS.
 - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-- Mark every verified fact with a superscript marker like [FACT:1].
 - Answer with focused Markdown.
 
-YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
-
-## 5. KEY DETAILS & EVIDENCE
-Present the facts verified in this response using a Markdown table formatted exactly like this:
-| Fact ID | Detail |
-| --- | --- |
-| [FACT:1] | [Fact detail] |
-
-## 6. FACT_GLOSSARY
-List the verification sources for each fact in a table formatted exactly like this:
-| Fact ID | Detail & Verification Source |
-| --- | --- |
-| [FACT:1] | [Verification source details] |
+${CITATION_CONTRACT_PROMPT}
 `;
     },
     buildDirectAgentPrompt({ agent, query, historyContext, filesContext, sessionSummary, fallbackWarning, allowDeepSearch, resolvedInstructions }) {
+      const executionPolicy = getChatExecutionPolicy(allowDeepSearch === true);
       return `
 ${resolvedInstructions || `You are ${agent.name}, a configured Quorum agent.\nPersona: ${agent.persona}`}
 ${agent.prompt ? `Standing instruction: ${agent.prompt}` : ""}
@@ -161,29 +153,16 @@ ${historyContext}
 [NON-NEGOTIABLE INTENT DIRECTIVE]
 The identified user intent is: "${query}" (Direct chat with ${agent.name}). This is a non-negotiable instruction that must be strictly followed. You are not permitted to negotiate, modify, or bypass this intent.
 
-DEEP_SEARCH_MODE: ${allowDeepSearch ? "ENABLED (You are permitted and requested to run deep workspace queries)" : "DISABLED (DO NOT perform deep search or run costly recursive checks unless explicitly requested)"}
+SEARCH_EXECUTION_POLICY: ${executionPolicy.promptDirective}
 
 CURRENT_SESSION_SUMMARY:
 "${sessionSummary || "No previous summary available."}"
 
 CORE MANDATE: Communicate ONLY FACTS.
 - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-- Mark every verified fact with a superscript marker like [FACT:1].
 - Answer with focused Markdown. Stay inside your persona and only solve the task.
 
-YOU MUST ALWAYS APPEND A FACT CHECK AND EVIDENCE GLOSSARY AT THE END:
-
-## 5. KEY DETAILS & EVIDENCE
-Present the facts verified in this response using a Markdown table formatted exactly like this:
-| Fact ID | Detail |
-| --- | --- |
-| [FACT:1] | [Fact detail] |
-
-## 6. FACT_GLOSSARY
-List the verification sources for each fact in a table formatted exactly like this:
-| Fact ID | Detail & Verification Source |
-| --- | --- |
-| [FACT:1] | [Verification source details] |
+${CITATION_CONTRACT_PROMPT}
 `;
     },
     buildModeratorDecisionPrompt({ userQuery, historyContext, turnContext, midRunContext, sessionSummary, filesContext, fallbackWarning, currentTurn, maxTurns, agentRosterPrompt }) {
@@ -206,7 +185,8 @@ ${agentRosterPrompt}
 
 CORE MANDATE: Communicate ONLY FACTS to the user.
 1. Anything that isn't a verified fact must remain in your "thought" or "whisper".
-2. Every fact in your "direct_response" MUST be marked with a superscript index (e.g., Fact[1]).
+2. Every direct_response must satisfy this contract:
+${CITATION_CONTRACT_PROMPT}
 `;
     },
     buildSummaryPrompt({ sessionSummary, intent, userQuery, engagedAgents, finalOutput, agentResponses, fallbackWarning }) {

@@ -535,28 +535,23 @@ export function ChatArea({
     const text = input.trim();
     if (!text) return;
 
-    // Direct route checks
-    let finalizedText = text;
-    if (selectedAgent !== "ALL" && !text.startsWith("@")) {
-      finalizedText = `@${selectedAgent.toLowerCase()} ${text}`;
-    }
-
-    // Intercept slash commands
-    if (finalizedText.startsWith("/clear")) {
+    // Intercept slash commands (case-insensitive and checked against original raw input before adding agent prefix)
+    const lowerText = text.toLowerCase();
+    if (lowerText.startsWith("/clear")) {
       if (onClearSession) onClearSession();
       setInput("");
       return;
     }
 
-    if (finalizedText.startsWith("/summarize")) {
+    if (lowerText.startsWith("/summarize")) {
       if (onSummarize) onSummarize();
       setInput("");
       return;
     }
 
-    if (finalizedText.startsWith("/jira")) {
+    if (lowerText.startsWith("/jira")) {
       // Parse ticket parameters: /jira [title] --priority [high/medium/low]
-      const cleanCmd = finalizedText.replace("/jira", "").trim();
+      const cleanCmd = text.replace(/\/jira/i, "").trim();
       const priorityMatch = cleanCmd.match(/--priority\s+(\w+)/i);
       const priority = priorityMatch ? priorityMatch[1].toLowerCase() : "medium";
       const title = cleanCmd.replace(/--priority\s+\w+/i, "").trim() || "Manual Ticket from Swarm Workspace";
@@ -589,6 +584,12 @@ export function ChatArea({
         onSend(`[SYSTEM_ERROR] Failed to create Jira ticket: ${e.message}`);
       }
       return;
+    }
+
+    // Direct route checks
+    let finalizedText = text;
+    if (selectedAgent !== "ALL" && !text.startsWith("@")) {
+      finalizedText = `@${selectedAgent.toLowerCase()} ${text}`;
     }
 
     onSend(finalizedText);
