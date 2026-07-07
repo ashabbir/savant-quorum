@@ -41,6 +41,6 @@ interface Window {
     getAthenaMessages: (threadId: string) => Promise<any[]>
     saveAthenaRun: (run: any) => Promise<boolean>
     getAthenaRuns: (threadId?: string) => Promise<any[]>
-    runAgentViaGateway: (payload: { provider: string; model: string; prompt: string }) => Promise<string>
+    runAgentViaGateway: (payload: { provider: string; model: string; prompt: string; timeoutMs?: number }) => Promise<string>
   }
 }

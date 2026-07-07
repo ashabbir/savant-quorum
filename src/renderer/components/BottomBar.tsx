@@ -20,11 +20,13 @@ export function BottomBar({
   folders = [],
   sessions = [],
   settings,
+  activeProviderIndex = 0,
 }: {
   sessionTitle?: string;
   folders?: Array<{ id: string }>;
   sessions?: Array<{ id: string }>;
   settings?: Record<string, any>;
+  activeProviderIndex?: number;
 }) {
   const [userName, setUserName] = useState("operator");
   const [gatewayStatus, setGatewayStatus] = useState<"online" | "offline">("offline");
@@ -266,11 +268,20 @@ export function BottomBar({
             const providerChain = settings?.["provider:chain"] || [
               { provider: 'gemini', model: 'gemini-2.0-flash' }
             ];
-            const activeProvider = providerChain[0] || { provider: 'gemini', model: 'gemini-2.0-flash' };
             return (
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 border border-[var(--border)] text-[9px] font-bold font-mono tracking-wider text-muted-foreground rounded-sm bg-[rgba(255,255,255,0.02)]">
-                <span style={{ color: "var(--primary)" }} className="opacity-80">ACTIVE ENGINE:</span>
-                <span className="opacity-60">{activeProvider.provider.toUpperCase()} ({activeProvider.model.toUpperCase()})</span>
+                <span style={{ color: "var(--primary)" }} className="opacity-80">ACTIVE CHAIN:</span>
+                {providerChain.map((p: any, idx: number) => {
+                  const isActive = idx === activeProviderIndex;
+                  return (
+                    <span key={idx} className="flex items-center gap-1">
+                      {idx > 0 && <span className="opacity-40">→</span>}
+                      <span className={`px-1 rounded-sm ${isActive ? 'bg-[var(--primary)] text-black font-extrabold' : 'opacity-60'}`}>
+                        {p.provider.toUpperCase()} ({p.model.toUpperCase()})
+                      </span>
+                    </span>
+                  );
+                })}
               </div>
             );
           })()}

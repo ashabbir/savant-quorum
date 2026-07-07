@@ -3,6 +3,12 @@
  * Orchestrates 3-round debate with multiple agents
  * Each round: collect responses, build context, pass to moderator for evaluation
  */
+import {
+  buildCitationCorrectionPrompt,
+  buildWithheldCitationResponse,
+  CITATION_CONTRACT_PROMPT,
+  validateCitationContract,
+} from './citationContract'
 
 export interface DebateRound {
   roundNumber: 1 | 2 | 3
@@ -84,8 +90,18 @@ export function createDebateOrchestrator(deps: DebateOrchestratorDeps = {}): Deb
     // Run all agents in parallel for this round
     await Promise.all(
       agents.map(async (agent) => {
-        const response = await executor.execute(moderatorContext, agent)
-        agentResponses[agent] = response
+        const response = await executor.execute(`${moderatorContext}\n\n${CITATION_CONTRACT_PROMPT}`, agent)
+        const validation = validateCitationContract(response)
+        if (validation.valid) {
+          agentResponses[agent] = response
+          return
+        }
+
+        const corrected = await executor.execute(buildCitationCorrectionPrompt(response, validation.errors), agent)
+        const correctedValidation = validateCitationContract(corrected)
+        agentResponses[agent] = correctedValidation.valid
+          ? corrected
+          : buildWithheldCitationResponse(agent, correctedValidation.errors)
       })
     )
 

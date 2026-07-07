@@ -298,7 +298,7 @@ ipcMain.handle('run-agent', async (_event, { provider, model, prompt }) => {
   }
 })
 
-async function runAgentViaGateway(payload: { provider: string; model: string; prompt: string }) {
+async function runAgentViaGateway(payload: { provider: string; model: string; prompt: string; timeoutMs?: number }) {
   let gatewayUrl = GATEWAY_URL;
   let apiKey = '';
   if (db) {
@@ -332,6 +332,8 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
   }
 
   const { id } = await runRes.json();
+  const timeoutMs = Math.max(1_000, payload.timeoutMs || 90_000);
+  const deadline = Date.now() + timeoutMs;
   if (db) {
     db.prepare(`
       INSERT INTO athena_runs (id, thread_id, provider, model, prompt, status, created_at, updated_at)
@@ -342,6 +344,16 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
 
   let pollDelay = 25;
   while (true) {
+    if (Date.now() >= deadline) {
+      await fetch(`${baseUrl}/runs/${id}`, {
+        method: 'DELETE',
+        headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+      }).catch(() => undefined);
+      if (db) {
+        db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run('killed', `AGENT_TIMEOUT after ${timeoutMs}ms`, Date.now(), id);
+      }
+      throw new Error(`AGENT_TIMEOUT after ${timeoutMs}ms`);
+    }
     await new Promise(r => setTimeout(r, pollDelay));
     if (pollDelay < 100) pollDelay += 15;
 

@@ -9,6 +9,8 @@ import StartupScreen from './components/StartupScreen';
 import { LoginScreen } from "./components/LoginScreen";
 import { clearStoredApiKey, getStoredApiKey, setStoredApiKey } from "./services/auth";
 import { createAthenaService } from "./services/athenaService";
+import { buildMandatoryCrossChecks, getChatExecutionPolicy } from "./services/chatExecutionPolicy";
+import { CITATION_CONTRACT_PROMPT } from "./services/citationContract";
 import mermaid from "mermaid";
 import { sanitizeMermaidCode } from "./utils/mermaidSanitizer";
 import { Toaster } from "./components/ui/sonner";
@@ -465,6 +467,7 @@ export default function App() {
   }
 
   const preferredProviderIndexRef = useRef(0);
+  const [activeProviderIndex, setActiveProviderIndex] = useState(0);
 
   const getAgentRoster = (): AgentConfig[] => {
     const configuredAgents = settings["agents:list"];
@@ -537,22 +540,28 @@ export default function App() {
         ]);
 
         // Basic quota/error checks (ensure it's actually an error message and not user-facing text containing these words)
-        const isLikelyErrorResponse = responseRaw.startsWith('Error:') || responseRaw.startsWith('Warning:') || responseRaw.length < 200;
-        if (isLikelyErrorResponse && /429|QUOTA_EXHAUSTED|rate_limit|rate limit/i.test(responseRaw)) {
-          lastError = new Error(`Quota exhausted on ${adapterName}`);
+        const responseLower = responseRaw.toLowerCase().trim();
+        const isLikelyErrorResponse = responseLower.startsWith('error:') || responseLower.startsWith('warning:') || responseRaw.length < 300;
+        if (isLikelyErrorResponse && (
+          /429|quota_exhausted|rate_limit|rate limit/i.test(responseRaw) || 
+          /usage limit|upgrade to pro/i.test(responseRaw)
+        )) {
+          lastError = new Error(`Quota exhausted on ${adapterName}: ${responseRaw}`);
           attempt++;
           continue;
         }
-        if (responseRaw.startsWith('Error:') || /ModelNotFoundError|An unexpected critical error occurred|Error when talking to.*API/i.test(responseRaw) || responseRaw.trim().startsWith('Warning:')) {
+        if (responseLower.startsWith('error:') || /ModelNotFoundError|An unexpected critical error occurred|Error when talking to.*API/i.test(responseRaw) || responseLower.startsWith('warning:')) {
           lastError = new Error(responseRaw);
           attempt++;
           continue;
         }
         
-        preferredProviderIndexRef.current = chain.findIndex((p: any) => 
+        const nextIdx = chain.findIndex((p: any) => 
           (item.id !== undefined && p.id === item.id) || 
           (p.provider === item.provider && p.model === item.model)
         );
+        preferredProviderIndexRef.current = nextIdx;
+        setActiveProviderIndex(nextIdx);
         return { content: responseRaw, provider: adapterName, model };
       } catch (e: any) {
         lastError = e;
@@ -1103,58 +1112,111 @@ ANTI-LOOP & PERFORMANCE POLICY:
     setIsLoading(true); 
     setStatusText('ANALYZING_INTENT...')
 
-    let currentTurn = 1;
-    const maxTurns = 2;
+    let rankedIntents: { rank: number, topic: string, intent: string, reason: string }[] = [];
+    try {
+      const intentAnalysisPrompt = `
+        You are ATHENA, the MASTER_CONTROL_MODERATOR.
+        The user has sent a request. You need to analyze this request and determine if there are multiple topics, tasks, or intents.
+        
+        User Request: "${userQuery}"
+        
+        Task:
+        1. Identify all distinct topics, tasks, or intents in the request.
+        2. Rank them in a logical processing order (e.g. dependency-first or importance-first).
+        3. Output a clean JSON object containing:
+           - "hasMultiple": true or false
+           - "rankedIntents": an array of objects, each containing:
+             - "rank": number (starting from 1)
+             - "topic": brief description of this specific topic/task
+             - "intent": the specific intent/sub-query for this topic/task
+             - "reason": why this topic is ranked here
+             
+        Example JSON Output:
+        {
+          "hasMultiple": true,
+          "rankedIntents": [
+            { "rank": 1, "topic": "Check database connection status", "intent": "Analyze if the db is reachable", "reason": "Pre-requisite for querying data" },
+            { "rank": 2, "topic": "Retrieve agent configuration", "intent": "List agent specs", "reason": "Requires database verification first" }
+          ]
+        }
+        
+        Output ONLY the valid JSON block inside markdown code ticks.
+      `;
+      const { content: analysisRaw } = await runWithFallback(intentAnalysisPrompt, 'Athena');
+      const jsonBlockMatch = analysisRaw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
+      const jsonStr = jsonBlockMatch ? jsonBlockMatch[1] : analysisRaw;
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && Array.isArray(parsed.rankedIntents) && parsed.rankedIntents.length > 0) {
+        rankedIntents = parsed.rankedIntents;
+      }
+    } catch (e: any) {
+      console.error("Intent analysis failed, falling back to single intent:", e);
+    }
+
+    if (rankedIntents.length === 0) {
+      rankedIntents = [{ rank: 1, topic: "General request", intent: userQuery, reason: "Fallback single topic" }];
+    }
+
     let accumulatedAgentContext: { agentId: string, agentName: string, persona: string, content: string }[] = [];
     let allAddedInfo = "";
-    let isFinalized = false;
-    let hasCrossChecked = false;
-    let latestDecision: any = null;
-    let finalDirResponse = "";
     const agentRosterPrompt = athenaServiceRef.current.buildAgentRosterPrompt(agentRoster);
 
     try {
-      while (currentTurn <= maxTurns && !isFinalized) {
-        if (midRunBuffer.current.length > 0) {
-          const newInfo = midRunBuffer.current.join('\n');
-          allAddedInfo += (allAddedInfo ? '\n' : '') + newInfo;
-          midRunBuffer.current = [];
-        }
+      for (const intentObj of rankedIntents) {
+        addThinking('Athena', `PROCESSING_INTENT_${intentObj.rank}_OF_${rankedIntents.length}: ${intentObj.topic}`);
+        addMessage(
+          'athena-whisper' as any,
+          `Processing sub-task ${intentObj.rank}/${rankedIntents.length}: **${intentObj.topic}** (Reason: ${intentObj.reason})`
+        );
 
-        const currentChain = settings["provider:chain"] || [];
-        const activeProvIdx = preferredProviderIndexRef.current;
-        const fallbackWarning = activeProvIdx > 0 && currentChain[activeProvIdx]
-          ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
-          : "";
+        const subQuery = intentObj.intent;
+        let currentTurn = 1;
+        const maxTurns = 2;
+        let isFinalized = false;
+        let latestDecision: any = null;
 
-        addThinking('Athena', `QUORUM_LOOP_TURN_${currentTurn}: Evaluating state...`)
-        addThinking('Athena', 'CALL_GATEWAY: POST /runs', 'mcp_call')
-        
-        const turnContext = accumulatedAgentContext.length > 0 
-          ? `\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
-          : "";
-        
-        const midRunContext = allAddedInfo ? `\n\nADDED_USER_INTEL_DURING_RUN:\n${allAddedInfo}` : "";
+        while (currentTurn <= maxTurns && !isFinalized) {
+          if (midRunBuffer.current.length > 0) {
+            const newInfo = midRunBuffer.current.join('\n');
+            allAddedInfo += (allAddedInfo ? '\n' : '') + newInfo;
+            midRunBuffer.current = [];
+          }
 
-        const moderatorDecisionPrompt = athenaServiceRef.current.buildModeratorDecisionPrompt({
-          userQuery,
-          historyContext,
-          turnContext,
-          midRunContext,
-          sessionSummary,
-          filesContext,
-          fallbackWarning,
-          currentTurn,
-          maxTurns,
-          agentRosterPrompt,
-        }) + `
+          const currentChain = settings["provider:chain"] || [];
+          const activeProvIdx = preferredProviderIndexRef.current;
+          const fallbackWarning = activeProvIdx > 0 && currentChain[activeProvIdx]
+            ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
+            : "";
+
+          addThinking('Athena', `QUORUM_LOOP_TURN_${currentTurn}: Evaluating state...`);
+          addThinking('Athena', 'CALL_GATEWAY: POST /runs', 'mcp_call');
+          
+          const turnContext = accumulatedAgentContext.length > 0 
+            ? `\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
+            : "";
+          
+          const midRunContext = allAddedInfo ? `\n\nADDED_USER_INTEL_DURING_RUN:\n${allAddedInfo}` : "";
+
+          const moderatorDecisionPrompt = athenaServiceRef.current.buildModeratorDecisionPrompt({
+            userQuery: subQuery,
+            historyContext,
+            turnContext,
+            midRunContext,
+            sessionSummary,
+            filesContext,
+            fallbackWarning,
+            currentTurn,
+            maxTurns,
+            agentRosterPrompt,
+          }) + `
 
 STRATEGY FOR THIS TURN:
 - If this is Turn 2, you MUST prioritize "action": "finalize" unless the agents have provided critically contradicting information that makes a decision impossible.
 - If agents AGREE or provide complementary info, merge their findings and finalize.
 - If you are NOT SURE about any agent claim, you MUST QUESTION that agent directly if you decide to engage for one more turn (only if absolutely necessary).
 - Limit agent exploration: Do NOT allow agents to perform deep search / deep exploration unless you explicitly prompt them to (default should be false).
-- Control agent-to-agent validation: Specify target cross_checks explicitly so agents don't engage in excessive all-to-all cross-checks.
+- When engaging agents, select at least 2 agents whenever the roster permits so independent validation is possible.
+- Cross-checking is mandatory for every swarm engagement with at least 2 successful agents. Specify targeted cross_checks so every successful agent output is reviewed by another successful agent without excessive all-to-all checks.
 
 AMBIGUITY & UNCERTAINTY:
 - If the user's request or agent responses are AMBIGUOUS, you MUST ask the agents (or user) for more questions/clarification.
@@ -1173,7 +1235,7 @@ Output ONLY valid JSON.
   "engage": ["agent_id"],
   "queries": {
     "agent_id": {
-      "task": "specific task for that agent. Instruct agent to identify and mark facts with [FACT:index]",
+      "task": "specific task for that agent. Require inline [CITE:n] citations and the mandatory citation table",
       "context_strategy": "full" | "summary",
       "allow_deep_search": true | false
     }
@@ -1181,127 +1243,138 @@ Output ONLY valid JSON.
   "cross_checks": [
     { "from": "agent_id", "to": "agent_id", "reason": "why they are validating this output" }
   ],
-  "direct_response": "... (FACTS ONLY. Mark with Fact[index]. EXPLAIN results, do not just summarize.)"
+  "direct_response": "... (FACTS ONLY. Use inline [CITE:n] markers and end with the required Citations table. EXPLAIN results, do not just summarize.)"
 }
 `;
-        
-        const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Athena')
-        
-        // Whisper Athena's initial acknowledgment
-        if (currentTurn === 1) {
+          
+          const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Athena');
+          
+          // Whisper Athena's initial acknowledgment
+          if (currentTurn === 1) {
+            addMessage(
+              'athena-whisper' as any,
+              `I've received your directive: "${subQuery.substring(0, 50)}${subQuery.length > 50 ? '...' : ''}". I am analyzing the state and looking at the roster to determine the best approach.`,
+              undefined,
+              undefined,
+              modProvider,
+              modModel
+            );
+          }
+
+          let decision;
+          try {
+            // First, attempt to extract a markdown JSON block if the model used one
+            const jsonBlockMatch = decisionRaw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
+            let jsonStr = jsonBlockMatch ? jsonBlockMatch[1] : decisionRaw;
+            
+            if (!jsonBlockMatch) {
+              // Strip out any trailing markdown code ticks if they exist without opening tags
+              jsonStr = jsonStr.replace(/```/g, '').trim();
+              const firstBrace = jsonStr.indexOf('{');
+              const lastBrace = jsonStr.lastIndexOf('}');
+              if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+              }
+            }
+            
+            decision = JSON.parse(jsonStr);
+            latestDecision = decision;
+          } catch (e: any) {
+            // If parsing completely fails, the model likely ignored the system prompt and answered directly.
+            // Log the parse error, but display the raw text to the user so the answer isn't lost.
+            addThinking('System', `Neural parsing error: ${e.message}. Assuming rogue direct response.`, 'error');
+            decision = { action: 'finalize', direct_response: decisionRaw, thought: `Parsing error fallback: ${e.message}` };
+            latestDecision = decision;
+          }
+
+          addThinking("Athena", `TURN_${currentTurn}_THOUGHT: ` + decision.thought); 
+
+          if (decision.action === 'finalize' || (decision.engage || []).length === 0) {
+            isFinalized = true;
+            if (decision.direct_response) {
+               const validationResult = await validateAndCorrectMermaid(decision.direct_response, 'Athena', moderatorDecisionPrompt, 90000);
+               const subDirResponse = validationResult.response;
+               accumulatedAgentContext.push({
+                 agentId: 'athena',
+                 agentName: 'Athena',
+                 persona: 'moderator',
+                 content: `Direct response for topic "${intentObj.topic}": ${subDirResponse}`
+               });
+            }
+            break;
+          }
+
+          const agentsToEngage = resolveEngagedAgents(decision.engage, agentRoster);
+          if (agentsToEngage.length === 1 && agentRoster.length >= 2) {
+            const independentReviewer = agentRoster.find(agent => agent.id !== agentsToEngage[0].id);
+            if (independentReviewer) {
+              agentsToEngage.push(independentReviewer);
+              addThinking('Athena', `MANDATORY_VALIDATION_REVIEWER_ADDED: ${independentReviewer.name}`);
+            }
+          }
+          latestDecision.engage = agentsToEngage.map(agent => agent.id);
+          setStatusText(`TURN_${currentTurn}: ${agentsToEngage.length} AGENTS`);
           addMessage(
             'athena-whisper' as any,
-            `I've received your directive: "${userQuery.substring(0, 50)}${userQuery.length > 50 ? '...' : ''}". I am analyzing the state and looking at the roster to determine the best approach.`,
+            `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`,
             undefined,
             undefined,
             modProvider,
             modModel
           );
-        }
 
-        let decision;
-        try {
-          // First, attempt to extract a markdown JSON block if the model used one
-          const jsonBlockMatch = decisionRaw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
-          let jsonStr = jsonBlockMatch ? jsonBlockMatch[1] : decisionRaw;
-          
-          if (!jsonBlockMatch) {
-            // Strip out any trailing markdown code ticks if they exist without opening tags
-            jsonStr = jsonStr.replace(/```/g, '').trim();
-            const firstBrace = jsonStr.indexOf('{');
-            const lastBrace = jsonStr.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-              jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
-            }
-          }
-          
-          decision = JSON.parse(jsonStr);
-          latestDecision = decision;
-        } catch (e: any) {
-          // If parsing completely fails, the model likely ignored the system prompt and answered directly.
-          // Log the parse error, but display the raw text to the user so the answer isn't lost.
-          addThinking('System', `Neural parsing error: ${e.message}. Assuming rogue direct response.`, 'error');
-          decision = { action: 'finalize', direct_response: decisionRaw, thought: `Parsing error fallback: ${e.message}` };
-          latestDecision = decision;
-        }
+          // ── SUPERVISED PARALLEL AGENT EXECUTION ──
+          const agentPromises = agentsToEngage.map(async (agent) => {
+            const queryData = decision.queries && (decision.queries[agent.id] || decision.queries[agent.name] || decision.queries[agent.persona]);
+            const promptQuery = filesContext ? `${subQuery}${filesContext}` : subQuery;
+            const query = typeof queryData === 'string' ? queryData : (queryData?.task || promptQuery);
+            const strategy = typeof queryData === 'object' ? queryData.context_strategy : 'full';
+            const allowDeepSearch = (typeof queryData === 'object' && queryData.allow_deep_search === true) || sessionMetadata.allowDeepSearch === true;
+            const agentLabel = agent.name || agent.id;
 
-        addThinking("Athena", `TURN_${currentTurn}_THOUGHT: ` + decision.thought); 
-
-        if (decision.action === 'finalize' || (decision.engage || []).length === 0) {
-          isFinalized = true;
-          if (decision.direct_response && currentTurn === 1) {
-             const validationResult = await validateAndCorrectMermaid(decision.direct_response, 'Athena', moderatorDecisionPrompt, 90000);
-             finalDirResponse = validationResult.response;
-             const finalModProvider = validationResult.provider || modProvider;
-             const finalModModel = validationResult.model || modModel;
-             addMessage('athena', finalDirResponse, undefined, undefined, finalModProvider, finalModModel);
-          }
-          break;
-        }
-
-        const agentsToEngage = resolveEngagedAgents(decision.engage, agentRoster);
-        setStatusText(`TURN_${currentTurn}: ${agentsToEngage.length} AGENTS`);
-        addMessage(
-          'athena-whisper' as any,
-          `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`,
-          undefined,
-          undefined,
-          modProvider,
-          modModel
-        );
-
-        // ── SUPERVISED PARALLEL AGENT EXECUTION ──
-        const agentPromises = agentsToEngage.map(async (agent) => {
-          const queryData = decision.queries && (decision.queries[agent.id] || decision.queries[agent.name] || decision.queries[agent.persona]);
-          const promptQuery = filesContext ? `${userQuery}${filesContext}` : userQuery;
-          const query = typeof queryData === 'string' ? queryData : (queryData?.task || promptQuery);
-          const strategy = typeof queryData === 'object' ? queryData.context_strategy : 'full';
-          const allowDeepSearch = (typeof queryData === 'object' && queryData.allow_deep_search === true) || sessionMetadata.allowDeepSearch === true;
-          const agentLabel = agent.name || agent.id;
-
-          // Start Ability Resolution and Context Setup in parallel
-          addThinking(agentLabel, `RESOLVING_ABILITIES: ${agent.persona}...`)
-          
-          const resolveAgentAbilities = async () => {
-            const cacheKey = `${agent.persona}:${(agent.tags || []).join(',')}`;
-            if (resolvedAbilitiesCache.current[cacheKey]) {
-              addThinking(agentLabel, `ABILITIES_CACHED: Using resolved prompt for ${agent.persona}`)
-              return { content: [{ text: resolvedAbilitiesCache.current[cacheKey] }] };
-            }
-
-            try {
-              const text = await athenaServiceRef.current.resolveAbilities(agent);
-              if (text) {
-                resolvedAbilitiesCache.current[cacheKey] = text;
-                addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response')
+            // Start Ability Resolution and Context Setup in parallel
+            addThinking(agentLabel, `RESOLVING_ABILITIES: ${agent.persona}...`)
+            
+            const resolveAgentAbilities = async () => {
+              const cacheKey = `${agent.persona}:${(agent.tags || []).join(',')}`;
+              if (resolvedAbilitiesCache.current[cacheKey]) {
+                addThinking(agentLabel, `ABILITIES_CACHED: Using resolved prompt for ${agent.persona}`)
+                return { content: [{ text: resolvedAbilitiesCache.current[cacheKey] }] };
               }
-              return { content: [{ text }] };
-            } catch (e: any) {
-              addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
-              return { content: [] };
-            }
-          };
 
-          const mcpPromise = resolveAgentAbilities();
-          const resolvedInstructions = (await mcpPromise).content?.[0]?.text || "";
-          addThinking(agentLabel, `ANALYZING_QUERY (strategy: ${strategy}): ${query.substring(0, 30)}...`)
-          
-          const effectiveContext = (strategy === 'summary' 
-            ? `\n\nCURRENT_SESSION_SUMMARY:\n${sessionSummary || "No previous summary."}\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
-            : `${historyContext}\n\n${turnContext}`) + filesContext;
+              try {
+                const text = await athenaServiceRef.current.resolveAbilities(agent);
+                if (text) {
+                  resolvedAbilitiesCache.current[cacheKey] = text;
+                  addThinking(agentLabel, `ABILITIES_RESOLVED: ${agent.persona}`, 'mcp_response')
+                }
+                return { content: [{ text }] };
+              } catch (e: any) {
+                addThinking(agentLabel, `ABILITY_RESOLUTION_FAILED: ${e.message}`, 'error');
+                return { content: [] };
+              }
+            };
 
-          const agentTimeout = allowDeepSearch ? 300000 : 90000;
+            const mcpPromise = resolveAgentAbilities();
+            const resolvedInstructions = (await mcpPromise).content?.[0]?.text || "";
+            addThinking(agentLabel, `ANALYZING_QUERY (strategy: ${strategy}): ${query.substring(0, 30)}...`)
+            
+            const effectiveContext = (strategy === 'summary' 
+              ? `\n\nCURRENT_SESSION_SUMMARY:\n${sessionSummary || "No previous summary."}\n\nCURRENT_TURN_INTEL:\n${JSON.stringify(accumulatedAgentContext)}`
+              : `${historyContext}\n\n${turnContext}`) + filesContext;
 
-          const prompt = athenaServiceRef.current.buildDirectAgentPrompt({
-            agent,
-            query,
-            historyContext: `${effectiveContext}${midRunContext}`,
-            sessionSummary,
-            fallbackWarning,
-            allowDeepSearch,
-            resolvedInstructions,
-            filesContext,
-          }) + `
+            const agentTimeout = getChatExecutionPolicy(allowDeepSearch).timeoutMs;
+
+            const prompt = athenaServiceRef.current.buildDirectAgentPrompt({
+              agent,
+              query,
+              historyContext: `${effectiveContext}${midRunContext}`,
+              sessionSummary,
+              fallbackWarning,
+              allowDeepSearch,
+              resolvedInstructions,
+              filesContext,
+            }) + `
 
 Task from moderator: ${query}
 
@@ -1310,102 +1383,117 @@ ANTI-LOOP & PERFORMANCE POLICY:
 - Give a direct, rapid response. Avoid conversational filler or verbose explanations. Keep the execution clean and fast.
 `;
 
-          try {
-            const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
-            
-            const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
-            const response = validationResult.response;
-            const finalAgentProvider = validationResult.provider || agentProvider;
-            const finalAgentModel = validationResult.model || agentModel;
-
-            addMessage('agent-whisper' as any, response, agentLabel, undefined, finalAgentProvider, finalAgentModel)
-            return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: response, status: 'complete' as const };
-          } catch (e: any) {
-            addThinking(agentLabel, `FAILURE_SIGNAL: ${e.message}`, 'error');
-            return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: `CRITICAL_ERROR: ${e.message}`, status: 'error' as const };
-          }
-        });
-
-        // Supervisor loop for monitoring
-        const watchSwarm = async (tasks: Promise<any>[], labels: string[]) => {
-          let results: any[] = [];
-          const taskStatuses = labels.map(label => ({ label, done: false }));
-          const checkInterval = 15000; // Check back every 15s
-          
-          const monitor = setInterval(() => {
-            const pending = taskStatuses.filter(t => !t.done).map(t => t.label);
-            if (pending.length > 0) {
-              addMessage('athena-whisper' as any, `I am checking back on the agents. **${pending.join(', ')}** are still processing. Stand by.`);
-            }
-          }, checkInterval);
-
-          try {
-            results = await Promise.all(tasks.map((p, i) => p.then(r => {
-              taskStatuses[i].done = true;
-              return r;
-            })));
-          } finally {
-            clearInterval(monitor);
-          }
-          return results;
-        };
-
-        const turnResults = await watchSwarm(agentPromises, agentsToEngage.map(a => a.name || a.id));
-
-        // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY ATHENA) ──
-        const crossCheckRequests = decision.cross_checks || [];
-        if (crossCheckRequests.length > 0 && !hasCrossChecked) {
-          addThinking('Athena', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
-          setStatusText(`TURN_${currentTurn}: CROSS-CHECK`);
-          hasCrossChecked = true;
-
-          const allCrossCheckPromises = crossCheckRequests.map(async (req: any) => {
-            const fromAgentRes = turnResults.find(r => (r.agentId === req.from || r.agentName.toLowerCase() === String(req.from).toLowerCase()) && r.status === 'complete');
-            const toAgentRes = turnResults.find(r => (r.agentId === req.to || r.agentName.toLowerCase() === String(req.to).toLowerCase()) && r.status === 'complete');
-
-            if (!fromAgentRes || !toAgentRes) {
-              return { from: req.from, on: req.to, feedback: "Skipped (agent not active or failed)" };
-            }
-
-            const checkPrompt = `
-              You are ${fromAgentRes.agentName}, performing a neural cross-check on ${toAgentRes.agentName}'s work.
-              ${toAgentRes.agentName}'s Output: "${toAgentRes.content}"
-              Original Task: "${userQuery}"
-              Context/Reason for check: ${req.reason || "Review for consistency"}
-              TASK: Review for accuracy/consistency with your persona (${fromAgentRes.persona}). Brief feedback ONLY.
-            `;
-
             try {
-              const { content: feedback, provider: checkProvider, model: checkModel } = await runWithFallback(checkPrompt, fromAgentRes.agentName, 45000);
-              addMessage('agent-whisper' as any, `CROSS-CHECK feedback on ${toAgentRes.agentName}: ${feedback}`, fromAgentRes.agentName, undefined, checkProvider, checkModel);
-              return { from: req.from, on: req.to, feedback };
+              const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
+              
+              const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
+              const response = validationResult.response;
+              const finalAgentProvider = validationResult.provider || agentProvider;
+              const finalAgentModel = validationResult.model || agentModel;
+
+              addMessage('agent-whisper' as any, response, agentLabel, undefined, finalAgentProvider, finalAgentModel)
+              return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: response, status: 'complete' as const };
             } catch (e: any) {
-              return { from: req.from, on: req.to, feedback: `Cross-check failed: ${e.message}` };
+              addThinking(agentLabel, `FAILURE_SIGNAL: ${e.message}`, 'error');
+              return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: `CRITICAL_ERROR: ${e.message}`, status: 'error' as const };
             }
           });
 
-          const crossCheckResults = await Promise.all(allCrossCheckPromises);
-          accumulatedAgentContext = [
-            ...accumulatedAgentContext, 
-            ...turnResults,
-            ...crossCheckResults.map(r => ({ 
-              agentId: 'system', 
-              agentName: 'CrossCheck', 
-              persona: 'internal', 
-              content: `Agent ${r.from} feedback on ${r.on}: ${r.feedback}` 
-            }))
-          ];
-        } else {
-          accumulatedAgentContext = [...accumulatedAgentContext, ...turnResults];
+          // Supervisor loop for monitoring
+          const watchSwarm = async (tasks: Promise<any>[], labels: string[]) => {
+            let results: any[] = [];
+            const taskStatuses = labels.map(label => ({ label, done: false }));
+            const checkInterval = 15000; // Check back every 15s
+            
+            const monitor = setInterval(() => {
+              const pending = taskStatuses.filter(t => !t.done).map(t => t.label);
+              if (pending.length > 0) {
+                addMessage('athena-whisper' as any, `I am checking back on the agents. **${pending.join(', ')}** are still processing. Stand by.`);
+              }
+            }, checkInterval);
+
+            try {
+              results = await Promise.all(tasks.map((p, i) => p.then(r => {
+                taskStatuses[i].done = true;
+                return r;
+              })));
+            } finally {
+              clearInterval(monitor);
+            }
+            return results;
+          };
+
+          const turnResults = await watchSwarm(agentPromises, agentsToEngage.map(a => a.name || a.id));
+
+          // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY ATHENA) ──
+          const crossCheckRequests = buildMandatoryCrossChecks(turnResults, decision.cross_checks);
+          if (crossCheckRequests.length > 0) {
+            addThinking('Athena', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
+            setStatusText(`TURN_${currentTurn}: CROSS-CHECK`);
+            const allCrossCheckPromises = crossCheckRequests.map(async (req: any) => {
+              const fromAgentRes = turnResults.find(r => (r.agentId === req.from || r.agentName.toLowerCase() === String(req.from).toLowerCase()) && r.status === 'complete');
+              const toAgentRes = turnResults.find(r => (r.agentId === req.to || r.agentName.toLowerCase() === String(req.to).toLowerCase()) && r.status === 'complete');
+
+              if (!fromAgentRes || !toAgentRes) {
+                return { from: req.from, on: req.to, feedback: "Skipped (agent not active or failed)" };
+              }
+
+              const checkPrompt = `
+                You are ${fromAgentRes.agentName}, performing a neural cross-check on ${toAgentRes.agentName}'s work.
+                Your independently produced evidence: "${fromAgentRes.content}"
+                ${toAgentRes.agentName}'s Output: "${toAgentRes.content}"
+                Original Task: "${subQuery}"
+                Context/Reason for check: ${req.reason || "Review for consistency"}
+                
+                CROSS-CHECK MANDATE:
+                1. Compare material claims against the independent evidence above and cross-check using the tools/context you have access to.
+                2. For any claim, identify if it is supported, contradicted, or unverified.
+                3. Provide a quantitative CONFIDENCE SCORE (0-100%) on how confident you are in your own cross-check, considering the tools and data you used.
+                4. You must output your feedback using the following structure:
+                   CONFIDENCE SCORE: [0-100]%
+                   TOOL VERIFICATION DETAILS: [Describe how tools/context/code support or contradict the claims]
+                   CRITIQUE: [Your detailed review feedback]
+
+                ${CITATION_CONTRACT_PROMPT}
+              `;
+
+              try {
+                const { content: feedbackRaw, provider: checkProvider, model: checkModel } = await runWithFallback(checkPrompt, fromAgentRes.agentName, 45000);
+                const validation = await validateAndCorrectMermaid(feedbackRaw, fromAgentRes.agentName, checkPrompt, 45000);
+                const feedback = validation.response;
+                addMessage('agent-whisper' as any, `CROSS-CHECK feedback on ${toAgentRes.agentName}:\n\n${feedback}`, fromAgentRes.agentName, undefined, validation.provider || checkProvider, validation.model || checkModel);
+                return { from: req.from, on: req.to, feedback };
+              } catch (e: any) {
+                return { from: req.from, on: req.to, feedback: `Cross-check failed: ${e.message}` };
+              }
+            });
+
+            const crossCheckResults = await Promise.all(allCrossCheckPromises);
+            accumulatedAgentContext = [
+              ...accumulatedAgentContext, 
+              ...turnResults,
+              ...crossCheckResults.map((r: any) => ({ 
+                agentId: 'system', 
+                agentName: 'CrossCheck', 
+                persona: 'internal', 
+                content: `Agent ${r.from} feedback on ${r.on}: ${r.feedback}` 
+              }))
+            ];
+          } else {
+            const successfulAgentCount = turnResults.filter(result => result.status === 'complete').length;
+            if (agentsToEngage.length >= 2 && successfulAgentCount < 2) {
+              addThinking('Athena', `MANDATORY_CROSS_CHECK_UNAVAILABLE: Only ${successfulAgentCount} agent(s) completed successfully.`, 'error');
+            }
+            accumulatedAgentContext = [...accumulatedAgentContext, ...turnResults];
+          }
+
+          currentTurn++;
         }
-
-        currentTurn++;
-
       }
 
-      if (accumulatedAgentContext.length > 0 || finalDirResponse) {
+      if (accumulatedAgentContext.length > 0) {
         setStatusText('SYNTHESIZING...'); 
-        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS...')
+        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS...');
 
         const currentChain = settings["provider:chain"] || [];
         const activeProvIdx = preferredProviderIndexRef.current;
@@ -1413,15 +1501,15 @@ ANTI-LOOP & PERFORMANCE POLICY:
           ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
           : "";
 
-        const intentToUse = latestDecision?.intent || "General reasoning task";
-        const engagedList = latestDecision?.engage || [];
+        const intentToUse = rankedIntents.map(i => i.topic).join(', ');
+        const engagedList = Array.from(new Set(accumulatedAgentContext.map(r => r.agentId).filter(id => id !== 'system' && id !== 'athena')));
         
         const summaryPrompt = athenaServiceRef.current.buildSummaryPrompt({
           sessionSummary,
           intent: intentToUse,
           userQuery,
           engagedAgents: engagedList,
-          finalOutput: finalDirResponse || "Athena is generating a final synthesized report based on the agent responses",
+          finalOutput: "Athena is generating a final synthesized report based on the agent responses",
           agentResponses: accumulatedAgentContext,
           fallbackWarning,
         }) + `
@@ -1441,96 +1529,86 @@ IMPORTANT RULES:
 5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
 `;
 
-        if (accumulatedAgentContext.length > 0) {
-          addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
+        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
 
-          const finalPrompt = `
-            You are ATHENA, the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
+        const finalPrompt = `
+          You are ATHENA, the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
 
-            USER'S ORIGINAL REQUEST: "${userQuery}"
-            PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
-            LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
-            ${fallbackWarning}
+          USER'S ORIGINAL REQUEST: "${userQuery}"
+          PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
+          LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
+          ${fallbackWarning}
 
-            YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
+          RESILIENCE AND EVIDENCE RULES:
+          - Synthesize every successful agent result even if another agent, provider, search, or cross-check failed.
+          - Clearly separate verified findings from failed checks and remaining evidence gaps.
+          - Never replace the best available evidence-backed answer with a generic failure message when usable evidence exists.
+          - Treat cross-check criticism as validation input; resolve material conflicts explicitly in the answer.
 
-            ## 1. RESTATE THE ASK
-            In your own words, rephrase what the user asked for. Make sure the user knows you fully understood their intent. Start with something like "You asked..." or "The question was...". Be specific.
+          YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
 
-            ## 2. THE ANSWER
-            Give a clear, direct, definitive answer. Do not hedge. If there is a recommendation, make it. If there is a result, present it. The user should be able to read ONLY this section and know the answer.
+          ## 1. RESTATE THE ASK
+          In your own words, rephrase what the user asked for. Make sure the user knows you fully understood their intent. Start with something like "You asked..." or "The question was...". Be specific.
 
-            ## 3. HOW IT WORKS — Full Explanation
-            Now explain the "how" in depth. Assume the reader has ZERO prior knowledge about this topic. Walk through:
-            - What each component/concept is
-            - How the pieces connect to each other
-            - What happens step-by-step when the system/process runs
-            - Why it was designed or works this way
+          ## 2. THE ANSWER
+          Give a clear, direct, definitive answer. Do not hedge. If there is a recommendation, make it. If there is a result, present it. The user should be able to read ONLY this section and know the answer.
 
-            Use **Mermaid diagrams** liberally. You MUST include at least one diagram. Choose the most appropriate type:
-            - \`\`\`mermaid graph TD\`\`\` for architecture/dependency maps
-            - \`\`\`mermaid sequenceDiagram\`\`\` for step-by-step flows
-            - \`\`\`mermaid flowchart LR\`\`\` for decision trees or pipelines
-            - \`\`\`mermaid classDiagram\`\`\` for data models or type hierarchies
-            - \`\`\`mermaid stateDiagram-v2\`\`\` for state machines or lifecycle flows
+          ## 3. HOW IT WORKS — Full Explanation
+          Now explain the "how" in depth. Assume the reader has ZERO prior knowledge about this topic. Walk through:
+          - What each concept is
+          - How the pieces connect to each other
+          - What happens step-by-step when the system/process runs
+          - Why it was designed or works this way
 
-            Use multiple diagrams if the topic has multiple dimensions (e.g., architecture + data flow).
+          Use **Mermaid diagrams** liberally. You MUST include at least one diagram. Choose the most appropriate type:
+          - \`\`\`mermaid graph TD\`\`\` for architecture/dependency maps
+          - \`\`\`mermaid sequenceDiagram\`\`\` for step-by-step flows
+          - \`\`\`mermaid flowchart LR\`\`\` for decision trees or pipelines
+          - \`\`\`mermaid classDiagram\`\`\` for data models or type hierarchies
+          - \`\`\`mermaid stateDiagram-v2\`\`\` for state machines or lifecycle flows
 
-            IMPORTANT MERMAID RULES:
-            - For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
-            - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
+          Use multiple diagrams if the topic has multiple dimensions (e.g., architecture + data flow).
 
-            ## 4. WHY — Rationale & Context
-            Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
+          IMPORTANT MERMAID RULES:
+          - For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
+          - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
 
-            ## 5. KEY DETAILS & EVIDENCE
-            Present the facts verified in this response using a Markdown table formatted exactly like this:
-            | Fact ID | Detail |
-            | --- | --- |
-            | [FACT:1] | [Fact detail] |
+          ## 4. WHY — Rationale & Context
+          Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
 
-            ## 6. FACT_GLOSSARY
-            List the verification sources for each fact in a table formatted exactly like this:
-            | Fact ID | Detail & Verification Source |
-            | --- | --- |
-            | [FACT:1] | [Verification source details] |
+          ## 5. FINALIZED NEURAL CROSS-CHECK & EVIDENCE VALIDATION
+          Synthesize and finalize all cross-check results. List each cross-check performed, the confidence scores provided by the reviewing agents, and Athena's final verdict on the validity of the claims. Resolve any discrepancies.
 
-            FORMATTING RULES:
-            - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
-            - Write in clear, plain language. Avoid unnecessary jargon. When you must use technical terms, define them inline.
-            - Be thorough. The user should NOT need to ask a follow-up question. If they read this report, they should fully understand the topic.
-            - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
-            - Do NOT summarize — EXPLAIN. The difference is critical.
-          `;
+          ${CITATION_CONTRACT_PROMPT}
 
-          const [summaryResult, finalResult] = await Promise.all([
-            runWithFallback(summaryPrompt, 'Athena'),
-            runWithFallback(finalPrompt, 'Athena')
-          ]);
+          FORMATTING RULES:
+          - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
+          - Write in clear, plain language. Avoid unnecessary jargon. When you must use technical terms, define them inline.
+          - Be thorough. The user should NOT need to ask a follow-up question. If they read this report, they should fully understand the topic.
+          - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
+          - Do NOT summarize — EXPLAIN. The difference is critical.
+        `;
 
-          const updatedSummary = summaryResult.content.trim();
-          setSessionSummary(updatedSummary);
-          saveCurrentSession(undefined, undefined, updatedSummary);
-          addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
+        const [summaryResult, finalResult] = await Promise.all([
+          runWithFallback(summaryPrompt, 'Athena'),
+          runWithFallback(finalPrompt, 'Athena')
+        ]);
 
-          const finalResponseRaw = finalResult.content;
-          let finalProvider = finalResult.provider;
-          let finalModel = finalResult.model;
+        const updatedSummary = summaryResult.content.trim();
+        setSessionSummary(updatedSummary);
+        saveCurrentSession(undefined, undefined, updatedSummary);
+        addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
 
-          const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Athena', finalPrompt, 90000);
-          const finalResponseCombined = validationResult.response;
-          finalProvider = validationResult.provider || finalProvider;
-          finalModel = validationResult.model || finalModel;
+        const finalResponseRaw = finalResult.content;
+        let finalProvider = finalResult.provider;
+        let finalModel = finalResult.model;
 
-          addMessage('athena', finalResponseCombined, undefined, undefined, finalProvider, finalModel);
-        } else {
-          // If finalized on Turn 1 without agents, we just update the summary
-          const summaryResult = await runWithFallback(summaryPrompt, 'Athena');
-          const updatedSummary = summaryResult.content.trim();
-          setSessionSummary(updatedSummary);
-          saveCurrentSession(undefined, undefined, updatedSummary);
-          addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
-        }
+        const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Athena', finalPrompt, 90000);
+        const finalResponseCombined = validationResult.response;
+        finalProvider = validationResult.provider || finalProvider;
+        finalModel = validationResult.model || finalModel;
+
+        addMessage('athena', finalResponseCombined, undefined, undefined, finalProvider, finalModel);
       }
     } catch (error: any) {
       addMessage('error', `CRITICAL_EXCEPTION: ${error.message}`)
@@ -1798,6 +1876,7 @@ IMPORTANT RULES:
         folders={folders}
         sessions={sessions}
         settings={settings}
+        activeProviderIndex={activeProviderIndex}
       />
       <Toaster />
     </div>

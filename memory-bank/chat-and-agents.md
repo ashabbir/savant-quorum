@@ -23,6 +23,21 @@ Document the central chat loop, direct agent execution, provider/model routing, 
 3. Execute providers in chain order and fall back when a provider fails.
 4. Preserve provider and model metadata on messages and whispers so the UI can inspect the execution path.
 
+## Search and validation budgets
+
+- Regular mode answers promptly from supplied context and uses only targeted lookups required for correctness, without broad or recursive exploration.
+- Deep Search systematically investigates at least two relevant sources when available, permits at most three targeted workspace queries per agent response, records failed searches, and then synthesizes the best available evidence.
+- Swarm runs require independent cross-checking whenever at least two agents complete successfully. Athena supplies a deterministic reviewer assignment if the moderator omits or returns invalid cross-check requests.
+- When Athena initially selects only one swarm agent and another configured agent exists, Quorum adds an independent reviewer so validation cannot be silently skipped.
+
+## Citation contract
+
+- Every model response shown to the user or passed between agents must place `[CITE:n]` markers directly after material factual claims.
+- Every response must end with one `## Citations` Markdown table using the columns `Citation`, `Source`, and `Evidence`.
+- Inline markers and table rows must match exactly; sources and evidence must be specific and must not be invented.
+- Quorum validates the structure, requests one corrected response when necessary, and withholds output that remains invalid rather than presenting uncited claims as verified.
+- The same structural requirement applies to direct replies, swarm agent output, cross-check feedback, final Athena synthesis, document summaries, and debate rounds.
+
 ## Routing rules
 
 - Provider discovery prefers gateway metadata.
