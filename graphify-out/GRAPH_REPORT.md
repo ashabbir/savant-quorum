@@ -1,16 +1,16 @@
-# Graph Report - savant-quorum  (2026-06-16)
+# Graph Report - savant-quorum  (2026-07-12)
 
 ## Corpus Check
-- 101 files · ~51,244 words
+- 117 files · ~78,428 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 748 nodes · 1079 edges · 56 communities (54 shown, 2 thin omitted)
+- 911 nodes · 1328 edges · 62 communities (61 shown, 1 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1c1ecd73`
+- Built from commit: `751918c5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -67,18 +67,24 @@
 - [[_COMMUNITY_Community 50|Community 50]]
 - [[_COMMUNITY_Community 52|Community 52]]
 - [[_COMMUNITY_Community 54|Community 54]]
+- [[_COMMUNITY_Community 56|Community 56]]
+- [[_COMMUNITY_Community 57|Community 57]]
+- [[_COMMUNITY_Community 58|Community 58]]
+- [[_COMMUNITY_Community 59|Community 59]]
+- [[_COMMUNITY_Community 60|Community 60]]
+- [[_COMMUNITY_Community 61|Community 61]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `cn()` - 224 edges
 2. `compilerOptions` - 18 edges
-3. `build` - 11 edges
-4. `buttonVariants` - 9 edges
-5. `scripts` - 8 edges
-6. `Chat and Agents` - 8 edges
-7. `Architecture` - 7 edges
-8. `Authentication and Profile` - 7 edges
-9. `Session Storage` - 7 edges
-10. `Startup and Packaging` - 7 edges
+3. `Forge Style Guide` - 18 edges
+4. `16. Visual Examples` - 13 edges
+5. `scripts` - 11 edges
+6. `build` - 11 edges
+7. `Chat and Agents` - 10 edges
+8. `buttonVariants` - 9 edges
+9. `getRunTiming()` - 7 edges
+10. `createAthenaService()` - 7 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `AccordionItem()` --calls--> `cn()`  [EXTRACTED]
@@ -95,59 +101,59 @@
 ## Import Cycles
 - None detected.
 
-## Communities (56 total, 2 thin omitted)
+## Communities (62 total, 1 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.03
-Nodes (66): dependencies, better-sqlite3, canvas-confetti, class-variance-authority, clsx, cmdk, d3, date-fns (+58 more)
+Nodes (67): dependencies, better-sqlite3, canvas-confetti, class-variance-authority, clsx, cmdk, d3, date-fns (+59 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.07
-Nodes (35): Input(), Separator(), Sidebar(), SidebarContent(), SidebarContext, SidebarContextProps, SidebarFooter(), SidebarGroup() (+27 more)
+Cohesion: 0.05
+Nodes (42): Input(), Separator(), Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay() (+34 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.07
-Nodes (31): AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay(), AlertDialogTitle() (+23 more)
+Cohesion: 0.10
+Nodes (18): AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay(), AlertDialogTitle() (+10 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.06
-Nodes (35): author, description, devDependencies, concurrently, electron, electron-builder, jsdom, tailwindcss (+27 more)
+Cohesion: 0.05
+Nodes (38): author, description, devDependencies, concurrently, electron, electron-builder, jsdom, tailwindcss (+30 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.11
-Nodes (26): Avatar(), AvatarFallback(), AvatarImage(), BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage() (+18 more)
+Cohesion: 0.07
+Nodes (38): Avatar(), AvatarFallback(), AvatarImage(), Card(), CardAction(), CardContent(), CardDescription(), CardFooter() (+30 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.09
-Nodes (22): Badge(), badgeVariants, Command(), CommandGroup(), CommandInput(), CommandItem(), CommandList(), CommandSeparator() (+14 more)
+Cohesion: 0.06
+Nodes (35): AgentItem, ConnectionStatus, inputStyle, labelStyle, MODELS, normalizeServiceUrl(), ProviderChainItem, ProviderOption (+27 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.10
-Nodes (16): ChatArea(), ChatAreaProps, MemoizedMessageItem, MemoizedWhisperBlock, Message, ChatMarkdown(), ChatMarkdownProps, codeBlockStyle (+8 more)
+Cohesion: 0.06
+Nodes (26): AgentStallDialog(), AgentStallDialogProps, AgentActivityCard(), ChatArea(), ChatAreaProps, MemoizedMessageItem, MemoizedWhisperBlock, Message (+18 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.08
-Nodes (11): AccordionContent(), AccordionItem(), AccordionTrigger(), Checkbox(), HoverCardContent(), Progress(), ResizableHandle(), ResizablePanelGroup() (+3 more)
+Cohesion: 0.07
+Nodes (16): Checkbox(), HoverCardContent(), InputOTP(), InputOTPGroup(), InputOTPSlot(), Progress(), ResizableHandle(), ResizablePanelGroup() (+8 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.09
-Nodes (22): build, appId, directories, dmg, electronVersion, extraResources, files, linux (+14 more)
+Cohesion: 0.08
+Nodes (24): build, appId, directories, dmg, electronVersion, extraResources, files, linux (+16 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.09
 Nodes (21): compilerOptions, allowJs, allowSyntheticDefaultImports, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx (+13 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.16
-Nodes (11): DebateResultsProps, DebateAgentResponseProps, DebateRoundContent(), DebateRoundContentProps, DebateRoundTab(), DebateRoundTabProps, AgentExecutor, DebateOrchestrator (+3 more)
+Cohesion: 0.13
+Nodes (17): DebateResultsProps, DebateAgentResponseProps, DebateRoundContent(), DebateRoundContentProps, DebateRoundTab(), DebateRoundTabProps, buildCitationCorrectionPrompt(), buildWithheldCitationResponse() (+9 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.12
-Nodes (13): AgentItem, ConnectionStatus, inputStyle, labelStyle, MODELS, normalizeServiceUrl(), ProviderChainItem, ProviderOption (+5 more)
+Cohesion: 0.20
+Nodes (12): buildMandatoryCrossChecks(), ChatExecutionPolicy, CompletedAgentResult, CrossCheckRequest, getChatExecutionPolicy(), getRecoverableAgentRunId(), INDEPENDENT_REVIEW_TERMS, requiresIndependentReview() (+4 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.12
-Nodes (11): Menubar(), MenubarCheckboxItem(), MenubarContent(), MenubarItem(), MenubarLabel(), MenubarRadioItem(), MenubarSeparator(), MenubarShortcut() (+3 more)
+Cohesion: 0.19
+Nodes (13): Carousel(), CarouselApi, CarouselContent(), CarouselContext, CarouselContextProps, CarouselItem(), CarouselNext(), CarouselOptions (+5 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.12
@@ -158,8 +164,8 @@ Cohesion: 0.12
 Nodes (9): DropdownMenuCheckboxItem(), DropdownMenuContent(), DropdownMenuItem(), DropdownMenuLabel(), DropdownMenuRadioItem(), DropdownMenuSeparator(), DropdownMenuShortcut(), DropdownMenuSubContent() (+1 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.19
-Nodes (8): LoginScreen(), LoginScreenProps, TopBar(), AgentConfig, App(), DEFAULT_AGENTS, getStoredApiKey(), Toaster()
+Cohesion: 0.12
+Nodes (12): BottomBar(), STATUS_COLORS, StatusDot, LoginScreen(), LoginScreenProps, StartupScreenProps, TopBar(), AgentConfig (+4 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.14
@@ -170,8 +176,8 @@ Cohesion: 0.20
 Nodes (11): FormControl(), FormDescription(), FormFieldContext, FormFieldContextValue, FormItem(), FormItemContext, FormItemContextValue, FormLabel() (+3 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.21
-Nodes (9): createTray(), createWindow(), getGatewayProviders(), LOG_FILE, MCP_TOOL_ROUTES, normalizeGatewayProviders(), QUORUM_DB_PATH, resolveAsset() (+1 more)
+Cohesion: 0.13
+Nodes (17): AgentRunControl, agentRunControls, createTray(), createWindow(), getGatewayConnection(), getGatewayProviders(), LOG_FILE, MCP_TOOL_ROUTES (+9 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.18
@@ -198,12 +204,12 @@ Cohesion: 0.18
 Nodes (7): SelectContent(), SelectItem(), SelectLabel(), SelectScrollDownButton(), SelectScrollUpButton(), SelectSeparator(), SelectTrigger()
 
 ### Community 25 - "Community 25"
-Cohesion: 0.18
-Nodes (7): Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetTitle()
+Cohesion: 0.15
+Nodes (13): 16.10 Dense List Example, 16.11 Modal Example, 16.12 What Good Looks Like, 16.1 Global Shell, 16.2 Top Header Example, 16.3 Left Rail Example, 16.4 Right Rail Example, 16.5 Workspace Detail Example (+5 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.38
-Nodes (6): ActionBar(), ActionBarProps, SessionModal(), SessionModalProps, sanitizeSessionName(), validateSessionName()
+Cohesion: 0.13
+Nodes (11): ActionBar(), ActionBarProps, SessionModal(), SessionModalProps, GROUPING_STOP_WORDS, GroupingFolderInput, parseFolderClassification(), sanitizeSessionName() (+3 more)
 
 ### Community 27 - "Community 27"
 Cohesion: 0.22
@@ -214,16 +220,16 @@ Cohesion: 0.36
 Nodes (3): MermaidEditorModal(), MermaidEditorModalProps, sanitizeMermaidCode()
 
 ### Community 29 - "Community 29"
-Cohesion: 0.22
-Nodes (8): AI flow, Chat and Agents, Failure modes, Human flow, Message types, Purpose, Relevant files, Routing rules
+Cohesion: 0.18
+Nodes (10): AI flow, Chat and Agents, Citation contract, Failure modes, Human flow, Message types, Purpose, Relevant files (+2 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.32
-Nodes (4): ChatModeSelectorProps, ChatMode, ChatModeConfig, ChatModeService
+Cohesion: 0.20
+Nodes (10): ChatModeSelectorProps, AthenaAgentSpec, AthenaRunPayload, AthenaService, AthenaThreadRecord, createAthenaService(), defaultStorage(), ChatMode (+2 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.25
-Nodes (5): ChatItem, FolderItem, LeftSidebar(), LeftSidebarProps, SettingsModal()
+Cohesion: 0.15
+Nodes (11): ChatItem, FolderItem, LeftSidebar(), LeftSidebarProps, ProfileModal(), ProfileModalProps, SettingsModal(), clearStoredApiKey() (+3 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.25
@@ -250,8 +256,8 @@ Cohesion: 0.25
 Nodes (3): electronProcess, isConcurrent, rootDir
 
 ### Community 38 - "Community 38"
-Cohesion: 0.25
-Nodes (7): Card(), CardAction(), CardContent(), CardDescription(), CardFooter(), CardHeader(), CardTitle()
+Cohesion: 0.17
+Nodes (11): 10. Motion, 11. Forge-Specific Product Framing, 12. Implementation Notes, 13. What Forge Should Not Look Like, 14. Reference Alignment, 15. Design Checklist, 1. Design Direction, 2. App Shell (+3 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.29
@@ -262,12 +268,12 @@ Cohesion: 0.29
 Nodes (6): compilerOptions, allowSyntheticDefaultImports, composite, module, moduleResolution, include
 
 ### Community 41 - "Community 41"
-Cohesion: 0.43
-Nodes (5): ToggleGroup(), ToggleGroupContext, ToggleGroupItem(), Toggle(), toggleVariants
+Cohesion: 0.28
+Nodes (8): copyDir(), main(), projectRoot, stsbDestDir, stsbSourceDir, syncModel(), whisperDestDir, whisperSourceDir
 
 ### Community 42 - "Community 42"
-Cohesion: 0.40
-Nodes (4): ProfileModal(), ProfileModalProps, clearStoredApiKey(), setStoredApiKey()
+Cohesion: 0.25
+Nodes (6): BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage(), BreadcrumbSeparator()
 
 ### Community 43 - "Community 43"
 Cohesion: 0.33
@@ -278,8 +284,8 @@ Cohesion: 0.33
 Nodes (5): localStorageMock, mockAgents, mockIpcRenderer, mockSessions, mockSystem
 
 ### Community 45 - "Community 45"
-Cohesion: 0.40
-Nodes (4): BottomBar(), BottomBarProps, STATUS_COLORS, StatusDot
+Cohesion: 0.38
+Nodes (6): downloadFile(), fileExists(), main(), modelFiles, modelRoot, projectRoot
 
 ### Community 47 - "Community 47"
 Cohesion: 0.40
@@ -290,32 +296,60 @@ Cohesion: 0.50
 Nodes (4): Alert(), AlertDescription(), AlertTitle(), alertVariants
 
 ### Community 49 - "Community 49"
-Cohesion: 0.40
-Nodes (3): InputOTP(), InputOTPGroup(), InputOTPSlot()
+Cohesion: 0.29
+Nodes (7): 3.1 Top Header, 3.2.1 Left Collapsible Panel, 3.2 Left Navigation Rail, 3.3 Center Workspace, 3.4 Right Context Rail, 3.5 Bottom Status Bar, 3. Layout Model
 
 ### Community 50 - "Community 50"
 Cohesion: 0.50
 Nodes (3): { app, BrowserWindow }, fs, path
 
+### Community 52 - "Community 52"
+Cohesion: 0.40
+Nodes (5): downloadFile(), fileExists(), modelFiles, modelRoot, projectRoot
+
+### Community 56 - "Community 56"
+Cohesion: 0.33
+Nodes (6): 6.1 Cards, 6.2 Tables and Lists, 6.3 Tabs and Subtabs, 6.4 Modals, 6.5 Toasts, 6. Component Patterns
+
+### Community 57 - "Community 57"
+Cohesion: 0.40
+Nodes (5): 4.1 Overall Tone, 4.2 Typography, 4.3 Color, 4.4 Surfaces, 4. Visual Language
+
+### Community 58 - "Community 58"
+Cohesion: 0.40
+Nodes (5): 7.1 Header, 7.2 Left Bar, 7.3 Right Bar, 7.4 Bottom Bar, 7. Shell-Specific Guidance
+
+### Community 59 - "Community 59"
+Cohesion: 0.40
+Nodes (3): AccordionContent(), AccordionItem(), AccordionTrigger()
+
+### Community 60 - "Community 60"
+Cohesion: 0.50
+Nodes (4): 9.1 Loading, 9.2 Empty States, 9.3 Error States, 9. State and Feedback
+
+### Community 61 - "Community 61"
+Cohesion: 0.67
+Nodes (3): 5.1 Primary Hierarchy, 5.2 Secondary Hierarchy, 5. Navigation and Information Hierarchy
+
 ## Knowledge Gaps
-- **295 isolated node(s):** `name`, `version`, `description`, `author`, `main` (+290 more)
+- **370 isolated node(s):** `name`, `version`, `description`, `author`, `main` (+365 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `Community 4` to `Community 1`, `Community 2`, `Community 5`, `Community 38`, `Community 7`, `Community 41`, `Community 12`, `Community 13`, `Community 14`, `Community 48`, `Community 17`, `Community 49`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 27`?**
-  _High betweenness centrality (0.232) - this node is a cross-community bridge._
-- **Why does `getStoredApiKey()` connect `Community 15` to `Community 42`, `Community 11`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Why does `cn()` connect `Community 4` to `Community 1`, `Community 2`, `Community 5`, `Community 7`, `Community 27`, `Community 42`, `Community 12`, `Community 13`, `Community 14`, `Community 48`, `Community 17`, `Community 22`, `Community 23`, `Community 24`, `Community 59`?**
+  _High betweenness centrality (0.208) - this node is a cross-community bridge._
+- **Why does `getStoredApiKey()` connect `Community 15` to `Community 5`, `Community 31`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Community 0` to `Community 3`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _295 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _370 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.030303030303030304 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.029850746268656716 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.06585365853658537 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05279034690799397 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.06794871794871794 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10461538461538461 - nodes in this community are weakly interconnected._
