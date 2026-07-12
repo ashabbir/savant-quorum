@@ -39,5 +39,3 @@ dist-electron
 # CLI
 .antigravitycli/
 
-# Models
-build/stsb-cache/v1/onnx/model.onnx

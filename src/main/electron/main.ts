@@ -99,7 +99,7 @@ async function getStsbExtractor() {
         return await pipeline(
           'feature-extraction',
           'v1',
-          { local_files_only: true },
+          { dtype: 'fp32', local_files_only: true },
         )
       } catch {
         // Fallback to user cache dir next to sqlite db
@@ -112,6 +112,7 @@ async function getStsbExtractor() {
           return await pipeline(
             'feature-extraction',
             'v1',
+            { dtype: 'fp32' },
           )
         } catch (error: any) {
           // If downloading Xenova fails/unauthorized, try sentence-transformers repo
@@ -119,6 +120,7 @@ async function getStsbExtractor() {
             return await pipeline(
               'feature-extraction',
               'sentence-transformers/stsb-distilbert-base',
+              { dtype: 'fp32' },
             )
           } catch (fallbackError: any) {
             throw new Error(
@@ -349,7 +351,9 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     console.log(`[QUORUM] Loading Dev Server: ${VITE_DEV_SERVER_URL}`)
     win.loadURL(VITE_DEV_SERVER_URL)
-    win.webContents.openDevTools()
+    if (process.env.OPEN_DEVTOOLS === 'true') {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
   } else {
     // In built app, index.html is in the dist folder
     // When running from root (dev/build), dist-electron and dist are siblings
