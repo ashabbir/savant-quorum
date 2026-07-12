@@ -28,6 +28,8 @@ async function getWhisperTranscriber() {
   if (!whisperTranscriberPromise) {
     whisperTranscriberPromise = (async () => {
       const { env, pipeline } = await import('@huggingface/transformers')
+      env.useFS = true
+      env.useBrowserCache = false
       const bundledCacheDir = app.isPackaged
         ? path.join(process.resourcesPath, 'whisper-cache')
         : path.join(process.cwd(), 'build', 'whisper-cache')
@@ -79,6 +81,8 @@ async function getStsbExtractor() {
   if (!stsbExtractorPromise) {
     stsbExtractorPromise = (async () => {
       const { env, pipeline } = await import('@huggingface/transformers')
+      env.useFS = true
+      env.useBrowserCache = false
       const bundledCacheDir = app.isPackaged
         ? path.join(process.resourcesPath, 'stsb-cache')
         : path.join(process.cwd(), 'build', 'stsb-cache')
@@ -728,7 +732,11 @@ ipcMain.handle('get-embeddings', async (_event, text: string) => {
   if (!text?.trim()) throw new Error('Text input cannot be empty.')
   const extractor = await getStsbExtractor()
   const output = await extractor(text, { pooling: 'mean', normalize: true })
-  return Array.from(output.data)
+  const result = Array.from(output.data)
+  if (output && typeof output.dispose === 'function') {
+    output.dispose()
+  }
+  return result
 })
 
 ipcMain.handle('get-settings', async () => {

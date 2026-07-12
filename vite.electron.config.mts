@@ -21,6 +21,7 @@ export default defineConfig({
       external: [
         'electron',
         'better-sqlite3',
+        '@huggingface/transformers',
         'node:child_process',
         'node:fs/promises',
         'node:os',
