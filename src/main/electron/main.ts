@@ -35,28 +35,35 @@ async function getWhisperTranscriber() {
       const bundledModelRoot = path.join(bundledCacheDir, 'Xenova', 'whisper-tiny.en')
       const userModelRoot = path.join(userCacheDir, 'Xenova', 'whisper-tiny.en')
 
+      // Check bundled cache first
       try {
         await fs.access(path.join(bundledModelRoot, 'preprocessor_config.json'))
         env.allowLocalModels = true
         env.allowRemoteModels = false
         env.localModelPath = bundledCacheDir
-      } catch {
-        await fs.mkdir(userCacheDir, { recursive: true })
-        env.allowLocalModels = true
-        env.allowRemoteModels = false
-        env.localModelPath = userCacheDir
-      }
-
-      try {
         return await pipeline(
           'automatic-speech-recognition',
           'Xenova/whisper-tiny.en',
           { dtype: 'q8', local_files_only: true },
         )
-      } catch (error: any) {
-        throw new Error(
-          `Unable to load the local speech model. Download: https://huggingface.co/Xenova/whisper-tiny.en/tree/main. ${error.message}`,
-        )
+      } catch {
+        // Fallback to user cache dir next to sqlite db
+        await fs.mkdir(userCacheDir, { recursive: true })
+        env.allowLocalModels = true
+        env.allowRemoteModels = true
+        env.localModelPath = userCacheDir
+        env.cacheDir = userCacheDir // Ensure downloading writes to this directory
+        try {
+          return await pipeline(
+            'automatic-speech-recognition',
+            'Xenova/whisper-tiny.en',
+            { dtype: 'q8' },
+          )
+        } catch (error: any) {
+          throw new Error(
+            `Unable to load the local speech model. Download: https://huggingface.co/Xenova/whisper-tiny.en/tree/main. ${error.message}`,
+          )
+        }
       }
     })().catch(error => {
       whisperTranscriberPromise = null
