@@ -35,6 +35,7 @@ interface Window {
     }>
     getDbStatus: () => Promise<string>
     transcribeAudio: (audio: Float32Array) => Promise<string>
+    getEmbeddings: (text: string) => Promise<number[]>
     callMcpTool: (serverName: string, toolName: string, args: any) => Promise<any>
     saveAthenaThread: (thread: any) => Promise<boolean>
     getAthenaThreads: (sessionId?: string) => Promise<any[]>

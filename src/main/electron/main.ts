@@ -73,6 +73,64 @@ async function getWhisperTranscriber() {
   return whisperTranscriberPromise
 }
 
+let stsbExtractorPromise: Promise<any> | null = null
+
+async function getStsbExtractor() {
+  if (!stsbExtractorPromise) {
+    stsbExtractorPromise = (async () => {
+      const { env, pipeline } = await import('@huggingface/transformers')
+      const bundledCacheDir = app.isPackaged
+        ? path.join(process.resourcesPath, 'stsb-cache')
+        : path.join(process.cwd(), 'build', 'stsb-cache')
+      const userCacheDir = path.join(SAVANT_DIR, 'models', 'stsb-distilbert-base')
+      const bundledModelRoot = path.join(bundledCacheDir, 'v1')
+      const userModelRoot = path.join(userCacheDir, 'v1')
+
+      // Check bundled cache first
+      try {
+        await fs.access(path.join(bundledModelRoot, 'config.json'))
+        env.allowLocalModels = true
+        env.allowRemoteModels = false
+        env.localModelPath = bundledCacheDir
+        return await pipeline(
+          'feature-extraction',
+          'v1',
+          { local_files_only: true },
+        )
+      } catch {
+        // Fallback to user cache dir next to sqlite db
+        await fs.mkdir(userCacheDir, { recursive: true })
+        env.allowLocalModels = true
+        env.allowRemoteModels = true
+        env.localModelPath = userCacheDir
+        env.cacheDir = userCacheDir // Ensure downloading writes to this directory
+        try {
+          return await pipeline(
+            'feature-extraction',
+            'v1',
+          )
+        } catch (error: any) {
+          // If downloading Xenova fails/unauthorized, try sentence-transformers repo
+          try {
+            return await pipeline(
+              'feature-extraction',
+              'sentence-transformers/stsb-distilbert-base',
+            )
+          } catch (fallbackError: any) {
+            throw new Error(
+              `Unable to load the local similarity model. Download: https://huggingface.co/sentence-transformers/stsb-distilbert-base/tree/main. ${error.message} (Fallback: ${fallbackError.message})`,
+            )
+          }
+        }
+      }
+    })().catch(error => {
+      stsbExtractorPromise = null
+      throw error
+    })
+  }
+  return stsbExtractorPromise
+}
+
 async function initDb() {
   try {
     await fs.mkdir(SAVANT_DIR, { recursive: true })
@@ -664,6 +722,13 @@ ipcMain.handle('transcribe-audio', async (_event, audioPayload) => {
   const text = Array.isArray(result) ? result[0]?.text : result?.text
   if (!text?.trim()) throw new Error('No speech was detected.')
   return text.trim()
+})
+
+ipcMain.handle('get-embeddings', async (_event, text: string) => {
+  if (!text?.trim()) throw new Error('Text input cannot be empty.')
+  const extractor = await getStsbExtractor()
+  const output = await extractor(text, { pooling: 'mean', normalize: true })
+  return Array.from(output.data)
 })
 
 ipcMain.handle('get-settings', async () => {

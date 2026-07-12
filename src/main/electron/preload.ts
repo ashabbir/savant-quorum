@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('system', {
   saveSetting: (key: string, value: any) => ipcRenderer.invoke('save-setting', { key, value }),
   getDbStatus: () => ipcRenderer.invoke('get-db-status'),
   transcribeAudio: (audio: Float32Array) => ipcRenderer.invoke('transcribe-audio', audio),
+  getEmbeddings: (text: string) => ipcRenderer.invoke('get-embeddings', text),
   callMcpTool: (serverName: string, toolName: string, args: any) => ipcRenderer.invoke('call-mcp-tool', { serverName, toolName, args }),
   saveAthenaThread: (thread: any) => ipcRenderer.invoke('save-athena-thread', thread),
   getAthenaThreads: (sessionId?: string) => ipcRenderer.invoke('get-athena-threads', sessionId),

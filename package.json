@@ -5,11 +5,12 @@
   "author": "project-x",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
+    "dev": "npm run prepare:models && node scripts/setup-dev-models.mjs && electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
     "dev:renderer": "QUORUM_RENDERER_ONLY=1 vite --force --host 127.0.0.1 --port 5273 --strictPort",
     "dev:electron": "node scripts/start-electron-dev.mjs",
+    "prepare:models": "node scripts/download-whisper-model.mjs && node scripts/download-stsb-model.mjs",
     "prepare:whisper": "node scripts/download-whisper-model.mjs",
-    "build": "npm run prepare:whisper && tsc && vite build && electron-builder",
+    "build": "npm run prepare:models && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
     "test": "vitest run",
@@ -110,6 +111,10 @@
       {
         "from": "build/whisper-cache",
         "to": "whisper-cache"
+      },
+      {
+        "from": "build/stsb-cache",
+        "to": "stsb-cache"
       }
     ],
     "mac": {

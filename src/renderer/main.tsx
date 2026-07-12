@@ -73,6 +73,7 @@ if (!window.system) {
     transcribeAudio: async () => {
       throw new Error('Local speech transcription requires the Electron app.')
     },
+    getEmbeddings: async () => [],
     callMcpTool: async () => ({ content: [] }),
     saveAthenaThread: async () => true,
     getAthenaThreads: async () => [],

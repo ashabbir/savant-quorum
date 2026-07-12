@@ -37,6 +37,7 @@ const mockSystem = {
   listProviders: vi.fn().mockResolvedValue({ source: 'gateway', providers: [] }),
   getDbStatus: vi.fn().mockResolvedValue('connected'),
   transcribeAudio: vi.fn().mockResolvedValue('Mock transcription'),
+  getEmbeddings: vi.fn().mockResolvedValue([]),
   callMcpTool: vi.fn().mockResolvedValue({ content: [] }),
   saveAthenaThread: vi.fn().mockResolvedValue(true),
   getAthenaThreads: vi.fn().mockResolvedValue([]),
