@@ -2351,7 +2351,7 @@ ${CITATION_CONTRACT_PROMPT}
         text: userText.slice(0, 10_000),
       };
     }));
-    return suggestSessionGrouping(groupingInputs, foldersRef.current);
+    return await suggestSessionGrouping(groupingInputs, foldersRef.current);
   }
 
   const handleApplyGrouping = (suggestions: SessionGroupingSuggestion[]) => {
@@ -2510,7 +2510,7 @@ ${CITATION_CONTRACT_PROMPT}
         settings={settings}
         activeProviderIndex={activeProviderIndex}
       />
-      <AgentStallDialog agents={streamingAgents} onDecision={handleAgentRunDecision} />
+      <AgentStallDialog agents={streamingAgents} thinking={thinking} onDecision={handleAgentRunDecision} />
       <Toaster />
     </div>
   );

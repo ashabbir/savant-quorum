@@ -57,8 +57,8 @@ describe('SessionService', () => {
     })
 
     describe('suggestSessionGrouping', () => {
-      it('groups similar unfiled sessions into a proposed new folder', () => {
-        const suggestions = suggestSessionGrouping([
+      it('groups similar unfiled sessions into a proposed new folder', async () => {
+        const suggestions = await suggestSessionGrouping([
           { id: '1', title: 'React rendering issue', text: 'component state and frontend rendering' },
           { id: '2', title: 'React component tests', text: 'frontend component testing' },
           { id: '3', title: 'Database migration', text: 'postgres schema change' },
@@ -70,8 +70,8 @@ describe('SessionService', () => {
         expect(suggestions[0].keywords).toContain('react')
       })
 
-      it('suggests an existing folder when its name or hint matches', () => {
-        const suggestions = suggestSessionGrouping([
+      it('suggests an existing folder when its name or hint matches', async () => {
+        const suggestions = await suggestSessionGrouping([
           { id: '1', title: 'Rails query tuning', text: 'database query performance' },
         ], [
           { id: 'backend', name: 'Backend', hint: 'Rails database query performance' },
@@ -85,8 +85,8 @@ describe('SessionService', () => {
         })])
       })
 
-      it('groups sessions with the same acronym in their titles', () => {
-        const suggestions = suggestSessionGrouping([
+      it('groups sessions with the same acronym in their titles', async () => {
+        const suggestions = await suggestSessionGrouping([
           { id: '1', title: 'MFA registration issue', text: 'authentication enrollment behavior for organizations' },
           { id: '2', title: 'MFA login failure', text: 'sign in challenge diagnostics and recovery' },
         ], [])
@@ -96,8 +96,8 @@ describe('SessionService', () => {
         expect(suggestions[0].keywords).toContain('mfa')
       })
 
-      it('groups chats sharing a distinctive domain term despite different surrounding words', () => {
-        const suggestions = suggestSessionGrouping([
+      it('groups chats sharing a distinctive domain term despite different surrounding words', async () => {
+        const suggestions = await suggestSessionGrouping([
           {
             id: '1',
             title: 'Cookie issue',

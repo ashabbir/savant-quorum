@@ -5,13 +5,29 @@ import {
   getRunTiming,
   type AgentRunDisplayState,
 } from "../services/agentRunSupervision";
+import { Thinking } from "../App";
 
 interface AgentStallDialogProps {
   agents: Record<string, AgentRunDisplayState>;
+  thinking?: Thinking[];
   onDecision: (runId: string, decision: "kill" | "wait") => Promise<void>;
 }
 
-export function AgentStallDialog({ agents, onDecision }: AgentStallDialogProps) {
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+export function AgentStallDialog({ agents, thinking = [], onDecision }: AgentStallDialogProps) {
   const [now, setNow] = useState(Date.now());
   const [candidate, setCandidate] = useState<{
     agentName: string;
@@ -19,6 +35,7 @@ export function AgentStallDialog({ agents, onDecision }: AgentStallDialogProps) 
     lastActivityAt: number;
   } | null>(null);
   const promptedActivityRef = useRef<Record<string, number>>({});
+  const checkingStallRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1_000);
@@ -38,19 +55,57 @@ export function AgentStallDialog({ agents, onDecision }: AgentStallDialogProps) 
       return;
     }
 
-    for (const [agentName, state] of Object.entries(agents)) {
-      if (!state.runId || !state.lastActivityAt) continue;
-      const timing = getRunTiming(state, now);
-      if (
-        timing.idleMs >= timing.stallWarningMs
-        && promptedActivityRef.current[state.runId] !== state.lastActivityAt
-      ) {
-        promptedActivityRef.current[state.runId] = state.lastActivityAt;
-        setCandidate({ agentName, runId: state.runId, lastActivityAt: state.lastActivityAt });
-        break;
+    async function evaluateStall() {
+      for (const [agentName, state] of Object.entries(agents)) {
+        if (!state.runId || !state.lastActivityAt) continue;
+        const timing = getRunTiming(state, now);
+        if (
+          timing.idleMs >= timing.stallWarningMs
+          && promptedActivityRef.current[state.runId] !== state.lastActivityAt
+        ) {
+          // Skip if already checking this run activity
+          const checkKey = `${state.runId}-${state.lastActivityAt}`;
+          if (checkingStallRef.current[checkKey]) continue;
+          checkingStallRef.current[checkKey] = true;
+
+          // Retrieve last 2 thoughts for this agent
+          const agentThoughts = thinking
+            .filter(t => t.agent.toLowerCase() === agentName.toLowerCase() && t.thought)
+            .slice(0, 2);
+
+          if (agentThoughts.length >= 2) {
+            try {
+              const t1 = agentThoughts[0].thought;
+              const t2 = agentThoughts[1].thought;
+              
+              const embed1 = await window.system.getEmbeddings(t1);
+              const embed2 = await window.system.getEmbeddings(t2);
+              
+              if (embed1.length > 0 && embed2.length > 0) {
+                const sim = cosineSimilarity(embed1, embed2);
+                if (sim < 0.85) {
+                  // Thoughts are sufficiently different; auto-extend the idle timer
+                  console.log(`[StallSupervision] Automatically extending run for ${agentName} (Thought Similarity: ${sim.toFixed(2)})`);
+                  await onDecision(state.runId, "wait");
+                  delete checkingStallRef.current[checkKey];
+                  return;
+                }
+              }
+            } catch (err) {
+              console.error("Failed to check semantic stall similarity:", err);
+            }
+          }
+
+          promptedActivityRef.current[state.runId] = state.lastActivityAt;
+          setCandidate({ agentName, runId: state.runId, lastActivityAt: state.lastActivityAt });
+          delete checkingStallRef.current[checkKey];
+          break;
+        }
       }
     }
-  }, [agents, candidate, now]);
+
+    evaluateStall();
+  }, [agents, candidate, now, thinking, onDecision]);
 
   const activeState = candidate ? agents[candidate.agentName] : undefined;
   const timing = activeState ? getRunTiming(activeState, now) : null;
