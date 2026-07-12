@@ -125,16 +125,67 @@ function suggestionFolderName(keywords: string[]): string {
     .join(' & ') || 'Related Sessions'
 }
 
-export function suggestSessionGrouping(
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+export async function suggestSessionGrouping(
   sessions: SessionGroupingInput[],
   folders: GroupingFolderInput[],
-): SessionGroupingSuggestion[] {
+): Promise<SessionGroupingSuggestion[]> {
   const remaining = new Map(sessions.map(session => [session.id, session]))
   const suggestions: SessionGroupingSuggestion[] = []
 
+  // Pre-calculate and cache embeddings for sessions and folders using DistilBERT model
+  const sessionEmbeddings = new Map<string, number[]>()
+  for (const session of sessions) {
+    try {
+      const textToEmbed = `${session.title}. ${session.text}`
+      const embed = await window.system.getEmbeddings(textToEmbed)
+      if (embed && embed.length > 0) {
+        sessionEmbeddings.set(session.id, embed)
+      }
+    } catch (e) {
+      console.warn("Failed to get session embedding:", session.id, e)
+    }
+  }
+
+  const folderEmbeddings = new Map<string, number[]>()
+  for (const folder of folders) {
+    try {
+      const textToEmbed = `${folder.name}. ${folder.hint || ""}`
+      const embed = await window.system.getEmbeddings(textToEmbed)
+      if (embed && embed.length > 0) {
+        folderEmbeddings.set(folder.id, embed)
+      }
+    } catch (e) {
+      console.warn("Failed to get folder embedding:", folder.id, e)
+    }
+  }
+
   folders.forEach(folder => {
     const folderTokens = groupingTokens(`${folder.name} ${folder.hint || ''}`)
+    const folderEmbed = folderEmbeddings.get(folder.id)
+
     const matches = [...remaining.values()].filter(session => {
+      // 1. Semantic comparison using DistilBERT embeddings
+      const sessionEmbed = sessionEmbeddings.get(session.id)
+      if (sessionEmbed && folderEmbed) {
+        const sim = cosineSimilarity(sessionEmbed, folderEmbed)
+        if (sim >= 0.45) return true
+      }
+
+      // 2. Lexical fallback
       const titleTokens = groupingTokens(session.title)
       return hasSharedToken(titleTokens, folderTokens)
         || hasDistinctiveSharedToken(groupingTokens(`${session.title} ${session.text}`), folderTokens)
@@ -168,23 +219,44 @@ export function suggestSessionGrouping(
       cluster.push(current)
       const currentTokens = groupingTokens(`${current.title} ${current.text}`)
       const currentTitleTokens = groupingTokens(current.title)
+      const currentEmbed = sessionEmbeddings.get(current.id)
+
       unassigned.forEach(candidate => {
         if (visited.has(candidate.id)) return
-        const candidateTitleTokens = groupingTokens(candidate.title)
-        const similarity = jaccardSimilarity(
-          currentTokens,
-          groupingTokens(`${candidate.title} ${candidate.text}`),
-        )
-        const titleSimilarity = jaccardSimilarity(currentTitleTokens, candidateTitleTokens)
-        if (
-          similarity >= 0.2
-          || titleSimilarity >= 0.2
-          || hasSharedToken(currentTitleTokens, candidateTitleTokens)
-          || hasDistinctiveSharedToken(
+        
+        let isMatch = false
+        const candidateEmbed = sessionEmbeddings.get(candidate.id)
+        
+        // 1. Semantic match using DistilBERT cosine similarity
+        if (currentEmbed && candidateEmbed) {
+          const sim = cosineSimilarity(currentEmbed, candidateEmbed)
+          if (sim >= 0.5) {
+            isMatch = true
+          }
+        }
+
+        // 2. Lexical fallback
+        if (!isMatch) {
+          const candidateTitleTokens = groupingTokens(candidate.title)
+          const similarity = jaccardSimilarity(
             currentTokens,
             groupingTokens(`${candidate.title} ${candidate.text}`),
           )
-        ) {
+          const titleSimilarity = jaccardSimilarity(currentTitleTokens, candidateTitleTokens)
+          if (
+            similarity >= 0.2
+            || titleSimilarity >= 0.2
+            || hasSharedToken(currentTitleTokens, candidateTitleTokens)
+            || hasDistinctiveSharedToken(
+              currentTokens,
+              groupingTokens(`${candidate.title} ${candidate.text}`),
+            )
+          ) {
+            isMatch = true
+          }
+        }
+
+        if (isMatch) {
           visited.add(candidate.id)
           queue.push(candidate)
         }

@@ -27,8 +27,6 @@ dist-electron
 # Project specific
 .gemini/
 .vite/
-build/whisper-cache/
-build/stsb-cache/
 .env
 .env.*
 .env.*.local
@@ -40,3 +38,6 @@ build/stsb-cache/
 
 # CLI
 .antigravitycli/
+
+# Models
+build/stsb-cache/v1/onnx/model.onnx

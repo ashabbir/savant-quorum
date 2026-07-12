@@ -397,6 +397,20 @@ function InsightsDashboard({
   );
 }
 
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 function QualityPulseDashboard({
   thinking,
   messages,
@@ -489,6 +503,199 @@ function QualityPulseDashboard({
   const participantDrift = Array.from(participantDriftMap.values())
     .map(item => ({ ...item, average: clamp(item.total / item.transitions) }))
     .sort((left, right) => right.average - left.average);
+
+  // Semantic (DistilBERT) async metric calculations
+  const TOPIC_DOMAINS = [
+    "Database & SQL",
+    "Frontend & UI",
+    "Backend API",
+    "Security & Auth",
+    "Testing & CI",
+    "Performance",
+    "Documentation",
+    "Devops & Build"
+  ];
+
+  const [semanticMetrics, setSemanticMetrics] = useState<{
+    topicDrift: number;
+    contextRetention: number;
+    driftPoints: number[];
+    driftTimeline: any[];
+  } | null>(null);
+
+  const [semanticTopicModel, setSemanticTopicModel] = useState<{ topic: string; percentage: number }[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    async function runSemanticCalculation() {
+      if (intentAnswers.length === 0) {
+        if (active) {
+          setSemanticMetrics({
+            topicDrift: 0,
+            contextRetention: 0,
+            driftPoints: [],
+            driftTimeline: [],
+          });
+          setSemanticTopicModel([]);
+        }
+        return;
+      }
+      
+      try {
+        // Pre-calculate embeddings for the TOPIC_DOMAINS
+        const domainEmbeds = await Promise.all(
+          TOPIC_DOMAINS.map(async (domain) => {
+            try {
+              const res = await window.system.getEmbeddings(domain);
+              return { domain, embed: res };
+            } catch (e) {
+              return { domain, embed: [] as number[] };
+            }
+          })
+        );
+
+        // Classify each message in messages to build the topic distribution model
+        const messageTopicsList = await Promise.all(
+          messages.map(async (msg) => {
+            if (!msg.content || msg.role === "system" || msg.role === "internal" || msg.role === "error") return null;
+            try {
+              const msgEmbed = await window.system.getEmbeddings(msg.content);
+              if (!msgEmbed || msgEmbed.length === 0) return null;
+              
+              let maxSim = -Infinity;
+              let bestTopic = null;
+              for (const { domain, embed } of domainEmbeds) {
+                if (embed.length === 0) continue;
+                const sim = cosineSimilarity(msgEmbed, embed);
+                if (sim > maxSim) {
+                  maxSim = sim;
+                  bestTopic = domain;
+                }
+              }
+              return { messageId: msg.id, topic: bestTopic };
+            } catch (e) {
+              return null;
+            }
+          })
+        );
+
+        const topicAssignments = messageTopicsList.filter(Boolean) as { messageId: string; topic: string }[];
+        
+        // Count topic occurrences for topic modeling
+        const topicCountsMap: Record<string, number> = {};
+        topicAssignments.forEach(item => {
+          topicCountsMap[item.topic] = (topicCountsMap[item.topic] || 0) + 1;
+        });
+
+        const totalClassified = topicAssignments.length;
+        const computedModel = TOPIC_DOMAINS.map(domain => ({
+          topic: domain,
+          percentage: totalClassified > 0 ? Math.round(((topicCountsMap[domain] || 0) / totalClassified) * 100) : 0
+        })).sort((a, b) => b.percentage - a.percentage);
+
+        const driftPointsPromises = intentAnswers.map(async (answer) => {
+          const answerIndex = messages.indexOf(answer);
+          const precedingUser = messages.slice(0, answerIndex).reverse().find(msg => msg.role === "user");
+          const defaultDrift = clamp(100 - overlapPercent(keywords(precedingUser?.content || ""), keywords(answer.content)));
+          
+          if (!precedingUser?.content || !answer.content) {
+            return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
+          }
+          
+          try {
+            const uEmbed = await window.system.getEmbeddings(precedingUser.content);
+            const aEmbed = await window.system.getEmbeddings(answer.content);
+            if (uEmbed.length === 0 || aEmbed.length === 0) {
+              return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
+            }
+            
+            // Find query topic and answer topic
+            let maxUSim = -Infinity, bestUTopic = null;
+            let maxASim = -Infinity, bestATopic = null;
+            for (const { domain, embed } of domainEmbeds) {
+              if (embed.length === 0) continue;
+              const uSim = cosineSimilarity(uEmbed, embed);
+              if (uSim > maxUSim) {
+                maxUSim = uSim;
+                bestUTopic = domain;
+              }
+              const aSim = cosineSimilarity(aEmbed, embed);
+              if (aSim > maxASim) {
+                maxASim = aSim;
+                bestATopic = domain;
+              }
+            }
+
+            const rawSim = cosineSimilarity(uEmbed, aEmbed);
+            let drift = clamp(100 - Math.max(0, Math.min(100, Math.round(rawSim * 100))));
+            
+            // Apply drift penalty if the topics mismatch, or reward similarity
+            if (bestUTopic && bestATopic) {
+              if (bestUTopic !== bestATopic) {
+                drift = clamp(Math.round(drift * 1.25)); // shift topic -> drift penalty
+              } else {
+                drift = clamp(Math.round(drift * 0.75)); // same topic -> drift reduction
+              }
+            }
+
+            return { drift, answerId: answer.id, classifiedTopic: bestATopic };
+          } catch (e) {
+            return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
+          }
+        });
+
+        const driftResults = await Promise.all(driftPointsPromises);
+        
+        let retention = contextRetention;
+        if (latestAnswer && recentUserKeywords.size > 0) {
+          const recentUserText = userMessages.slice(-3).map(m => m.content).join(" ");
+          if (recentUserText.trim()) {
+            try {
+              const contextEmbed = await window.system.getEmbeddings(recentUserText);
+              const answerEmbed = await window.system.getEmbeddings(latestAnswer.content);
+              if (contextEmbed.length > 0 && answerEmbed.length > 0) {
+                const sim = cosineSimilarity(contextEmbed, answerEmbed);
+                retention = clamp(Math.round(sim * 100));
+              }
+            } catch (e) {
+              // fallback remains
+            }
+          }
+        }
+
+        if (!active) return;
+
+        const semanticDriftPoints = driftResults.map(r => r.drift);
+        const avgDrift = semanticDriftPoints.length > 0
+          ? clamp(semanticDriftPoints.reduce((sum, v) => sum + v, 0) / semanticDriftPoints.length)
+          : 0;
+
+        const updatedTimeline = driftTimeline.map(item => {
+          const semanticItem = driftResults.find(r => r.answerId === item.id);
+          return {
+            ...item,
+            semanticDrift: semanticItem ? semanticItem.drift : item.drift,
+            classifiedTopic: semanticItem ? semanticItem.classifiedTopic : undefined,
+          };
+        });
+
+        setSemanticMetrics({
+          topicDrift: avgDrift,
+          contextRetention: retention,
+          driftPoints: semanticDriftPoints,
+          driftTimeline: updatedTimeline,
+        });
+        setSemanticTopicModel(computedModel);
+      } catch (err) {
+        console.error("Failed to compute semantic metrics:", err);
+      }
+    }
+
+    runSemanticCalculation();
+    return () => {
+      active = false;
+    };
+  }, [messages]);
 
   const analysisText = [...messages.map(message => message.content), ...thinking.map(item => item.thought)].join(" ").toLowerCase();
   const agreementSignals = (analysisText.match(/\bagree|agreed|confirmed|supports?|consistent|validated\b/g) || []).length;
@@ -736,6 +943,10 @@ function QualityPulseDashboard({
     .map((value, index, values) => `${values.length === 1 ? 100 : (index / (values.length - 1)) * 200},${70 - (value / 100) * 60}`)
     .join(" ");
 
+  const semanticSparklinePoints = (semanticMetrics && semanticMetrics.driftPoints.length > 0 ? semanticMetrics.driftPoints : [0])
+    .map((value, index, values) => `${values.length === 1 ? 100 : (index / (values.length - 1)) * 200},${70 - (value / 100) * 60}`)
+    .join(" ");
+
   return (
     <div className="h-full overflow-y-auto p-3 space-y-4" style={{ scrollbarWidth: "thin" }}>
       <header className="flex items-start justify-between gap-3 border border-[var(--border)] bg-[var(--card)] p-3">
@@ -762,14 +973,15 @@ function QualityPulseDashboard({
           <MetricCard
             title="Topic drift"
             icon={<GitBranch size={14} />}
-            value={`${topicDrift}%`}
-            label={severity(topicDrift)}
-            color={riskColor(topicDrift)}
-            description="Lexical distance between each final answer and its preceding user request."
+            value={`${semanticMetrics ? semanticMetrics.topicDrift : '--'}% / ${topicDrift}%`}
+            label={severity(semanticMetrics ? semanticMetrics.topicDrift : topicDrift)}
+            color={riskColor(semanticMetrics ? semanticMetrics.topicDrift : topicDrift)}
+            description="Concept drift (DistilBERT, solid line) vs Lexical keyword drift (Jaccard, dashed line)."
           >
             <svg viewBox="0 0 200 80" className="w-full h-16" role="img" aria-label="Topic drift across final answers">
               <line x1="0" y1="40" x2="200" y2="40" stroke="var(--border)" strokeDasharray="4 4" />
-              <polyline points={sparklinePoints} fill="none" stroke={riskColor(topicDrift)} strokeWidth="3" />
+              <polyline points={sparklinePoints} fill="none" stroke="var(--muted-foreground)" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+              <polyline points={semanticSparklinePoints} fill="none" stroke={riskColor(semanticMetrics ? semanticMetrics.topicDrift : topicDrift)} strokeWidth="3" />
             </svg>
           </MetricCard>
 
@@ -783,8 +995,8 @@ function QualityPulseDashboard({
           >
             <div className="space-y-2 text-[9px]">
              <div className="flex justify-between gap-3">
-               <span className="text-[var(--accent)]">Agreement <strong>{agreementSignals}</strong></span>
-               <span className="text-[var(--good)]">Challenge <strong>{challengeSignals}</strong></span>
+                <span className="text-[var(--accent)]">Agreement <strong>{agreementSignals}</strong></span>
+                <span className="text-[var(--good)]">Challenge <strong>{challengeSignals}</strong></span>
               </div>
              <div
                className="h-3 flex bg-[var(--background)] border border-[var(--border)] overflow-hidden"
@@ -806,16 +1018,24 @@ function QualityPulseDashboard({
           <MetricCard
             title="Context retention"
             icon={<Cpu size={14} />}
-            value={`${contextRetention}%`}
-            label={contextRetention < 40 ? "ROT RISK" : contextRetention < 70 ? "WATCH" : "HEALTHY"}
-            color={retentionColor(contextRetention)}
-            description="Recent user terms retained in the latest final answer; low overlap flags context rot."
+            value={`${semanticMetrics ? semanticMetrics.contextRetention : '--'}% / ${contextRetention}%`}
+            label={(semanticMetrics ? semanticMetrics.contextRetention : contextRetention) < 40 ? "ROT RISK" : (semanticMetrics ? semanticMetrics.contextRetention : contextRetention) < 70 ? "WATCH" : "HEALTHY"}
+            color={retentionColor(semanticMetrics ? semanticMetrics.contextRetention : contextRetention)}
+            description="Semantic retention (DistilBERT, top bar) vs Lexical retention (bottom bar)."
           >
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-3 bg-[var(--background)] border border-[var(--border)] overflow-hidden">
-                <div className="h-full" style={{ width: `${contextRetention}%`, background: retentionColor(contextRetention) }} />
+            <div className="space-y-1.5 w-full">
+              <div className="flex items-center gap-3">
+                <span className="text-[8px] font-mono opacity-50 w-8">SEMANTIC</span>
+                <div className="flex-1 h-2 bg-[var(--background)] border border-[var(--border)] overflow-hidden">
+                  <div className="h-full" style={{ width: `${semanticMetrics ? semanticMetrics.contextRetention : 0}%`, background: retentionColor(semanticMetrics ? semanticMetrics.contextRetention : 0) }} />
+                </div>
               </div>
-              <span className="text-[9px] opacity-60">LAST 3 TURNS</span>
+              <div className="flex items-center gap-3">
+                <span className="text-[8px] font-mono opacity-50 w-8">LEXICAL</span>
+                <div className="flex-1 h-2 bg-[var(--background)] border border-[var(--border)] overflow-hidden">
+                  <div className="h-full" style={{ width: `${contextRetention}%`, background: "var(--muted-foreground)" }} />
+                </div>
+              </div>
             </div>
           </MetricCard>
 
@@ -928,27 +1148,39 @@ function QualityPulseDashboard({
             <div className="grid grid-cols-12 gap-2 text-[8px] uppercase tracking-wider opacity-50 border-b border-[var(--border)] pb-1">
               <span className="col-span-1">Time</span>
               <span className="col-span-2">Shift</span>
-              <span className="col-span-1 text-right">Drift</span>
+              <span className="col-span-1 text-right">Sem Drift</span>
+              <span className="col-span-1 text-right">Lex Drift</span>
               <span className="col-span-1 text-right">Size</span>
-              <span className="col-span-7">User intent keywords</span>
+              <span className="col-span-6">User intent keywords</span>
             </div>
-            {driftTimeline.length > 0 ? driftTimeline.slice(-12).map(item => (
-              <div key={item.id} className="grid grid-cols-12 gap-2 items-center border-b border-[color-mix(in_srgb,var(--border)_60%,transparent)] py-2 text-[9px]">
-                <span className="col-span-1 font-mono opacity-60">{item.timestamp}</span>
-                <span className="col-span-2 truncate" aria-label={`${item.previousActor} to ${item.actor}`}>
-                  <span className="opacity-50">{item.previousActor}</span>
-                  <span className="mx-1 text-[var(--primary)]">→</span>
-                  <strong>{item.actor}</strong>
-                </span>
-                <span className="col-span-1 text-right font-bold" style={{ color: riskColor(item.drift) }}>{item.drift}%</span>
-                <span className="col-span-1 text-right">{item.words}w</span>
-                <span className="col-span-7 flex flex-wrap gap-1">
-                  {item.topics.length > 0 ? item.topics.map(topic => (
-                    <span key={topic} className="border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">{topic}</span>
-                  )) : <span className="opacity-40">No distinct terms</span>}
-                </span>
-              </div>
-            )) : <div className="text-[10px] opacity-40 py-3">No message transitions yet.</div>}
+            {(() => {
+              const timelineToRender = (semanticMetrics && semanticMetrics.driftTimeline) || driftTimeline;
+              return timelineToRender.length > 0 ? timelineToRender.slice(-12).map(item => (
+                <div key={item.id} className="grid grid-cols-12 gap-2 items-center border-b border-[color-mix(in_srgb,var(--border)_60%,transparent)] py-2 text-[9px]">
+                  <span className="col-span-1 font-mono opacity-60">{item.timestamp}</span>
+                  <span className="col-span-2 truncate" aria-label={`${item.previousActor} to ${item.actor}`}>
+                    <span className="opacity-50">{item.previousActor}</span>
+                    <span className="mx-1 text-[var(--primary)]">→</span>
+                    <strong>{item.actor}</strong>
+                  </span>
+                  <span className="col-span-1 text-right font-bold" style={{ color: riskColor(item.semanticDrift !== undefined ? item.semanticDrift : item.drift) }}>
+                    {item.semanticDrift !== undefined ? `${item.semanticDrift}%` : '--'}
+                  </span>
+                  <span className="col-span-1 text-right font-bold opacity-60" style={{ color: riskColor(item.drift) }}>{item.drift}%</span>
+                  <span className="col-span-1 text-right">{item.words}w</span>
+                  <span className="col-span-6 flex flex-wrap gap-1 items-center">
+                    {item.classifiedTopic && (
+                      <span className="border border-[var(--primary)] bg-[rgba(0,229,255,0.08)] text-[var(--primary)] font-bold px-1.5 py-0.5 rounded-sm text-[8px] mr-2">
+                        {item.classifiedTopic.toUpperCase()}
+                      </span>
+                    )}
+                    {item.topics.length > 0 ? item.topics.map((topic: string) => (
+                      <span key={topic} className="border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5 text-[8px] opacity-70">{topic}</span>
+                    )) : <span className="opacity-40">No distinct terms</span>}
+                  </span>
+                </div>
+              )) : <div className="text-[10px] opacity-40 py-3">No message transitions yet.</div>;
+            })()}
           </div>
         </div>
       </section>
@@ -993,30 +1225,60 @@ function QualityPulseDashboard({
 
       <section className="border border-[var(--border)] bg-[var(--card)] p-3">
         <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--primary)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-          05 / Conversation map
+          05 / Conversation map & Topic Modeling
         </div>
         <h3 className="text-xs font-bold mt-2">Topics discussed</h3>
         <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
-          Terms ranked by the number of distinct messages in which they appear.
+          Lexical term frequencies compared against zero-shot BERT topic classification. Topic modeling requires 4+ messages.
         </p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
-          {topics.length > 0 ? topics.map((topic, index) => (
-            <div key={topic.topic}>
-              <div className="flex items-center justify-between text-[9px] mb-1">
-                <span className="truncate"><strong className="text-[var(--primary)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
-                <span>{topic.mentions}</span>
-              </div>
-              <div className="h-1.5 bg-[var(--background)] border border-[var(--border)]">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${(topic.mentions / maxTopicMentions) * 100}%`,
-                    background: index === 0 ? "var(--primary)" : "var(--chart-3)",
-                  }}
-                />
-              </div>
+        <div className="grid grid-cols-2 gap-4 mt-3">
+          <div>
+            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">Lexical Keyword Frequency</div>
+            <div className="space-y-2">
+              {topics.length > 0 ? topics.map((topic, index) => (
+                <div key={topic.topic}>
+                  <div className="flex items-center justify-between text-[9px] mb-1">
+                    <span className="truncate"><strong className="text-[var(--primary)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
+                    <span>{topic.mentions}</span>
+                  </div>
+                  <div className="h-1.5 bg-[var(--background)] border border-[var(--border)]">
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${(topic.mentions / maxTopicMentions) * 100}%`,
+                        background: index === 0 ? "var(--primary)" : "var(--chart-3)",
+                      }}
+                    />
+                  </div>
+                </div>
+              )) : <div className="text-[10px] opacity-40">No topic data yet.</div>}
             </div>
-          )) : <div className="text-[10px] opacity-40">No topic data yet.</div>}
+          </div>
+          
+          <div>
+            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">BERT Topic Modeling Distribution</div>
+            <div className="space-y-2">
+              {messages.length < 4 ? (
+                <div className="text-[10px] opacity-40 py-2">Awaiting enough conversation context (4+ messages) to model...</div>
+              ) : semanticTopicModel.length > 0 ? semanticTopicModel.filter(t => t.percentage > 0).map((topic, index) => (
+                <div key={topic.topic}>
+                  <div className="flex items-center justify-between text-[9px] mb-1">
+                    <span className="truncate"><strong className="text-[var(--chart-3)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
+                    <strong>{topic.percentage}%</strong>
+                  </div>
+                  <div className="h-1.5 bg-[var(--background)] border border-[var(--border)]">
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${topic.percentage}%`,
+                        background: index === 0 ? "var(--chart-3)" : "var(--chart-5)",
+                      }}
+                    />
+                  </div>
+                </div>
+              )) : <div className="text-[10px] opacity-40 py-2">Computing semantic topic distribution...</div>}
+            </div>
+          </div>
         </div>
       </section>
 
