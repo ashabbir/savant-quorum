@@ -32,22 +32,26 @@ async function getWhisperTranscriber() {
         ? path.join(process.resourcesPath, 'whisper-cache')
         : path.join(process.cwd(), 'build', 'whisper-cache')
       const userCacheDir = path.join(SAVANT_DIR, 'models', 'whisper')
+      const bundledModelRoot = path.join(bundledCacheDir, 'Xenova', 'whisper-tiny.en')
+      const userModelRoot = path.join(userCacheDir, 'Xenova', 'whisper-tiny.en')
 
       try {
-        await fs.access(path.join(bundledCacheDir, 'Xenova', 'whisper-tiny.en'))
-        env.cacheDir = bundledCacheDir
+        await fs.access(path.join(bundledModelRoot, 'preprocessor_config.json'))
+        env.allowLocalModels = true
         env.allowRemoteModels = false
+        env.localModelPath = bundledCacheDir
       } catch {
         await fs.mkdir(userCacheDir, { recursive: true })
-        env.cacheDir = userCacheDir
-        env.allowRemoteModels = true
+        env.allowLocalModels = true
+        env.allowRemoteModels = false
+        env.localModelPath = userCacheDir
       }
 
       try {
         return await pipeline(
           'automatic-speech-recognition',
           'Xenova/whisper-tiny.en',
-          { dtype: 'q8' },
+          { dtype: 'q8', local_files_only: true },
         )
       } catch (error: any) {
         throw new Error(
