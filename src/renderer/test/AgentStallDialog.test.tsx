@@ -35,4 +35,31 @@ describe("AgentStallDialog", () => {
       vi.useRealTimers();
     }
   });
+
+  it("does not prompt for runs that are already terminal", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-11T20:00:00.000Z"));
+    const now = Date.now();
+
+    try {
+      render(
+        <AgentStallDialog
+          agents={{
+            Engineer: {
+              status: "Run completed successfully.",
+              runId: "run-complete",
+              startedAt: now - 120_000,
+              lastActivityAt: now - 100_000,
+              idleTimeoutMs: 180_000,
+            },
+          }}
+          onDecision={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+
+      expect(screen.queryByText(/possible stalled run/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

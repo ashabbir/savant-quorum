@@ -27,6 +27,11 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+function isTerminalRunStatus(status?: string): boolean {
+  if (!status) return false;
+  return /(^|[\s:-])(complete|completed|done|error|failed|failure|killed|cancelled|canceled|terminated)([\s:-]|$)/i.test(status);
+}
+
 export function AgentStallDialog({ agents, thinking = [], onDecision }: AgentStallDialogProps) {
   const [now, setNow] = useState(Date.now());
   const [candidate, setCandidate] = useState<{
@@ -49,6 +54,7 @@ export function AgentStallDialog({ agents, thinking = [], onDecision }: AgentSta
         !active
         || active.runId !== candidate.runId
         || active.lastActivityAt !== candidate.lastActivityAt
+        || isTerminalRunStatus(active.status)
       ) {
         setCandidate(null);
       }
@@ -58,6 +64,7 @@ export function AgentStallDialog({ agents, thinking = [], onDecision }: AgentSta
     async function evaluateStall() {
       for (const [agentName, state] of Object.entries(agents)) {
         if (!state.runId || !state.lastActivityAt) continue;
+        if (isTerminalRunStatus(state.status)) continue;
         const timing = getRunTiming(state, now);
         if (
           timing.idleMs >= timing.stallWarningMs

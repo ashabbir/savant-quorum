@@ -151,6 +151,17 @@ export default function App() {
           const gwCfg = settingsData?.['gateway:config'];
           const gatewayUrl = (gwCfg?.url || 'http://127.0.0.1:3100').replace(/\/$/, '');
           const res = await fetch(`${gatewayUrl}/runs/${runId}/events`);
+          if (res.status === 404) {
+            clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
+            delete agentRunEventsIntervalRef.current[agentLabel];
+            setStreamingAgents(prev => {
+              if (!prev[agentLabel]) return prev;
+              const next = { ...prev };
+              delete next[agentLabel];
+              return next;
+            });
+            return;
+          }
           if (res.ok) {
             const data = await res.json();
             const events = data?.events || [];
@@ -178,6 +189,12 @@ export default function App() {
             if (events.some((event: any) => event?.type === 'complete' || event?.type === 'error')) {
               clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
               delete agentRunEventsIntervalRef.current[agentLabel];
+              setStreamingAgents(prev => {
+                if (!prev[agentLabel]) return prev;
+                const next = { ...prev };
+                delete next[agentLabel];
+                return next;
+              });
             }
           }
         } catch {}
