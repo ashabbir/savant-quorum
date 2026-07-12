@@ -277,6 +277,40 @@
   color: var(--foreground);
 }
 
+.run-recovery-button {
+  margin-top: 0.65rem;
+  padding: 0.4rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--cp-cyan);
+  font: 700 0.7rem 'Share Tech Mono', monospace;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.run-recovery-button:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.16);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.12);
+}
+
+.run-recovery-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.run-recovery-spinner {
+  animation: run-recovery-spin 0.8s linear infinite;
+}
+
+@keyframes run-recovery-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Input Section */
 .chat-input-panel {
   background: var(--cp-bg-2);
@@ -369,6 +403,45 @@
 .chat-attach-button:hover {
   background: rgba(0, 229, 255, 0.08);
   box-shadow: 0 0 6px rgba(0, 229, 255, 0.25);
+}
+
+.chat-voice-button {
+  padding: 0.375rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  background: transparent;
+  color: var(--cp-cyan);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  cursor: pointer;
+}
+
+.chat-voice-button:hover {
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.25);
+}
+
+.chat-voice-button.listening {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: voice-input-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-voice-button.transcribing,
+.chat-voice-button:disabled {
+  color: var(--warning);
+  border-color: var(--warning);
+  cursor: wait;
+  opacity: 0.75;
+}
+
+@keyframes voice-input-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 .chat-input-footer-row {

@@ -56,7 +56,7 @@ export function ActionBar({ currentChatName, onCreateChat, onRenameChat, onExpor
             }}
             className="flex items-center gap-1 px-2 py-0.5 text-xs hover:opacity-90 transition-all"
           >
-          <Plus size={11} />
+            <Plus size={11} />
           </button>
         </Dialog.Trigger>
         <Dialog.Portal>

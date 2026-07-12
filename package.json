@@ -1,6 +1,6 @@
 {
   "name": "savant-quorum",
-  "version": "5.0.40",
+  "version": "5.0.60",
   "description": "Quorum - A high-security multi-agent collaborative environment.",
   "author": "project-x",
   "main": "dist-electron/main.js",
@@ -8,7 +8,8 @@
     "dev": "electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
     "dev:renderer": "QUORUM_RENDERER_ONLY=1 vite --force --host 127.0.0.1 --port 5273 --strictPort",
     "dev:electron": "node scripts/start-electron-dev.mjs",
-    "build": "tsc && vite build && electron-builder",
+    "prepare:whisper": "node scripts/download-whisper-model.mjs",
+    "build": "npm run prepare:whisper && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
     "test": "vitest run",
@@ -17,6 +18,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@huggingface/transformers": "^3.8.1",
     "@mui/icons-material": "^9.0.1",
     "@mui/material": "^9.0.1",
     "@popperjs/core": "^2.11.8",
@@ -104,11 +106,18 @@
           "trayTemplate.png",
           "trayTemplate@2x.png"
         ]
+      },
+      {
+        "from": "build/whisper-cache",
+        "to": "whisper-cache"
       }
     ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Quorum uses the microphone to transcribe speech into chat messages."
+      },
       "target": [
         "dmg",
         "zip"

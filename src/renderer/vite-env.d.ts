@@ -34,6 +34,7 @@ interface Window {
       }>
     }>
     getDbStatus: () => Promise<string>
+    transcribeAudio: (audio: Float32Array) => Promise<string>
     callMcpTool: (serverName: string, toolName: string, args: any) => Promise<any>
     saveAthenaThread: (thread: any) => Promise<boolean>
     getAthenaThreads: (sessionId?: string) => Promise<any[]>
@@ -41,6 +42,15 @@ interface Window {
     getAthenaMessages: (threadId: string) => Promise<any[]>
     saveAthenaRun: (run: any) => Promise<boolean>
     getAthenaRuns: (threadId?: string) => Promise<any[]>
-    runAgentViaGateway: (payload: { provider: string; model: string; prompt: string; timeoutMs?: number }) => Promise<string>
+    runAgentViaGateway: (payload: { provider: string; model: string; prompt: string; timeoutMs?: number; agentLabel?: string }) => Promise<string>
+    resumeAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => Promise<string>
+    extendAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => Promise<boolean>
+    killAgentRun: (payload: { runId: string }) => Promise<boolean>
+    onAgentRunStarted: (cb: (data: { runId: string; agentLabel: string; provider: string; model: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number }) => void) => void
+    offAgentRunStarted: () => void
+    onAgentRunConnectionState: (cb: (data: { runId: string; agentLabel: string; state: 'disconnected' | 'reconnected'; detail?: string }) => void) => void
+    offAgentRunConnectionState: () => void
+    onAgentRunActivity: (cb: (data: { runId: string; agentLabel: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number; reason: string }) => void) => void
+    offAgentRunActivity: () => void
   }
 }

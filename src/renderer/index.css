@@ -295,3 +295,43 @@ body {
 .chat-markdown--whisper {
   font-size: 0.92rem;
 }
+
+.summary-markdown .chat-markdown {
+  font-size: 0.95rem;
+  line-height: 1.58;
+}
+
+.summary-markdown .chat-markdown h1 {
+  margin-bottom: 1rem;
+  padding-bottom: 0.55rem;
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-markdown .chat-markdown h2 {
+  margin: 1rem 0 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--secondary));
+  color: var(--foreground);
+  font-size: 1rem;
+}
+
+.summary-markdown .chat-markdown h3 {
+  margin-top: 0.75rem;
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-markdown .chat-markdown blockquote {
+  margin: 0.35rem 0 0.7rem;
+  border-left-color: var(--chart-3);
+  background: color-mix(in srgb, var(--chart-3) 6%, var(--background));
+  font-size: 0.95rem;
+}

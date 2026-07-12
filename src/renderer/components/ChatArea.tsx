@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, memo } from "react";
-import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert, Globe, Search, RefreshCw, X, Edit, Paperclip } from "lucide-react";
+import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert, Globe, Search, RefreshCw, X, Edit, Paperclip, Mic, MicOff } from "lucide-react";
 import { ChatMarkdown } from './ChatMarkdown';
+import {
+  formatRunDuration,
+  getRunTiming,
+  type AgentRunDisplayState,
+} from "../services/agentRunSupervision";
 
 export interface Message {
   id: string;
@@ -33,6 +38,9 @@ interface ChatAreaProps {
   sessionFiles?: { name: string; content: string; summary?: string; loading?: boolean }[];
   onDeleteSessionFile?: (name: string) => void;
   thinking?: any[];
+  streamingAgents?: Record<string, AgentRunDisplayState>;
+  onRecoverRun?: (runId: string) => Promise<void>;
+  onRetryFailedRequest?: (messageId: string) => Promise<void>;
 }
 
 const getRoleIcon = (role: Message['role']) => {
@@ -303,11 +311,18 @@ const WhisperGroupBlock = ({
   );
 };
 
-const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMessage, onUpdateMessage }: { msg: Message, sessionTitle: string, onDeleteMessage?: (id: string) => void, onEditMessage?: (id: string, newContent: string) => void, onUpdateMessage?: (id: string, newContent: string) => void }) => {
+const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMessage, onUpdateMessage, onRecoverRun, onRetryFailedRequest }: { msg: Message, sessionTitle: string, onDeleteMessage?: (id: string) => void, onEditMessage?: (id: string, newContent: string) => void, onUpdateMessage?: (id: string, newContent: string) => void, onRecoverRun?: (runId: string) => Promise<void>, onRetryFailedRequest?: (messageId: string) => Promise<void> }) => {
   const isUser = msg.role === 'user';
   const timestamp = typeof msg.timestamp === 'number' ? new Date(msg.timestamp) : msg.timestamp;
   const [isEditing, setIsEditing] = useState(false);
   const [editVal, setEditVal] = useState(msg.content);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const recoverableRunId = msg.role === 'error'
+    ? msg.content.match(/RECOVERABLE_AGENT_(?:TIMEOUT|DISCONNECT) runId=([^\s]+)/)?.[1]
+    : undefined;
+  const isLegacyTimeout = msg.role === 'error'
+    && !recoverableRunId
+    && /AGENT_TIMEOUT|ALL_PROVIDERS_EXHAUSTED/i.test(msg.content);
 
   function handleSaveEdit() {
     if (editVal.trim() && editVal !== msg.content) {
@@ -382,6 +397,40 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
                   onUpdateMessage?.(msg.id, updatedContent);
                 }}
               />
+              {recoverableRunId && onRecoverRun && (
+                <button
+                  className="run-recovery-button"
+                  disabled={isRecovering}
+                  onClick={async () => {
+                    setIsRecovering(true);
+                    try {
+                      await onRecoverRun(recoverableRunId);
+                    } finally {
+                      setIsRecovering(false);
+                    }
+                  }}
+                >
+                  <RefreshCw size={12} className={isRecovering ? 'run-recovery-spinner' : ''} />
+                  {isRecovering ? 'RECONNECTING...' : 'RECOVER RUN'}
+                </button>
+              )}
+              {isLegacyTimeout && onRetryFailedRequest && (
+                <button
+                  className="run-recovery-button"
+                  disabled={isRecovering}
+                  onClick={async () => {
+                    setIsRecovering(true);
+                    try {
+                      await onRetryFailedRequest(msg.id);
+                    } finally {
+                      setIsRecovering(false);
+                    }
+                  }}
+                >
+                  <RefreshCw size={12} className={isRecovering ? 'run-recovery-spinner' : ''} />
+                  {isRecovering ? 'RESTARTING...' : 'RETRY REQUEST'}
+                </button>
+              )}
               {msg.attachments && msg.attachments.length > 0 && (
                 <div className="message-attachments-container">
                   {msg.attachments.map((att, idx) => (
@@ -411,9 +460,126 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
   );
 });
 
+async function decodeRecordingForWhisper(recording: Blob) {
+  const audioContext = new AudioContext();
+  try {
+    const decoded = await audioContext.decodeAudioData(await recording.arrayBuffer());
+    const mono = new Float32Array(decoded.length);
+    for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
+      const channelData = decoded.getChannelData(channel);
+      for (let index = 0; index < decoded.length; index += 1) {
+        mono[index] += channelData[index] / decoded.numberOfChannels;
+      }
+    }
 
+    if (decoded.sampleRate === 16_000) return mono;
+    const outputLength = Math.max(1, Math.round(mono.length * 16_000 / decoded.sampleRate));
+    const resampled = new Float32Array(outputLength);
+    const ratio = decoded.sampleRate / 16_000;
+    for (let index = 0; index < outputLength; index += 1) {
+      const sourcePosition = index * ratio;
+      const lowerIndex = Math.floor(sourcePosition);
+      const upperIndex = Math.min(lowerIndex + 1, mono.length - 1);
+      const weight = sourcePosition - lowerIndex;
+      resampled[index] = mono[lowerIndex] * (1 - weight) + mono[upperIndex] * weight;
+    }
+    return resampled;
+  } finally {
+    await audioContext.close();
+  }
+}
 
-export function ChatArea({ 
+function AgentActivityCard({
+  agentName,
+  agentData,
+}: {
+  agentName: string;
+  agentData: AgentRunDisplayState;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const events = agentData.events || [];
+  const timing = getRunTiming(agentData, now);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const renderEvent = (ev: any, idx: number) => {
+    if (ev.type === 'thinking') {
+      return (
+        <div key={idx} style={{ color: ev.status === 'error' ? 'var(--accent)' : 'rgba(100,180,255,0.85)', fontSize: '10px', fontFamily: 'monospace', padding: '1px 0' }}>
+          &gt; [{ev.provider}:{ev.model}] {ev.status}{ev.reason ? ` — ${ev.reason}` : ''}
+          {ev.status === 'pending' && <span style={{ marginLeft: 4, animation: 'pulse 1s infinite' }}>...</span>}
+        </div>
+      );
+    }
+    if (ev.type === 'chunk') {
+      return (
+        <div key={idx} style={{ color: 'rgba(220,220,220,0.9)', fontSize: '10px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', padding: '1px 0' }}>
+          {ev.content}
+        </div>
+      );
+    }
+    if (ev.type === 'complete') {
+      return (
+        <div key={idx} style={{ color: '#00ff88', fontSize: '10px', fontFamily: 'monospace', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 4, marginTop: 4 }}>
+          &gt; Run complete.
+        </div>
+      );
+    }
+    if (ev.type === 'error') {
+      return (
+        <div key={idx} style={{ color: 'var(--accent)', fontSize: '10px', fontFamily: 'monospace', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 4, marginTop: 4 }}>
+          &gt; Error: {ev.message || ev.content || 'Run failed'}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div style={{ background: 'rgba(0,20,35,0.7)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 3, overflow: 'hidden' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.35rem 0.6rem', cursor: events.length > 0 ? 'pointer' : 'default' }}
+        onClick={() => events.length > 0 && setExpanded(e => !e)}
+      >
+        <span style={{ color: 'var(--cp-cyan)', fontWeight: 700, fontSize: '11px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+          {agentName.toUpperCase()}
+        </span>
+        <span style={{ opacity: 0.65, fontSize: '10px', flex: 1, fontFamily: 'monospace' }}>
+          {agentData.status}
+        </span>
+        {agentData.startedAt && agentData.lastActivityAt && agentData.idleTimeoutMs && (
+          <span
+            title="Elapsed time · idle time remaining. Idle timer resets whenever Athena sees agent activity."
+            style={{ fontSize: '9px', color: 'var(--good)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}
+          >
+            {formatRunDuration(timing.elapsedMs)} · idle {formatRunDuration(timing.idleRemainingMs)}
+          </span>
+        )}
+        {events.length > 0 && (
+          <span style={{ fontSize: '9px', color: 'rgba(0,229,255,0.5)', fontFamily: 'monospace' }}>
+            {expanded ? '▲ collapse' : `▼ ${events.length} events`}
+          </span>
+        )}
+        <div className="typing-dots" style={{ flexShrink: 0 }}>
+          <span className="typing-dot"></span>
+          <span className="typing-dot"></span>
+          <span className="typing-dot"></span>
+        </div>
+      </div>
+      {expanded && events.length > 0 && (
+        <div style={{ borderTop: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,0,0,0.5)', padding: '0.4rem 0.6rem', maxHeight: '180px', overflowY: 'auto' }}>
+          {events.map((ev, i) => renderEvent(ev, i))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatArea({
   messages, 
   sessionTitle, 
   onSend, 
@@ -430,7 +596,10 @@ export function ChatArea({
   agents = [],
   sessionFiles = [],
   onDeleteSessionFile,
-  thinking = []
+  thinking = [],
+  streamingAgents = {},
+  onRecoverRun,
+  onRetryFailedRequest,
 }: ChatAreaProps) {
   const [input, setInput] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -438,6 +607,8 @@ export function ChatArea({
   const [selectedAgent, setSelectedAgent] = useState("ALL");
   const [slashSuggestions, setSlashSuggestions] = useState<{ name: string; desc: string }[]>([]);
   const [selectedSugIdx, setSelectedSugIdx] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -446,6 +617,79 @@ export function ChatArea({
   const lastMessageCountRef = useRef(messages.length);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const recordedAudioChunksRef = useRef<Blob[]>([]);
+  const speechBaseInputRef = useRef("");
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
+  async function toggleVoiceInput() {
+    if (isListening) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (isTranscribing) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      microphoneStreamRef.current = stream;
+      recordedAudioChunksRef.current = [];
+      speechBaseInputRef.current = input.trimEnd();
+
+      const preferredMimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "";
+      const recorder = new MediaRecorder(stream, preferredMimeType ? { mimeType: preferredMimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) recordedAudioChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setIsListening(false);
+        window.dispatchEvent(new CustomEvent('toast', { detail: 'Microphone recording failed.' }));
+      };
+      recorder.onstop = async () => {
+        setIsListening(false);
+        setIsTranscribing(true);
+        microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+        microphoneStreamRef.current = null;
+        mediaRecorderRef.current = null;
+
+        try {
+          const recording = new Blob(recordedAudioChunksRef.current, {
+            type: recorder.mimeType || "audio/webm",
+          });
+          const audio = await decodeRecordingForWhisper(recording);
+          const transcript = await window.system.transcribeAudio(audio);
+          const base = speechBaseInputRef.current;
+          setInput(`${base}${base && transcript ? " " : ""}${transcript.trim()}`);
+        } catch (error: any) {
+          window.dispatchEvent(new CustomEvent('toast', {
+            detail: `Voice transcription failed: ${error.message}`,
+          }));
+        } finally {
+          recordedAudioChunksRef.current = [];
+          setIsTranscribing(false);
+          textareaRef.current?.focus();
+        }
+      };
+      recorder.start();
+      setIsListening(true);
+    } catch (error: any) {
+      const detail = error?.name === "NotAllowedError"
+        ? "Microphone permission was denied."
+        : `Unable to start microphone: ${error.message}`;
+      window.dispatchEvent(new CustomEvent('toast', { detail }));
+    }
+  }
 
   function triggerFileInput() {
     fileInputRef.current?.click();
@@ -532,6 +776,7 @@ export function ChatArea({
   }, [input]);
 
   async function handleSendMsg() {
+    if (isListening || isTranscribing) return;
     const text = input.trim();
     if (!text) return;
 
@@ -730,21 +975,35 @@ export function ChatArea({
               onDeleteMessage={onDeleteMessage} 
               onEditMessage={onEditMessage}
               onUpdateMessage={onUpdateMessage}
+              onRecoverRun={onRecoverRun}
+              onRetryFailedRequest={onRetryFailedRequest}
             />
           );
         })}
         {isLoading && (
           <div className="processing-indicator-container">
-            <div className="processing-bubble">
-              <span className="processing-text">
-                // SWARM_PROCESSING: [{statusText}]
-              </span>
-              <div className="typing-dots">
-                <span className="typing-dot"></span>
-                <span className="typing-dot"></span>
-                <span className="typing-dot"></span>
+            {Object.keys(streamingAgents).length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                {Object.entries(streamingAgents).map(([agentName, agentData]) => (
+                  <AgentActivityCard
+                    key={agentName}
+                    agentName={agentName}
+                    agentData={agentData}
+                  />
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="processing-bubble">
+                <span className="processing-text">
+                  // SWARM_PROCESSING: [{statusText}]
+                </span>
+                <div className="typing-dots">
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div ref={bottomRef} />
@@ -889,8 +1148,18 @@ export function ChatArea({
             className={`chat-input-textarea ${isDragOver ? 'dragover' : ''}`}
           />
           <button
+            onClick={toggleVoiceInput}
+            className={`chat-voice-button ${isListening ? "listening" : ""} ${isTranscribing ? "transcribing" : ""}`}
+            title={isTranscribing ? "Transcribing locally" : isListening ? "Stop and transcribe" : "Start voice input"}
+            aria-label={isTranscribing ? "Transcribing voice input" : isListening ? "Stop voice input" : "Start voice input"}
+            disabled={isTranscribing}
+            type="button"
+          >
+            {isTranscribing ? <RefreshCw size={13} className="animate-spin" /> : isListening ? <MicOff size={13} /> : <Mic size={13} />}
+          </button>
+          <button
             onClick={handleSendMsg}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isListening || isTranscribing}
             className="chat-send-button"
           >
             <Send size={13} />
@@ -898,7 +1167,7 @@ export function ChatArea({
         </div>
         <div className="chat-input-footer-row">
           <span>enter to send · shift+enter for newline</span>
-          {isLoading && <span className="active-state">SYSTEM_BUSY</span>}
+          {isLoading && <span className="active-state">ACTIVE · {statusText} · new context joins this run</span>}
         </div>
       </div>
     </div>

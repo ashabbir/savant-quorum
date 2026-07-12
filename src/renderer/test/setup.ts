@@ -36,6 +36,7 @@ const mockSystem = {
   saveSetting: vi.fn().mockResolvedValue(true),
   listProviders: vi.fn().mockResolvedValue({ source: 'gateway', providers: [] }),
   getDbStatus: vi.fn().mockResolvedValue('connected'),
+  transcribeAudio: vi.fn().mockResolvedValue('Mock transcription'),
   callMcpTool: vi.fn().mockResolvedValue({ content: [] }),
   saveAthenaThread: vi.fn().mockResolvedValue(true),
   getAthenaThreads: vi.fn().mockResolvedValue([]),
@@ -44,6 +45,15 @@ const mockSystem = {
   saveAthenaRun: vi.fn().mockResolvedValue(true),
   getAthenaRuns: vi.fn().mockResolvedValue([]),
   runAgentViaGateway: vi.fn().mockResolvedValue('Mock gateway response'),
+  resumeAgentRun: vi.fn().mockResolvedValue('Mock recovered gateway response'),
+  extendAgentRun: vi.fn().mockResolvedValue(true),
+  killAgentRun: vi.fn().mockResolvedValue(true),
+  onAgentRunStarted: vi.fn(),
+  offAgentRunStarted: vi.fn(),
+  onAgentRunConnectionState: vi.fn(),
+  offAgentRunConnectionState: vi.fn(),
+  onAgentRunActivity: vi.fn(),
+  offAgentRunActivity: vi.fn(),
 }
 
 const localStorageMock = (() => {
