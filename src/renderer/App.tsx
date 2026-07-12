@@ -726,7 +726,7 @@ export default function App() {
       });
   }
 
-  const runWithFallback = async (prompt: string, agentName: string, timeoutMs: number = REGULAR_AGENT_TIMEOUT_MS) => {
+  const runWithFallback = async (prompt: string, agentName: string, timeoutMs: number = REGULAR_AGENT_TIMEOUT_MS, extraPayload?: Record<string, any>) => {
     const chain = settings["provider:chain"] || [
       { provider: 'gemini', model: 'gemini-2.0-flash' },
       { provider: 'claude', model: 'haiku' }
@@ -751,6 +751,7 @@ export default function App() {
           prompt,
           timeoutMs,
           agentLabel: agentName,
+          ...extraPayload,
         });
 
         // Basic quota/error checks (ensure it's actually an error message and not user-facing text containing these words)
@@ -985,8 +986,117 @@ ${transcript}`,
     addThinking('Athena', 'MANUAL_NEURAL_RECALIBRATION_TRIGGERED');
     
     try {
+      addThinking('Athena', 'PREPROCESSING_SESSION_TEXT_START');
+      
+      const chatText = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+      const prevSummary = sessionSummary || "";
+      
+      // Local BERT embedding
+      const chatEmbedding = await window.system.getEmbeddings(chatText.slice(0, 4000));
+      const summaryEmbedding = prevSummary ? await window.system.getEmbeddings(prevSummary.slice(0, 4000)) : [];
+      
+      // Keyword/Topic extraction
+      const stopWords = new Set([
+        'about', 'above', 'after', 'again', 'against', 'along', 'already', 'would', 'could', 'should',
+        'the', 'and', 'a', 'of', 'to', 'is', 'in', 'that', 'it', 'for', 'you', 'was', 'with', 'on', 'as', 'at', 'by', 'an', 'be', 'this', 'are', 'from', 'or', 'have', 'i', 'your', 'we', 'but', 'not', 'this', 'that', 'with', 'what', 'how', 'why', 'who', 'our', 'more', 'some', 'than', 'them', 'their', 'there', 'then', 'here', 'when', 'where', 'been', 'were', 'has', 'had', 'does', 'did', 'doing', 'done'
+      ]);
+      
+      const extractTopics = (text: string): string[] => {
+        const words = text
+          .toLowerCase()
+          .replace(/[^\w\s-]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 3 && !stopWords.has(w));
+        const freqs: Record<string, number> = {};
+        for (const w of words) {
+          freqs[w] = (freqs[w] || 0) + 1;
+        }
+        return Object.entries(freqs)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(entry => entry[0]);
+      };
+      
+      const topics = extractTopics(chatText);
+      
+      // Semantic Clustering of Turns/Messages
+      const candidateMessages = messages.filter(m => m.content && m.content.trim().length > 10).slice(-15);
+      const msgEmbeddings = await Promise.all(candidateMessages.map(async (m) => {
+        const vector = await window.system.getEmbeddings(m.content.slice(0, 1000));
+        return { role: m.role, content: m.content, vector };
+      }));
+      
+      const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
+        if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) return 0;
+        let dotProduct = 0;
+        let normA = 0;
+        let normB = 0;
+        for (let i = 0; i < vecA.length; i++) {
+          dotProduct += vecA[i] * vecB[i];
+          normA += vecA[i] * vecA[i];
+          normB += vecB[i] * vecB[i];
+        }
+        if (normA === 0 || normB === 0) return 0;
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+      };
+      
+      const clusters: { label: string; items: string[] }[] = [];
+      const threshold = 0.55;
+      
+      for (const item of msgEmbeddings) {
+        let placed = false;
+        for (const cluster of clusters) {
+          const firstItem = msgEmbeddings.find(x => x.content === cluster.items[0]);
+          if (firstItem) {
+            const sim = cosineSimilarity(item.vector, firstItem.vector);
+            if (sim > threshold) {
+              cluster.items.push(item.content);
+              placed = true;
+              break;
+            }
+          }
+        }
+        if (!placed) {
+          clusters.push({
+            label: "",
+            items: [item.content],
+          });
+        }
+      }
+      
+      for (const cluster of clusters) {
+        const clusterText = cluster.items.join(" ");
+        const clusterTopics = extractTopics(clusterText);
+        cluster.label = clusterTopics.slice(0, 3).join(", ") || `Theme ${clusters.indexOf(cluster) + 1}`;
+      }
+      
+      const preprocessData = {
+        topics,
+        clusters: clusters.map(c => ({
+          label: c.label,
+          count: c.items.length,
+          snippets: c.items.map(item => item.slice(0, 120) + (item.length > 120 ? '...' : ''))
+        })),
+        chatEmbedding,
+        summaryEmbedding
+      };
+      
+      // Store preprocess data locally in sessionMetadata
+      const updatedMeta = {
+        ...sessionMetadataRef.current,
+        preprocess: preprocessData
+      };
+      setSessionMetadata(updatedMeta);
+      
+      addThinking('Athena', 'PREPROCESSING_SESSION_TEXT_COMPLETE');
+      
       const summaryPrompt = `
         You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The user has requested a manual neural recalibration of the session state.
+        
+        We have preprocessed the session text using local BERT models:
+        - Extracted Topics: ${topics.join(', ')}
+        - Semantic Clusters:
+          ${clusters.map(c => `* Cluster "${c.label}" (${c.items.length} messages): \n    ${c.items.slice(0, 3).map(item => `- ${item.slice(0, 100)}...`).join('\n    ')}`).join('\n')}
         
         CURRENT_SESSION_SUMMARY:
         "${sessionSummary || "No previous summary available."}"
@@ -994,7 +1104,7 @@ ${transcript}`,
         FULL_CHAT_HISTORY:
         ${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
         
-        TASK: Produce polished Markdown that helps the user quickly understand the session.
+        TASK: Produce polished Markdown that helps the user quickly understand the session. Incorporate the preprocessed semantic topics and clusters to structure the summary.
 
         REQUIRED STRUCTURE:
         # Session Summary
@@ -1027,9 +1137,16 @@ ${transcript}`,
         5. Return only the Markdown summary.
       `;
       
-      const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Athena');
+      const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Athena', REGULAR_AGENT_TIMEOUT_MS, {
+        embeddings: {
+          chat: chatEmbedding,
+          summary: summaryEmbedding
+        },
+        preprocess: preprocessData
+      });
+      
       setSessionSummary(updatedSummary);
-      saveCurrentSession(undefined, undefined, updatedSummary);
+      saveCurrentSession(undefined, undefined, updatedSummary, updatedMeta);
       addThinking('Athena', 'NEURAL_SUMMARY_RECALIBRATED');
     } catch (e: any) {
       addMessage('error', `Recalibration failed: ${e.message}`);
@@ -2500,6 +2617,7 @@ ${CITATION_CONTRACT_PROMPT}
           sessionFiles={sessionMetadata.files || []}
           onUploadFile={handleUploadFile}
           onDeleteSessionFile={handleDeleteSessionFile}
+          sessionMetadata={sessionMetadata}
         />
       </div>
 

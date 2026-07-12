@@ -28,6 +28,7 @@ interface RightPanelProps {
   sessionFiles?: { name: string; content: string; summary?: string; loading?: boolean }[];
   onUploadFile?: (name: string, content: string) => Promise<string>;
   onDeleteSessionFile?: (name: string) => void;
+  sessionMetadata?: Record<string, any>;
 }
 
 function cleanLegacySummaryValue(value: string) {
@@ -1380,7 +1381,7 @@ function QualityPulseDashboard({
 }
 
 export function RightPanel({
-  thinking, messages, statusText, sessionSummary, onSummarize, settings, sessionFiles = [], onUploadFile, onDeleteSessionFile
+  thinking, messages, statusText, sessionSummary, onSummarize, settings, sessionFiles = [], onUploadFile, onDeleteSessionFile, sessionMetadata
 }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
   const [computingStep, setComputingStep] = useState(0);
@@ -3211,6 +3212,85 @@ export function RightPanel({
                             </button>
                           </div>
                         </div>
+                        
+                        {/* Preprocess Analytics Section */}
+                        {sessionMetadata?.preprocess && (
+                          <div 
+                            className="mb-4 p-3 border" 
+                            style={{ 
+                              background: "rgba(0, 240, 255, 0.02)", 
+                              borderColor: "rgba(0, 240, 255, 0.15)",
+                              boxShadow: "0 0 10px rgba(0, 240, 255, 0.05)"
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 mb-2 font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--primary)" }}>
+                              <Sparkles size={12} />
+                              <span>Local Neural Preprocessing (BERT)</span>
+                            </div>
+                            
+                            <div className="space-y-2.5 text-xs text-[var(--muted-foreground)]">
+                              {/* Topics */}
+                              <div>
+                                <span className="font-mono text-[9px] uppercase tracking-wider block mb-1">Key Topics:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {sessionMetadata.preprocess.topics?.map((topic: string) => (
+                                    <span 
+                                      key={topic} 
+                                      className="px-1.5 py-0.5 border text-[10px] font-mono" 
+                                      style={{ 
+                                        background: "rgba(0, 240, 255, 0.05)", 
+                                        borderColor: "rgba(0, 240, 255, 0.15)",
+                                        color: "var(--foreground)" 
+                                      }}
+                                    >
+                                      #{topic}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {/* Clusters */}
+                              {sessionMetadata.preprocess.clusters && sessionMetadata.preprocess.clusters.length > 0 && (
+                                <div>
+                                  <span className="font-mono text-[9px] uppercase tracking-wider block mb-1">Semantic Turn Clusters:</span>
+                                  <div className="space-y-1">
+                                    {sessionMetadata.preprocess.clusters.map((cluster: any, i: number) => (
+                                      <div 
+                                        key={i} 
+                                        className="p-1.5 border" 
+                                        style={{ 
+                                          background: "var(--secondary)", 
+                                          borderColor: "var(--border)" 
+                                        }}
+                                      >
+                                        <div className="flex justify-between items-center text-[10px] font-mono mb-1">
+                                          <span style={{ color: "var(--primary)" }}>✦ {cluster.label}</span>
+                                          <span className="opacity-50">{cluster.count} turns</span>
+                                        </div>
+                                        {cluster.snippets?.slice(0, 2).map((snippet: string, j: number) => (
+                                          <div key={j} className="text-[10px] italic truncate pl-2 border-l border-[var(--border)] mt-0.5">
+                                            "{snippet}"
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Vector Diagnostics */}
+                              <div className="flex gap-4 text-[9px] font-mono pt-1.5 border-t border-[var(--border)] opacity-60">
+                                <div>
+                                  CHAT EMBEDDING: <span style={{ color: "var(--success)" }}>768-D Vector</span>
+                                </div>
+                                <div>
+                                  SUMMARY EMBEDDING: <span style={{ color: "var(--success)" }}>{sessionMetadata.preprocess.summaryEmbedding?.length > 0 ? "768-D Vector" : "NONE"}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {summaryMode === "rendered" ? (
                           <div className="summary-markdown">
                             <ChatMarkdown content={summaryMarkdown} />
