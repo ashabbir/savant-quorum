@@ -5,7 +5,7 @@
   "author": "project-x",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
+    "dev": "npm run prepare:whisper && node scripts/setup-dev-whisper.mjs && electron-builder install-app-deps && concurrently -k -n renderer,electron \"npm run dev:renderer\" \"npm run dev:electron -- --concurrent\"",
     "dev:renderer": "QUORUM_RENDERER_ONLY=1 vite --force --host 127.0.0.1 --port 5273 --strictPort",
     "dev:electron": "node scripts/start-electron-dev.mjs",
     "prepare:whisper": "node scripts/download-whisper-model.mjs",
