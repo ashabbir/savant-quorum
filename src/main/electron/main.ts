@@ -22,6 +22,45 @@ console.warn = (...args) => { origWarn(...args); writeLog('WARN', ...args); };
 
 let db: any
 let tray: Tray | null = null
+let whisperTranscriberPromise: Promise<any> | null = null
+
+async function getWhisperTranscriber() {
+  if (!whisperTranscriberPromise) {
+    whisperTranscriberPromise = (async () => {
+      const { env, pipeline } = await import('@huggingface/transformers')
+      const bundledCacheDir = app.isPackaged
+        ? path.join(process.resourcesPath, 'whisper-cache')
+        : path.join(process.cwd(), 'build', 'whisper-cache')
+      const userCacheDir = path.join(SAVANT_DIR, 'models', 'whisper')
+
+      try {
+        await fs.access(path.join(bundledCacheDir, 'Xenova', 'whisper-tiny.en'))
+        env.cacheDir = bundledCacheDir
+        env.allowRemoteModels = false
+      } catch {
+        await fs.mkdir(userCacheDir, { recursive: true })
+        env.cacheDir = userCacheDir
+        env.allowRemoteModels = true
+      }
+
+      try {
+        return await pipeline(
+          'automatic-speech-recognition',
+          'Xenova/whisper-tiny.en',
+          { dtype: 'q8' },
+        )
+      } catch (error: any) {
+        throw new Error(
+          `Unable to load the local speech model. Download: https://huggingface.co/Xenova/whisper-tiny.en/tree/main. ${error.message}`,
+        )
+      }
+    })().catch(error => {
+      whisperTranscriberPromise = null
+      throw error
+    })
+  }
+  return whisperTranscriberPromise
+}
 
 async function initDb() {
   try {
@@ -298,7 +337,7 @@ ipcMain.handle('run-agent', async (_event, { provider, model, prompt }) => {
   }
 })
 
-async function runAgentViaGateway(payload: { provider: string; model: string; prompt: string; timeoutMs?: number }) {
+function getGatewayConnection() {
   let gatewayUrl = GATEWAY_URL;
   let apiKey = '';
   if (db) {
@@ -313,7 +352,159 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
     } catch (e) {}
   }
 
-  const baseUrl = gatewayUrl.replace(/\/$/, '');
+  return {
+    baseUrl: gatewayUrl.replace(/\/$/, ''),
+    apiKey,
+  };
+}
+
+function sendAgentRunConnectionState(runId: string, agentLabel: string, state: 'disconnected' | 'reconnected', detail?: string) {
+  if (!win) return;
+  win.webContents.send('agent-run-connection-state', { runId, agentLabel, state, detail });
+}
+
+type AgentRunControl = {
+  startedAt: number;
+  lastActivityAt: number;
+  idleTimeoutMs: number;
+  lastEventFingerprint: string;
+  killed: boolean;
+};
+
+const agentRunControls = new Map<string, AgentRunControl>();
+
+function sendAgentRunActivity(runId: string, agentLabel: string, control: AgentRunControl, reason: string) {
+  if (!win) return;
+  win.webContents.send('agent-run-activity', {
+    runId,
+    agentLabel,
+    startedAt: control.startedAt,
+    lastActivityAt: control.lastActivityAt,
+    idleTimeoutMs: control.idleTimeoutMs,
+    reason,
+  });
+}
+
+async function pollGatewayRun(id: string, timeoutMs: number, baseUrl: string, apiKey: string, agentLabel = '') {
+  const control = agentRunControls.get(id) || {
+    startedAt: Date.now(),
+    lastActivityAt: Date.now(),
+    idleTimeoutMs: Math.max(1_000, timeoutMs),
+    lastEventFingerprint: '',
+    killed: false,
+  };
+  control.idleTimeoutMs = Math.max(1_000, timeoutMs);
+  agentRunControls.set(id, control);
+  let pollDelay = 25;
+  let disconnected = false;
+  let lastConnectionError = '';
+  let lastEventPollAt = 0;
+
+  while (true) {
+    await new Promise(r => setTimeout(r, pollDelay));
+    if (pollDelay < 500) pollDelay += 25;
+
+    if (control.killed) {
+      agentRunControls.delete(id);
+      throw new Error(`Gateway run ${id} was killed by the operator`);
+    }
+
+    try {
+      const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
+        headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+      });
+
+      if (!pollRes.ok) {
+        if (pollRes.status === 404) {
+          throw new Error(`Gateway run ${id} is no longer available`);
+        }
+        if (pollRes.status === 401 || pollRes.status === 403) {
+          throw new Error(`Gateway authorization failed with ${pollRes.status}`);
+        }
+        throw new Error(`Gateway polling returned ${pollRes.status}`);
+      }
+
+      if (disconnected) {
+        disconnected = false;
+        lastConnectionError = '';
+        if (db) {
+          db.prepare(`UPDATE athena_runs SET status = ?, error = NULL, updated_at = ? WHERE id = ?`).run('running', Date.now(), id);
+        }
+        sendAgentRunConnectionState(id, agentLabel, 'reconnected');
+      }
+
+      const run = await pollRes.json();
+      if (run.status === 'complete') {
+        const responseText = run.result?.response || '';
+        agentRunControls.delete(id);
+        if (db) {
+          db.prepare(`UPDATE athena_runs SET status = ?, response = ?, error = NULL, updated_at = ? WHERE id = ?`).run('complete', responseText, Date.now(), id);
+        }
+        return responseText;
+      }
+      if (run.status === 'error' || run.status === 'killed') {
+        agentRunControls.delete(id);
+        if (db) {
+          db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(run.status, run.error || 'Unknown error', Date.now(), id);
+        }
+        throw new Error(`Gateway run failed with status ${run.status} - ${run.error || 'Unknown error'}`);
+      }
+
+      const now = Date.now();
+      if (now - lastEventPollAt >= 1_000) {
+        lastEventPollAt = now;
+        try {
+          const eventsRes = await fetch(`${baseUrl}/runs/${id}/events`, {
+            headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+          });
+          if (eventsRes.ok) {
+            const eventsData = await eventsRes.json();
+            const events = Array.isArray(eventsData?.events) ? eventsData.events : [];
+            const latest = events.at(-1);
+            const fingerprint = JSON.stringify([
+              events.length,
+              latest?.id,
+              latest?.type,
+              latest?.timestamp,
+              latest?.status,
+              typeof latest?.content === 'string' ? latest.content.slice(-128) : undefined,
+            ]);
+            if (events.length > 0 && fingerprint !== control.lastEventFingerprint) {
+              control.lastEventFingerprint = fingerprint;
+              control.lastActivityAt = now;
+              sendAgentRunActivity(id, agentLabel, control, latest?.type || 'gateway_event');
+            }
+          }
+        } catch {
+          // Status polling remains authoritative when the optional events feed is unavailable.
+        }
+      }
+    } catch (error: any) {
+      if (/no longer available|Gateway run failed|Gateway authorization failed/.test(error?.message || '')) throw error;
+      lastConnectionError = error?.message || 'Gateway connection lost';
+      if (!disconnected) {
+        disconnected = true;
+        pollDelay = 1_000;
+        if (db) {
+          db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run('disconnected', lastConnectionError, Date.now(), id);
+        }
+        sendAgentRunConnectionState(id, agentLabel, 'disconnected', lastConnectionError);
+      }
+    }
+
+    if (Date.now() - control.lastActivityAt >= control.idleTimeoutMs) {
+      const interruptionType = disconnected ? 'DISCONNECT' : 'TIMEOUT';
+      const timeoutError = `RECOVERABLE_AGENT_${interruptionType} runId=${id} after ${control.idleTimeoutMs}ms idle`;
+      if (db) {
+        db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(disconnected ? 'disconnected' : 'timed_out', timeoutError, Date.now(), id);
+      }
+      throw new Error(timeoutError);
+    }
+  }
+}
+
+async function runAgentViaGateway(payload: { provider: string; model: string; prompt: string; timeoutMs?: number; agentLabel?: string }) {
+  const { baseUrl, apiKey } = getGatewayConnection();
   const runRes = await fetch(`${baseUrl}/runs`, {
     method: 'POST',
     headers: {
@@ -332,8 +523,26 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
   }
 
   const { id } = await runRes.json();
+  const startedAt = Date.now();
   const timeoutMs = Math.max(1_000, payload.timeoutMs || 90_000);
-  const deadline = Date.now() + timeoutMs;
+  agentRunControls.set(id, {
+    startedAt,
+    lastActivityAt: startedAt,
+    idleTimeoutMs: timeoutMs,
+    lastEventFingerprint: '',
+    killed: false,
+  });
+  if (win) {
+    win.webContents.send('agent-run-started', {
+      runId: id,
+      agentLabel: payload.agentLabel || '',
+      provider: payload.provider,
+      model: payload.model,
+      startedAt,
+      lastActivityAt: startedAt,
+      idleTimeoutMs: timeoutMs,
+    });
+  }
   if (db) {
     db.prepare(`
       INSERT INTO athena_runs (id, thread_id, provider, model, prompt, status, created_at, updated_at)
@@ -342,47 +551,37 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
     `).run(id, null, payload.provider, payload.model, payload.prompt, 'running', Date.now(), Date.now());
   }
 
-  let pollDelay = 25;
-  while (true) {
-    if (Date.now() >= deadline) {
-      await fetch(`${baseUrl}/runs/${id}`, {
-        method: 'DELETE',
-        headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
-      }).catch(() => undefined);
-      if (db) {
-        db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run('killed', `AGENT_TIMEOUT after ${timeoutMs}ms`, Date.now(), id);
-      }
-      throw new Error(`AGENT_TIMEOUT after ${timeoutMs}ms`);
-    }
-    await new Promise(r => setTimeout(r, pollDelay));
-    if (pollDelay < 100) pollDelay += 15;
+  return pollGatewayRun(id, timeoutMs, baseUrl, apiKey, payload.agentLabel);
+}
 
-    const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
-      headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
-    });
-    if (!pollRes.ok) continue;
-    const run = await pollRes.json();
-
-    if (run.status === 'complete') {
-      const responseText = run.result?.response || '';
-      if (db) {
-        db.prepare(`UPDATE athena_runs SET status = ?, response = ?, updated_at = ? WHERE id = ?`).run('complete', responseText, Date.now(), id);
-      }
-      return responseText;
-    }
-    if (run.status === 'error' || run.status === 'killed') {
-      if (db) {
-        db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(run.status, run.error || 'Unknown error', Date.now(), id);
-      }
-      throw new Error(`Gateway run failed with status ${run.status} - ${run.error || 'Unknown error'}`);
-    }
+async function resumeAgentRun(payload: { runId: string; timeoutMs?: number; agentLabel?: string }) {
+  if (!payload?.runId) throw new Error('Gateway run ID is required for recovery');
+  const { baseUrl, apiKey } = getGatewayConnection();
+  const timeoutMs = Math.max(1_000, payload.timeoutMs || 300_000);
+  const now = Date.now();
+  const existingControl = agentRunControls.get(payload.runId);
+  const control = existingControl || {
+    startedAt: now,
+    lastActivityAt: now,
+    idleTimeoutMs: timeoutMs,
+    lastEventFingerprint: '',
+    killed: false,
+  };
+  control.lastActivityAt = now;
+  control.idleTimeoutMs = timeoutMs;
+  control.killed = false;
+  agentRunControls.set(payload.runId, control);
+  sendAgentRunActivity(payload.runId, payload.agentLabel || '', control, 'recovered');
+  if (db) {
+    db.prepare(`UPDATE athena_runs SET status = ?, error = NULL, updated_at = ? WHERE id = ?`).run('running', Date.now(), payload.runId);
   }
+  return pollGatewayRun(payload.runId, timeoutMs, baseUrl, apiKey, payload.agentLabel);
 }
 
 ipcMain.handle('list-sessions', async () => {
   if (!db) return []
   try {
-    return db.prepare('SELECT id, title, updated_at as timestamp FROM sessions ORDER BY updated_at DESC').all()
+    return db.prepare('SELECT id, title, created_at, updated_at as timestamp FROM sessions ORDER BY created_at DESC').all()
   } catch (e) {
     return []
   }
@@ -441,6 +640,19 @@ ipcMain.handle('get-user', async () => {
   } catch (e) {
     return 'operator'
   }
+})
+
+ipcMain.handle('transcribe-audio', async (_event, audioPayload) => {
+  const audio = audioPayload instanceof Float32Array
+    ? audioPayload
+    : new Float32Array(audioPayload)
+  if (audio.length === 0) throw new Error('No audio was recorded.')
+
+  const transcriber = await getWhisperTranscriber()
+  const result = await transcriber(audio)
+  const text = Array.isArray(result) ? result[0]?.text : result?.text
+  if (!text?.trim()) throw new Error('No speech was detected.')
+  return text.trim()
 })
 
 ipcMain.handle('get-settings', async () => {
@@ -623,6 +835,39 @@ ipcMain.handle('get-db-status', async () => {
 
 ipcMain.handle('run-agent-via-gateway', async (_event, payload) => {
   return runAgentViaGateway(payload)
+})
+
+ipcMain.handle('resume-agent-run', async (_event, payload) => {
+  return resumeAgentRun(payload)
+})
+
+ipcMain.handle('extend-agent-run', async (_event, payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => {
+  const control = agentRunControls.get(payload?.runId);
+  if (!control) return false;
+  control.lastActivityAt = Date.now();
+  if (payload.timeoutMs) control.idleTimeoutMs = Math.max(1_000, payload.timeoutMs);
+  sendAgentRunActivity(payload.runId, payload.agentLabel || '', control, 'operator_wait');
+  return true;
+})
+
+ipcMain.handle('kill-agent-run', async (_event, payload: { runId: string }) => {
+  if (!payload?.runId) return false;
+  const control = agentRunControls.get(payload.runId);
+  if (control) control.killed = true;
+  const { baseUrl, apiKey } = getGatewayConnection();
+  const response = await fetch(`${baseUrl}/runs/${payload.runId}`, {
+    method: 'DELETE',
+    headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+  });
+  if (db) {
+    db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(
+      'killed',
+      'Killed by operator after stalled-run warning',
+      Date.now(),
+      payload.runId,
+    );
+  }
+  return response.ok;
 })
 
 ipcMain.handle('save-athena-thread', async (_event, thread) => {

@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('system', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSetting: (key: string, value: any) => ipcRenderer.invoke('save-setting', { key, value }),
   getDbStatus: () => ipcRenderer.invoke('get-db-status'),
+  transcribeAudio: (audio: Float32Array) => ipcRenderer.invoke('transcribe-audio', audio),
   callMcpTool: (serverName: string, toolName: string, args: any) => ipcRenderer.invoke('call-mcp-tool', { serverName, toolName, args }),
   saveAthenaThread: (thread: any) => ipcRenderer.invoke('save-athena-thread', thread),
   getAthenaThreads: (sessionId?: string) => ipcRenderer.invoke('get-athena-threads', sessionId),
@@ -48,4 +49,25 @@ contextBridge.exposeInMainWorld('system', {
   saveAthenaRun: (run: any) => ipcRenderer.invoke('save-athena-run', run),
   getAthenaRuns: (threadId?: string) => ipcRenderer.invoke('get-athena-runs', threadId),
   runAgentViaGateway: (payload: any) => ipcRenderer.invoke('run-agent-via-gateway', payload),
+  resumeAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => ipcRenderer.invoke('resume-agent-run', payload),
+  extendAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => ipcRenderer.invoke('extend-agent-run', payload),
+  killAgentRun: (payload: { runId: string }) => ipcRenderer.invoke('kill-agent-run', payload),
+  onAgentRunStarted: (cb: (data: { runId: string; agentLabel: string; provider: string; model: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number }) => void) => {
+    ipcRenderer.on('agent-run-started', (_event, data) => cb(data));
+  },
+  offAgentRunStarted: () => {
+    ipcRenderer.removeAllListeners('agent-run-started');
+  },
+  onAgentRunConnectionState: (cb: (data: { runId: string; agentLabel: string; state: 'disconnected' | 'reconnected'; detail?: string }) => void) => {
+    ipcRenderer.on('agent-run-connection-state', (_event, data) => cb(data));
+  },
+  offAgentRunConnectionState: () => {
+    ipcRenderer.removeAllListeners('agent-run-connection-state');
+  },
+  onAgentRunActivity: (cb: (data: { runId: string; agentLabel: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number; reason: string }) => void) => {
+    ipcRenderer.on('agent-run-activity', (_event, data) => cb(data));
+  },
+  offAgentRunActivity: () => {
+    ipcRenderer.removeAllListeners('agent-run-activity');
+  },
 })

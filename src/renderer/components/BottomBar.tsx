@@ -53,8 +53,8 @@ export function BottomBar({
   }, [folders, sessions]);
 
   const filteredRuns = useMemo(() => {
-    return runs.filter((r) => r.session_id && allowedIds.has(r.session_id));
-  }, [runs, allowedIds]);
+    return runs;
+  }, [runs]);
 
   const activeRunsCount = useMemo(() => {
     return filteredRuns.filter((r) => r.status === "running").length;

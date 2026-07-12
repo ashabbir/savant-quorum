@@ -9,12 +9,28 @@ import StartupScreen from './components/StartupScreen';
 import { LoginScreen } from "./components/LoginScreen";
 import { clearStoredApiKey, getStoredApiKey, setStoredApiKey } from "./services/auth";
 import { createAthenaService } from "./services/athenaService";
-import { buildMandatoryCrossChecks, getChatExecutionPolicy } from "./services/chatExecutionPolicy";
+import {
+  buildMandatoryCrossChecks,
+  getRecoverableAgentRunId,
+  getChatExecutionPolicy,
+  MODERATOR_DECISION_TIMEOUT_MS,
+  REGULAR_AGENT_TIMEOUT_MS,
+  requiresIndependentReview,
+  selectValueAddingAgents,
+  shouldDecomposeRequest,
+} from "./services/chatExecutionPolicy";
 import { CITATION_CONTRACT_PROMPT } from "./services/citationContract";
+import type { AgentRunDisplayState } from "./services/agentRunSupervision";
 import mermaid from "mermaid";
 import { sanitizeMermaidCode } from "./utils/mermaidSanitizer";
+import {
+  parseFolderClassification,
+  suggestSessionGrouping,
+  type SessionGroupingSuggestion,
+} from "./services/sessionService";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
+import { AgentStallDialog } from "./components/AgentStallDialog";
 
 export interface Thinking {
   id: string
@@ -48,6 +64,8 @@ export default function App() {
   const [thinking, setThinking] = useState<Thinking[]>([])
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("IDLE")
+  const [streamingAgents, setStreamingAgents] = useState<Record<string, AgentRunDisplayState>>({})
+  const agentRunEventsIntervalRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [sessionSummary, setSessionSummary] = useState<string>("");
@@ -59,24 +77,163 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('New Session')
 
-  // UI state for folders (mocked for now as we don't have persistent folders yet)
   const [folders, setFolders] = useState<FolderItem[]>([
-    { id: "f1", name: "research" },
-    { id: "f2", name: "code sessions" },
+    { id: "f1", name: "research", hint: "Research, investigation, discovery, and source analysis" },
+    { id: "f2", name: "code sessions", hint: "Software implementation, debugging, tests, and code review" },
   ]);
 
   const [sessionFolders, setSessionFolders] = useState<Record<string, string | null>>({});
+  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(new Set());
   const [sessionMetadata, setSessionMetadata] = useState<Record<string, any>>({ allowDeepSearch: false, files: [] });
 
   const messagesRef = useRef<Message[]>([]);
   const thinkingRef = useRef<Thinking[]>([]);
   const sessionMetadataRef = useRef<Record<string, any>>({ allowDeepSearch: false, files: [] });
   const currentSessionIdRef = useRef<string | null>(null);
+  const foldersRef = useRef<FolderItem[]>(folders);
+  const sessionFoldersRef = useRef<Record<string, string | null>>({});
+  const unreadSessionIdsRef = useRef<Set<string>>(new Set());
+  const sessionOrderRef = useRef<string[]>([]);
+  const classificationRequestsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
   useEffect(() => { sessionMetadataRef.current = sessionMetadata; }, [sessionMetadata]);
   useEffect(() => { currentSessionIdRef.current = currentSessionId; }, [currentSessionId]);
+  useEffect(() => { foldersRef.current = folders; }, [folders]);
+  useEffect(() => { sessionFoldersRef.current = sessionFolders; }, [sessionFolders]);
+
+  const updateUnreadSession = (sessionId: string, unread: boolean) => {
+    const updated = new Set(unreadSessionIdsRef.current);
+    if (unread) {
+      updated.add(sessionId);
+    } else {
+      updated.delete(sessionId);
+    }
+    if (updated.size === unreadSessionIdsRef.current.size
+      && [...updated].every(id => unreadSessionIdsRef.current.has(id))) {
+      return;
+    }
+    unreadSessionIdsRef.current = updated;
+    setUnreadSessionIds(updated);
+    void window.system.saveSetting("system:unreadSessionIds", [...updated]);
+  };
+
+  // Listen for agent run IDs from main process and poll gateway events per agent
+  useEffect(() => {
+    if (typeof window.system?.onAgentRunStarted !== 'function') return;
+
+    window.system.onAgentRunStarted(({
+      runId,
+      agentLabel,
+      startedAt,
+      lastActivityAt,
+      idleTimeoutMs,
+    }) => {
+      if (!agentLabel || !runId) return;
+
+      setStreamingAgents(prev => ({
+        ...prev,
+        [agentLabel]: {
+          ...(prev[agentLabel] || { status: 'Running via gateway...' }),
+          runId,
+          events: [],
+          startedAt,
+          lastActivityAt,
+          idleTimeoutMs,
+        }
+      }));
+
+      let lastEventFingerprint = '';
+      const fetchEvents = async () => {
+        try {
+          const settingsData: Record<string, any> = await window.system.getSettings().catch(() => ({}));
+          const gwCfg = settingsData?.['gateway:config'];
+          const gatewayUrl = (gwCfg?.url || 'http://127.0.0.1:3100').replace(/\/$/, '');
+          const res = await fetch(`${gatewayUrl}/runs/${runId}/events`);
+          if (res.ok) {
+            const data = await res.json();
+            const events = data?.events || [];
+            const latest = events.at(-1);
+            const eventFingerprint = JSON.stringify([
+              events.length,
+              latest?.id,
+              latest?.type,
+              latest?.timestamp,
+              latest?.status,
+            ]);
+            setStreamingAgents(prev => {
+              if (!prev[agentLabel]) return prev;
+              const hasNewActivity = events.length > 0 && eventFingerprint !== lastEventFingerprint;
+              if (hasNewActivity) lastEventFingerprint = eventFingerprint;
+              return {
+                ...prev,
+                [agentLabel]: {
+                  ...prev[agentLabel],
+                  events,
+                  lastActivityAt: hasNewActivity ? Date.now() : prev[agentLabel].lastActivityAt,
+                },
+              };
+            });
+            if (events.some((event: any) => event?.type === 'complete' || event?.type === 'error')) {
+              clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
+              delete agentRunEventsIntervalRef.current[agentLabel];
+            }
+          }
+        } catch {}
+      };
+
+      fetchEvents();
+      const existingInterval = agentRunEventsIntervalRef.current[agentLabel];
+      if (existingInterval) clearInterval(existingInterval);
+      const interval = setInterval(fetchEvents, 2000);
+      agentRunEventsIntervalRef.current[agentLabel] = interval;
+    });
+
+    window.system.onAgentRunConnectionState?.(({ runId, agentLabel, state, detail }) => {
+      if (!agentLabel || !runId) return;
+      setStreamingAgents(prev => ({
+        ...prev,
+        [agentLabel]: {
+          ...(prev[agentLabel] || {}),
+          runId,
+          status: state === 'disconnected'
+            ? `Gateway disconnected. Reconnecting to the same run...${detail ? ` (${detail})` : ''}`
+            : 'Gateway reconnected. Continuing the same run...',
+        },
+      }));
+    });
+
+    window.system.onAgentRunActivity?.((activity) => {
+      setStreamingAgents(prev => {
+        const key = activity.agentLabel && prev[activity.agentLabel]
+          ? activity.agentLabel
+          : Object.keys(prev).find(agentName => prev[agentName]?.runId === activity.runId);
+        if (!key) return prev;
+        return {
+          ...prev,
+          [key]: {
+            ...prev[key],
+            runId: activity.runId,
+            startedAt: activity.startedAt,
+            lastActivityAt: activity.lastActivityAt,
+            idleTimeoutMs: activity.idleTimeoutMs,
+            status: activity.reason === 'operator_wait'
+              ? 'Athena extended the idle timer. Waiting for more activity...'
+              : prev[key].status,
+          },
+        };
+      });
+    });
+
+    return () => {
+      window.system?.offAgentRunStarted?.();
+      window.system?.offAgentRunConnectionState?.();
+      window.system?.offAgentRunActivity?.();
+      Object.values(agentRunEventsIntervalRef.current).forEach(clearInterval);
+      agentRunEventsIntervalRef.current = {};
+    };
+  }, []);
 
   const updateSessionMetadata = (newMeta: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) => {
     if (typeof newMeta === 'function') {
@@ -113,11 +270,39 @@ export default function App() {
 
   const loadSessionList = async () => {
     const list = await window.sessions.list()
-    setSessions(list)
+    const order = new Map(sessionOrderRef.current.map((id, index) => [id, index]));
+    const orderedList = [...list].sort((left, right) => {
+      const leftIndex = order.get(left.id);
+      const rightIndex = order.get(right.id);
+      if (leftIndex !== undefined && rightIndex !== undefined) return leftIndex - rightIndex;
+      if (leftIndex !== undefined) return 1;
+      if (rightIndex !== undefined) return -1;
+      return (right.created_at || right.timestamp || 0) - (left.created_at || left.timestamp || 0);
+    });
+    sessionOrderRef.current = orderedList.map(session => session.id);
+    setSessions(orderedList)
+    return orderedList;
+  }
+
+  const persistSessionFolder = (sessionId: string, folderId: string | null) => {
+    setSessionFolders(prev => {
+      const updated = { ...prev, [sessionId]: folderId };
+      sessionFoldersRef.current = updated;
+      window.system.saveSetting("system:sessionFolders", updated);
+      return updated;
+    });
   }
 
   const startNewSession = (title?: string) => {
     const newId = `quorum-${Date.now()}`
+    const newTitle = title || "New Quorum";
+    sessionOrderRef.current = [newId, ...sessionOrderRef.current.filter(id => id !== newId)];
+    setSessions(previous => [
+      { id: newId, title: newTitle, created_at: Date.now(), timestamp: Date.now() },
+      ...previous.filter(session => session.id !== newId),
+    ]);
+    window.system.saveSetting("system:sessionOrder", sessionOrderRef.current);
+    currentSessionIdRef.current = newId;
     setCurrentSessionId(newId)
     setMessages([])
     setThinking([])
@@ -125,13 +310,15 @@ export default function App() {
     thinkingRef.current = []
     setSessionSummary("")
     updateSessionMetadata({ allowDeepSearch: false, files: [] })
-    setSessionTitle(title || "New Quorum")
+    setSessionTitle(newTitle)
     addThinking('System', 'INITIALIZING_QUORUM_HEURISTICS...'); 
     addThinking('System', '----------------------------'); 
     addThinking('System', 'QUORUM_ONLINE')
   }
 
   const loadSession = async (id: string) => {
+    currentSessionIdRef.current = id;
+    updateUnreadSession(id, false);
     addThinking('System', `SWITCHING_TO_QUORUM: ${id}`)
     const data = await window.sessions.load(id)
     if (data) {
@@ -169,15 +356,18 @@ export default function App() {
     }
 
     const metaToSave = updatedMetadata !== undefined ? updatedMetadata : sessionMetadataRef.current;
+    const messagesToSave = updatedMessages || messagesRef.current;
+    const summaryToSave = updatedSummary !== undefined ? updatedSummary : sessionSummary;
     await window.sessions.save({
       id: currentSessionId,
       title: newTitle,
-      messages: updatedMessages || messagesRef.current,
+      messages: messagesToSave,
       thinking: updatedThinking || thinkingRef.current,
-      summary: updatedSummary !== undefined ? updatedSummary : sessionSummary,
+      summary: summaryToSave,
       metadata: JSON.stringify(metaToSave)
     })
     loadSessionList()
+    void classifySession(currentSessionId, newTitle, messagesToSave, summaryToSave)
   }
 
   const saveSessionDirectly = async (sessionId: string, msgs: Message[], thinks: Thinking[]) => {
@@ -221,6 +411,7 @@ export default function App() {
     });
     
     loadSessionList();
+    void classifySession(sessionId, title, msgs, existingSummary);
   }
 
   const deleteSession = async (id: string) => {
@@ -232,6 +423,9 @@ export default function App() {
         window.system.saveSetting("system:sessionFolders", updated);
         return updated;
       });
+      updateUnreadSession(id, false);
+        sessionOrderRef.current = sessionOrderRef.current.filter(sessionId => sessionId !== id);
+        window.system.saveSetting("system:sessionOrder", sessionOrderRef.current);
       if (id === currentSessionId) {
         startNewSession()
       } else {
@@ -259,6 +453,11 @@ export default function App() {
     if (loadedSettings["system:sessionFolders"]) {
       setSessionFolders(loadedSettings["system:sessionFolders"]);
     }
+    if (Array.isArray(loadedSettings["system:unreadSessionIds"])) {
+      const restoredUnread = new Set<string>(loadedSettings["system:unreadSessionIds"]);
+      unreadSessionIdsRef.current = restoredUnread;
+      setUnreadSessionIds(restoredUnread);
+    }
     addThinking('System', 'SETTINGS_UPDATED_FROM_DATABASE');
   }
 
@@ -282,7 +481,21 @@ export default function App() {
     setIsInitializing(true)
     setStartupProgress('CONNECTING_TO_DATABASE')
     setStartupSubtext('Opening persistence layer...')
-    await loadSessionList()
+    sessionOrderRef.current = Array.isArray(loadedSettings["system:sessionOrder"])
+      ? loadedSettings["system:sessionOrder"]
+      : [];
+    const list = await loadSessionList()
+    const knownSessionIds = new Set(list.map(session => session.id));
+    const restoredUnread = new Set<string>(
+      (Array.isArray(loadedSettings["system:unreadSessionIds"])
+        ? loadedSettings["system:unreadSessionIds"]
+        : []
+      ).filter((sessionId: unknown): sessionId is string => (
+        typeof sessionId === "string" && knownSessionIds.has(sessionId)
+      )),
+    );
+    unreadSessionIdsRef.current = restoredUnread;
+    setUnreadSessionIds(restoredUnread);
     
     setStartupProgress('CHECKING_GATEWAY_LINK')
     setStartupSubtext('Scanning for configured gateway...')
@@ -310,7 +523,6 @@ export default function App() {
       addThinking('System', 'GATEWAY_DISABLED (LOCAL_MODE_ENGAGED)')
     }
 
-    const list = await window.sessions.list()
     if (list.length > 0) {
       setStartupProgress('RESTORING_QUORUM')
       setStartupSubtext(`Loading: ${list[0].title}`)
@@ -410,6 +622,8 @@ export default function App() {
     setMessages([]);
     setThinking([]);
     setSessions([]);
+    unreadSessionIdsRef.current = new Set();
+    setUnreadSessionIds(new Set());
     setCurrentSessionId(null);
     setSessionTitle("New Session");
     setSettings(prev => ({ ...prev, "user:apiKey": "" }));
@@ -512,7 +726,7 @@ export default function App() {
       });
   }
 
-  const runWithFallback = async (prompt: string, agentName: string, timeoutMs: number = 90000) => {
+  const runWithFallback = async (prompt: string, agentName: string, timeoutMs: number = REGULAR_AGENT_TIMEOUT_MS) => {
     const chain = settings["provider:chain"] || [
       { provider: 'gemini', model: 'gemini-2.0-flash' },
       { provider: 'claude', model: 'haiku' }
@@ -525,19 +739,19 @@ export default function App() {
     
     let lastError = null;
     let attempt = 1;
-
     for (const item of effectiveChain) {
       const adapterName = item.provider;
       const model = item.model;
       const attemptPrefix = attempt > 1 ? `[Fallback ${attempt-1}] ` : '';
       
       try {
-        const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('AGENT_TIMEOUT')), timeoutMs));
-        
-        const responseRaw = await Promise.race([
-          window.system.runAgentViaGateway({ provider: adapterName, model, prompt }),
-          timeoutPromise
-        ]);
+        const responseRaw = await window.system.runAgentViaGateway({
+          provider: adapterName,
+          model,
+          prompt,
+          timeoutMs,
+          agentLabel: agentName,
+        });
 
         // Basic quota/error checks (ensure it's actually an error message and not user-facing text containing these words)
         const responseLower = responseRaw.toLowerCase().trim();
@@ -564,6 +778,40 @@ export default function App() {
         setActiveProviderIndex(nextIdx);
         return { content: responseRaw, provider: adapterName, model };
       } catch (e: any) {
+        const recoverableRunId = getRecoverableAgentRunId(e);
+        if (recoverableRunId && typeof window.system?.resumeAgentRun === 'function') {
+          const recoveryTimeoutMs = Math.max(timeoutMs, 300_000);
+          addThinking(agentName, `RUN_TIMEOUT_RECOVERY_STARTED (${adapterName}): reconnecting to ${recoverableRunId}`, 'thought');
+          setStreamingAgents(prev => ({
+            ...prev,
+            [agentName]: {
+              ...(prev[agentName] || {}),
+              runId: recoverableRunId,
+              status: 'Original run exceeded the time limit. Recovering it without restarting...',
+            },
+          }));
+          try {
+            const recoveredResponse = await window.system.resumeAgentRun({
+              runId: recoverableRunId,
+              timeoutMs: recoveryTimeoutMs,
+              agentLabel: agentName,
+            });
+            const nextIdx = chain.findIndex((provider: any) =>
+              (item.id !== undefined && provider.id === item.id) ||
+              (provider.provider === item.provider && provider.model === item.model)
+            );
+            preferredProviderIndexRef.current = nextIdx;
+            setActiveProviderIndex(nextIdx);
+            addThinking(agentName, `RUN_TIMEOUT_RECOVERED (${adapterName}): ${recoverableRunId}`, 'worker_end');
+            return { content: recoveredResponse, provider: adapterName, model };
+          } catch (recoveryError: any) {
+            lastError = recoveryError;
+            addThinking(agentName, `RUN_TIMEOUT_RECOVERY_FAILED (${adapterName}): ${recoveryError.message}`, 'error');
+            attempt++;
+            continue;
+          }
+        }
+
         lastError = e;
         addThinking(agentName, `PROVIDER_FAILED (${adapterName}): ${e.message}`, 'error');
         attempt++;
@@ -572,6 +820,83 @@ export default function App() {
     }
     
     throw new Error(`ALL_PROVIDERS_EXHAUSTED: ${lastError?.message || 'Unknown'}`);
+  }
+
+  const classifySession = async (
+    sessionId: string,
+    title: string,
+    sessionMessages: Message[],
+    summary = "",
+    force = false,
+  ) => {
+    const hintedFolders = foldersRef.current.filter(folder => folder.hint?.trim());
+    if (hintedFolders.length === 0) return;
+    if (!force && Object.prototype.hasOwnProperty.call(sessionFoldersRef.current, sessionId)) return;
+
+    const userMessages = sessionMessages.filter(message => message.role === "user");
+    if (userMessages.length === 0) return;
+    const latestUserContent = userMessages.at(-1)?.content || "";
+    const hintSignature = hintedFolders.map(folder => `${folder.id}:${folder.hint}`).join("|");
+    const requestKey = `${sessionId}:${latestUserContent}:${hintSignature}`;
+    if (classificationRequestsRef.current.has(requestKey)) return;
+    classificationRequestsRef.current.add(requestKey);
+
+    const folderOptions = hintedFolders.map(folder => ({
+      folderId: folder.id,
+      name: folder.name,
+      hint: folder.hint,
+    }));
+    const transcript = userMessages
+      .slice(-4)
+      .map(message => message.content)
+      .join("\n\n")
+      .slice(0, 6000);
+
+    try {
+      const result = await runWithFallback(
+        `Classify this chat into exactly one folder only when it clearly matches a folder hint.
+Return JSON only: {"folderId":"<id>"} or {"folderId":null}.
+
+FOLDERS:
+${JSON.stringify(folderOptions)}
+
+CHAT TITLE:
+${title}
+
+CHAT SUMMARY:
+${summary || "None"}
+
+RECENT USER MESSAGES:
+${transcript}`,
+        "Session Classifier",
+        30_000,
+      );
+      const folderId = parseFolderClassification(
+        result.content,
+        hintedFolders.map(folder => folder.id),
+      );
+      const wasManuallyFiled = Object.prototype.hasOwnProperty.call(
+        sessionFoldersRef.current,
+        sessionId,
+      );
+      if (folderId && (force || !wasManuallyFiled)) {
+        persistSessionFolder(sessionId, folderId);
+      }
+    } catch (error) {
+      console.warn("Session classification failed:", error);
+    }
+  }
+
+  const classifyChatById = async (sessionId: string) => {
+    const data = await window.sessions.load(sessionId);
+    if (!data) return;
+    await classifySession(
+      sessionId,
+      data.title || sessions.find(session => session.id === sessionId)?.title || "Untitled Quorum",
+      data.messages || [],
+      data.summary || "",
+      true,
+    );
   }
 
   const validateAndCorrectMermaid = async (
@@ -661,7 +986,7 @@ export default function App() {
     
     try {
       const summaryPrompt = `
-        You are ATHENA, the MASTER_CONTROL_MODERATOR. The user has requested a manual neural recalibration of the session state.
+        You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The user has requested a manual neural recalibration of the session state.
         
         CURRENT_SESSION_SUMMARY:
         "${sessionSummary || "No previous summary available."}"
@@ -669,20 +994,37 @@ export default function App() {
         FULL_CHAT_HISTORY:
         ${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
         
-        TASK: Provide a fresh, comprehensive, and cohesive SESSION_SUMMARY based on the entire history.
-        The summary MUST be structured chronologically for each turn in the chat history following this exact format:
+        TASK: Produce polished Markdown that helps the user quickly understand the session.
 
-        - User asked: "[Brief summary of what the user asked]"
-        - Athena: intent is "[Brief summary of identified intent]" and engaged [List of engaged agents, or "Athena (direct/moderator)"]
-        [If agents were engaged in that turn, include one bullet point per engaged agent:
-        - [Agent Name]: "[Extracted key findings/message from this agent]"]
-        - Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
+        REQUIRED STRUCTURE:
+        # Session Summary
+
+        ## Overview
+        A concise paragraph describing the session's purpose and current conclusion.
+
+        ## Conversation Timeline
+        ### Turn 1 — [short topic]
+        **Question:** [concise user question]
+        **Agents:** [engaged agents]
+        **Outcome:**
+        - [direct conclusion]
+        - [material fact or decision]
+        - [remaining gap, only if one exists]
+
+        Repeat the Turn section for each user request.
+
+        ## Key Facts and Decisions
+        - Preserve important technical facts, decisions, identifiers, and relationships.
+
+        ## Open Questions
+        - Include only unresolved items. Write "None" when everything is resolved.
 
         IMPORTANT RULES:
         1. Do NOT lose key data, decisions, or facts from the agents' messages or the history.
-        2. Keep the user's question, intent, and clean extracted messages in focus for every turn.
-        3. Format the entire history turn-by-turn.
-        4. Return ONLY the complete updated summary text. Do not include any other conversational text or formatting.
+        2. Summarize outcomes; do not paste full answers or citation tables.
+        3. Use real Markdown headings, bullets, bold labels, and whitespace.
+        4. Never wrap whole questions or answers in quotation marks.
+        5. Return only the Markdown summary.
       `;
       
       const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Athena');
@@ -788,7 +1130,10 @@ export default function App() {
         type,
         timestamp: Date.now()
       };
-      runThinking = [newThink, ...runThinking];
+      const latestThinking = currentSessionIdRef.current === sessionForThisRun
+        ? thinkingRef.current
+        : runThinking;
+      runThinking = [newThink, ...latestThinking];
       
       if (currentSessionIdRef.current === sessionForThisRun) {
         thinkingRef.current = [newThink, ...thinkingRef.current];
@@ -810,7 +1155,10 @@ export default function App() {
         model,
         timestamp: Date.now()
       };
-      runMessages = [...runMessages, newMsg];
+      const latestMessages = currentSessionIdRef.current === sessionForThisRun
+        ? messagesRef.current
+        : runMessages;
+      runMessages = [...latestMessages, newMsg];
       
       if (currentSessionIdRef.current === sessionForThisRun) {
         messagesRef.current = [...messagesRef.current, newMsg];
@@ -818,6 +1166,12 @@ export default function App() {
       }
       
       saveSessionDirectly(sessionForThisRun, runMessages, runThinking);
+      if (
+        currentSessionIdRef.current !== sessionForThisRun
+        && ['athena', 'moderator', 'engineer', 'architect', 'security', 'ai', 'error'].includes(role)
+      ) {
+        updateUnreadSession(sessionForThisRun, true);
+      }
     };
 
     // Scan for reference chat in the user query
@@ -844,7 +1198,7 @@ export default function App() {
           if (!refSummary.trim() && refData.messages && refData.messages.length > 0) {
             addThinking('Athena', `GENERATING_SUMMARY_FOR_REFERENCE_CHAT: "${referencedSession.title}"`);
             const refSummaryPrompt = `
-              You are ATHENA, the MASTER_CONTROL_MODERATOR. The operator has referenced the session "${referencedSession.title}".
+              You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The operator has referenced the session "${referencedSession.title}".
               
               FULL_CHAT_HISTORY OF REFERENCED SESSION:
               ${refData.messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
@@ -881,7 +1235,7 @@ export default function App() {
       midRunBuffer.current.push(text)
       addMessage(
         'athena-whisper' as any,
-        `I've captured your added intel: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}". I am relaying this to the working agents and integrating it into the current reasoning cycle.`
+        `Added context captured: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}". Active agent calls cannot be rewritten, so Athena will apply it at the next moderation checkpoint before finalizing.`
       );
       return
     }
@@ -949,7 +1303,7 @@ export default function App() {
 
           // Update the persistent summary after direct run
           const directSummaryPrompt = `
-            You are ATHENA, the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
+            You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. An agent direct run has just completed.
             ${fallbackWarning}
             
             CURRENT_SESSION_SUMMARY:
@@ -1059,7 +1413,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
 
           // Update the persistent summary after direct run
           const directSummaryPrompt = `
-            You are ATHENA, the MASTER_CONTROL_MODERATOR. An agent direct run has just completed.
+            You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. An agent direct run has just completed.
             ${fallbackWarning}
             
             CURRENT_SESSION_SUMMARY:
@@ -1110,12 +1464,17 @@ ANTI-LOOP & PERFORMANCE POLICY:
 
     addMessage('user', userQuery)
     setIsLoading(true); 
-    setStatusText('ANALYZING_INTENT...')
+    setStatusText('TRIAGING REQUEST')
+    addMessage(
+      'athena-whisper' as any,
+      `Request received. Athena is deciding whether to answer directly or engage the smallest specialist roster that adds distinct value.`
+    );
 
     let rankedIntents: { rank: number, topic: string, intent: string, reason: string }[] = [];
-    try {
+    if (shouldDecomposeRequest(userQuery)) try {
+      setStatusText('DECOMPOSING REQUEST');
       const intentAnalysisPrompt = `
-        You are ATHENA, the MASTER_CONTROL_MODERATOR.
+        You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system.
         The user has sent a request. You need to analyze this request and determine if there are multiple topics, tasks, or intents.
         
         User Request: "${userQuery}"
@@ -1147,7 +1506,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
       const jsonStr = jsonBlockMatch ? jsonBlockMatch[1] : analysisRaw;
       const parsed = JSON.parse(jsonStr);
       if (parsed && Array.isArray(parsed.rankedIntents) && parsed.rankedIntents.length > 0) {
-        rankedIntents = parsed.rankedIntents;
+        rankedIntents = parsed.rankedIntents.slice(0, 3);
       }
     } catch (e: any) {
       console.error("Intent analysis failed, falling back to single intent:", e);
@@ -1215,13 +1574,16 @@ STRATEGY FOR THIS TURN:
 - If agents AGREE or provide complementary info, merge their findings and finalize.
 - If you are NOT SURE about any agent claim, you MUST QUESTION that agent directly if you decide to engage for one more turn (only if absolutely necessary).
 - Limit agent exploration: Do NOT allow agents to perform deep search / deep exploration unless you explicitly prompt them to (default should be false).
-- When engaging agents, select at least 2 agents whenever the roster permits so independent validation is possible.
-- Cross-checking is mandatory for every swarm engagement with at least 2 successful agents. Specify targeted cross_checks so every successful agent output is reviewed by another successful agent without excessive all-to-all checks.
+- Default to one specialist. Select a second only when it contributes a distinct discipline or materially reduces decision risk. Never select more than two.
+- Every selected agent must have a specific, non-overlapping contribution. Do not engage an agent merely because it is available.
+- Cross-checking: specify at most one targeted cross_check. Use it to search for disconfirming evidence on a material claim, not to manufacture agreement.
+- Minimize cost: prefer finalizing over another turn when the evidence is already sufficient.
 
 AMBIGUITY & UNCERTAINTY:
 - If the user's request or agent responses are AMBIGUOUS, you MUST ask the agents (or user) for more questions/clarification.
+- Actively identify the strongest plausible counterargument and unresolved evidence gap. Do not reward consensus by itself.
 
-VISUALIZATION REQUIREMENT: Include Mermaid diagrams and visuals as much as possible in your direct_response.
+VISUALIZATION: Include a diagram only when it materially improves the answer.
 
 HUMAN_IN_THE_LOOP: If "ADDED_USER_INTEL_DURING_RUN" is present, prioritize this context.
 
@@ -1247,7 +1609,46 @@ Output ONLY valid JSON.
 }
 `;
           
-          const { content: decisionRaw, provider: modProvider, model: modModel } = await runWithFallback(moderatorDecisionPrompt, 'Athena');
+          let decisionRaw: string;
+          let modProvider: string | undefined;
+          let modModel: string | undefined;
+          try {
+            const moderatorResult = await runWithFallback(
+              moderatorDecisionPrompt,
+              'Athena',
+              MODERATOR_DECISION_TIMEOUT_MS,
+            );
+            decisionRaw = moderatorResult.content;
+            modProvider = moderatorResult.provider;
+            modModel = moderatorResult.model;
+          } catch (moderatorError: any) {
+            const fallbackAgents = selectValueAddingAgents([], agentRoster, subQuery);
+            if (fallbackAgents.length === 0) throw moderatorError;
+
+            setStatusText('MODERATOR SLOW · USING SAFE FALLBACK');
+            addThinking('Athena', `MODERATOR_FALLBACK: ${moderatorError.message}`, 'timeout');
+            addMessage(
+              'athena-whisper' as any,
+              `Athena's planning call exceeded 30 seconds. Continuing with a bounded fallback instead of ending the chat: ${fallbackAgents.map(agent => `**${agent.name}**`).join(', ')}.`
+            );
+            decisionRaw = JSON.stringify({
+              thought: `Moderator timed out; using deterministic value-based agent selection.`,
+              intent: subQuery,
+              goal: `Return the best supported answer without another planning delay.`,
+              action: "engage",
+              engage: fallbackAgents.map(agent => agent.id),
+              queries: Object.fromEntries(fallbackAgents.map(agent => [
+                agent.id,
+                {
+                  task: subQuery,
+                  context_strategy: "summary",
+                  allow_deep_search: sessionMetadata.allowDeepSearch === true,
+                },
+              ])),
+              cross_checks: [],
+              direct_response: "",
+            });
+          }
           
           // Whisper Athena's initial acknowledgment
           if (currentTurn === 1) {
@@ -1304,19 +1705,17 @@ Output ONLY valid JSON.
             break;
           }
 
-          const agentsToEngage = resolveEngagedAgents(decision.engage, agentRoster);
-          if (agentsToEngage.length === 1 && agentRoster.length >= 2) {
-            const independentReviewer = agentRoster.find(agent => agent.id !== agentsToEngage[0].id);
-            if (independentReviewer) {
-              agentsToEngage.push(independentReviewer);
-              addThinking('Athena', `MANDATORY_VALIDATION_REVIEWER_ADDED: ${independentReviewer.name}`);
-            }
-          }
+          const requestedAgents = resolveEngagedAgents(decision.engage, agentRoster);
+          const agentsToEngage = selectValueAddingAgents(
+            requestedAgents.map(agent => agent.id),
+            agentRoster,
+            subQuery,
+          );
           latestDecision.engage = agentsToEngage.map(agent => agent.id);
-          setStatusText(`TURN_${currentTurn}: ${agentsToEngage.length} AGENTS`);
+          setStatusText(`RUNNING ${agentsToEngage.length} SPECIALIST${agentsToEngage.length === 1 ? '' : 'S'}`);
           addMessage(
             'athena-whisper' as any,
-            `I've analyzed the intent and am now looking at the agent roster to engage the best specialists for your task. Turn ${currentTurn}: Engaging ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}.`,
+            `Roster decision: ${agentsToEngage.map(agent => `**${agent.name}** (${agent.persona})`).join(', ')}. ${agentsToEngage.length === 1 ? 'One specialist is sufficient for this focused task.' : 'A second specialist is included for distinct, risk-reducing review.'}`,
             undefined,
             undefined,
             modProvider,
@@ -1332,6 +1731,7 @@ Output ONLY valid JSON.
             const allowDeepSearch = (typeof queryData === 'object' && queryData.allow_deep_search === true) || sessionMetadata.allowDeepSearch === true;
             const agentLabel = agent.name || agent.id;
 
+            setStreamingAgents(prev => ({ ...prev, [agentLabel]: { status: 'Resolving abilities...' } }));
             // Start Ability Resolution and Context Setup in parallel
             addThinking(agentLabel, `RESOLVING_ABILITIES: ${agent.persona}...`)
             
@@ -1357,6 +1757,7 @@ Output ONLY valid JSON.
 
             const mcpPromise = resolveAgentAbilities();
             const resolvedInstructions = (await mcpPromise).content?.[0]?.text || "";
+            setStreamingAgents(prev => ({ ...prev, [agentLabel]: { ...(prev[agentLabel] || {}), status: "Analyzing query..." } }));
             addThinking(agentLabel, `ANALYZING_QUERY (strategy: ${strategy}): ${query.substring(0, 30)}...`)
             
             const effectiveContext = (strategy === 'summary' 
@@ -1384,16 +1785,24 @@ ANTI-LOOP & PERFORMANCE POLICY:
 `;
 
             try {
+              setStreamingAgents(prev => ({ ...prev, [agentLabel]: { ...(prev[agentLabel] || {}), status: "Running via gateway..." } }));
               const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
-              
+
+              setStreamingAgents(prev => ({ ...prev, [agentLabel]: { ...(prev[agentLabel] || {}), status: "Validating output..." } }));
               const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
               const response = validationResult.response;
               const finalAgentProvider = validationResult.provider || agentProvider;
               const finalAgentModel = validationResult.model || agentModel;
 
+              clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
+              delete agentRunEventsIntervalRef.current[agentLabel];
+              setStreamingAgents(prev => { const n = { ...prev }; delete n[agentLabel]; return n; });
               addMessage('agent-whisper' as any, response, agentLabel, undefined, finalAgentProvider, finalAgentModel)
               return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: response, status: 'complete' as const };
             } catch (e: any) {
+              clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
+              delete agentRunEventsIntervalRef.current[agentLabel];
+              setStreamingAgents(prev => { const n = { ...prev }; delete n[agentLabel]; return n; });
               addThinking(agentLabel, `FAILURE_SIGNAL: ${e.message}`, 'error');
               return { agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: `CRITICAL_ERROR: ${e.message}`, status: 'error' as const };
             }
@@ -1403,14 +1812,13 @@ ANTI-LOOP & PERFORMANCE POLICY:
           const watchSwarm = async (tasks: Promise<any>[], labels: string[]) => {
             let results: any[] = [];
             const taskStatuses = labels.map(label => ({ label, done: false }));
-            const checkInterval = 15000; // Check back every 15s
-            
+
             const monitor = setInterval(() => {
               const pending = taskStatuses.filter(t => !t.done).map(t => t.label);
               if (pending.length > 0) {
-                addMessage('athena-whisper' as any, `I am checking back on the agents. **${pending.join(', ')}** are still processing. Stand by.`);
+                addThinking('Athena', `SUPERVISING: waiting on ${pending.join(', ')}`);
               }
-            }, checkInterval);
+            }, 30000);
 
             try {
               results = await Promise.all(tasks.map((p, i) => p.then(r => {
@@ -1425,11 +1833,30 @@ ANTI-LOOP & PERFORMANCE POLICY:
 
           const turnResults = await watchSwarm(agentPromises, agentsToEngage.map(a => a.name || a.id));
 
+          if (midRunBuffer.current.length > 0) {
+            const newInfo = midRunBuffer.current.join('\n');
+            allAddedInfo += (allAddedInfo ? '\n' : '') + newInfo;
+            midRunBuffer.current = [];
+            addMessage(
+              'athena-whisper' as any,
+              `New context arrived while specialists were running. Athena is re-evaluating their output against it before finalizing.`
+            );
+            if (currentTurn < maxTurns) {
+              accumulatedAgentContext = [...accumulatedAgentContext, ...turnResults];
+              currentTurn++;
+              continue;
+            }
+          }
+
           // ── SUPERVISED PARALLEL NEURAL CROSS-CHECK (GOVERNED BY ATHENA) ──
-          const crossCheckRequests = buildMandatoryCrossChecks(turnResults, decision.cross_checks);
+          const crossCheckRequests = buildMandatoryCrossChecks(
+            turnResults,
+            decision.cross_checks,
+            requiresIndependentReview(subQuery) || (Array.isArray(decision.cross_checks) && decision.cross_checks.length > 0),
+          );
           if (crossCheckRequests.length > 0) {
-            addThinking('Athena', `INITIATING_GOVERNED_NEURAL_CROSS_CHECK: Running ${crossCheckRequests.length} check(s)...`)
-            setStatusText(`TURN_${currentTurn}: CROSS-CHECK`);
+            addThinking('Athena', `INITIATING_TARGETED_ADVERSARIAL_REVIEW`)
+            setStatusText('CHALLENGING MATERIAL CLAIM');
             const allCrossCheckPromises = crossCheckRequests.map(async (req: any) => {
               const fromAgentRes = turnResults.find(r => (r.agentId === req.from || r.agentName.toLowerCase() === String(req.from).toLowerCase()) && r.status === 'complete');
               const toAgentRes = turnResults.find(r => (r.agentId === req.to || r.agentName.toLowerCase() === String(req.to).toLowerCase()) && r.status === 'complete');
@@ -1438,45 +1865,50 @@ ANTI-LOOP & PERFORMANCE POLICY:
                 return { from: req.from, on: req.to, feedback: "Skipped (agent not active or failed)" };
               }
 
-              const checkPrompt = `
-                You are ${fromAgentRes.agentName}, performing a neural cross-check on ${toAgentRes.agentName}'s work.
-                Your independently produced evidence: "${fromAgentRes.content}"
-                ${toAgentRes.agentName}'s Output: "${toAgentRes.content}"
-                Original Task: "${subQuery}"
-                Context/Reason for check: ${req.reason || "Review for consistency"}
-                
-                CROSS-CHECK MANDATE:
-                1. Compare material claims against the independent evidence above and cross-check using the tools/context you have access to.
-                2. For any claim, identify if it is supported, contradicted, or unverified.
-                3. Provide a quantitative CONFIDENCE SCORE (0-100%) on how confident you are in your own cross-check, considering the tools and data you used.
-                4. You must output your feedback using the following structure:
-                   CONFIDENCE SCORE: [0-100]%
-                   TOOL VERIFICATION DETAILS: [Describe how tools/context/code support or contradict the claims]
-                   CRITIQUE: [Your detailed review feedback]
+              const xLabel = `${fromAgentRes.agentName} cross-check`;
+              setStreamingAgents(prev => ({ ...prev, [xLabel]: { status: `checking ${toAgentRes.agentName}...` } }));
 
-                ${CITATION_CONTRACT_PROMPT}
-              `;
+              // Truncate agent content to keep cross-check prompts lean and fast
+              const myEvidence = fromAgentRes.content.substring(0, 800);
+              const theirOutput = toAgentRes.content.substring(0, 800);
+
+              const checkPrompt = `You are an AI assistant acting as a skeptical ${fromAgentRes.agentName} specialist. Independently challenge another agent's most material claim.
+
+Your evidence summary: "${myEvidence}"
+${toAgentRes.agentName}'s output summary: "${theirOutput}"
+Task: "${subQuery.substring(0, 300)}"
+Review reason: ${req.reason || "adversarial evidence check"}
+
+Respond in 3 lines ONLY:
+CONFIDENCE: [0-100]%
+VERDICT: supported | contradicted | unverified
+NOTES: [strongest disconfirming evidence, missing evidence, or material discrepancy; never endorse a claim merely because agents agree]`;
 
               try {
-                const { content: feedbackRaw, provider: checkProvider, model: checkModel } = await runWithFallback(checkPrompt, fromAgentRes.agentName, 45000);
-                const validation = await validateAndCorrectMermaid(feedbackRaw, fromAgentRes.agentName, checkPrompt, 45000);
-                const feedback = validation.response;
-                addMessage('agent-whisper' as any, `CROSS-CHECK feedback on ${toAgentRes.agentName}:\n\n${feedback}`, fromAgentRes.agentName, undefined, validation.provider || checkProvider, validation.model || checkModel);
-                return { from: req.from, on: req.to, feedback };
+                const { content: feedback, provider: checkProvider, model: checkModel } = await runWithFallback(checkPrompt, fromAgentRes.agentName, 25000);
+                setStreamingAgents(prev => { const n = { ...prev }; delete n[xLabel]; return n; });
+                clearInterval(agentRunEventsIntervalRef.current[fromAgentRes.agentName]);
+                delete agentRunEventsIntervalRef.current[fromAgentRes.agentName];
+                addMessage('agent-whisper' as any, `CROSS-CHECK [${fromAgentRes.agentName} → ${toAgentRes.agentName}]:\n\n${feedback}`, fromAgentRes.agentName, undefined, checkProvider, checkModel);
+                return { from: req.from, on: req.to, reviewerName: fromAgentRes.agentName, checkedName: toAgentRes.agentName, checkedAgent: toAgentRes, feedback, skipped: false };
               } catch (e: any) {
-                return { from: req.from, on: req.to, feedback: `Cross-check failed: ${e.message}` };
+                setStreamingAgents(prev => { const n = { ...prev }; delete n[xLabel]; return n; });
+                clearInterval(agentRunEventsIntervalRef.current[fromAgentRes.agentName]);
+                delete agentRunEventsIntervalRef.current[fromAgentRes.agentName];
+                return { from: req.from, on: req.to, reviewerName: fromAgentRes.agentName, checkedName: toAgentRes.agentName, checkedAgent: toAgentRes, feedback: `Cross-check failed: ${e.message}`, skipped: true };
               }
             });
 
             const crossCheckResults = await Promise.all(allCrossCheckPromises);
+
             accumulatedAgentContext = [
-              ...accumulatedAgentContext, 
+              ...accumulatedAgentContext,
               ...turnResults,
-              ...crossCheckResults.map((r: any) => ({ 
-                agentId: 'system', 
-                agentName: 'CrossCheck', 
-                persona: 'internal', 
-                content: `Agent ${r.from} feedback on ${r.on}: ${r.feedback}` 
+              ...crossCheckResults.map((r: any) => ({
+                agentId: 'system',
+                agentName: 'CrossCheck',
+                persona: 'internal',
+                content: `${r.reviewerName} reviewed ${r.checkedName}: ${r.feedback}`
               }))
             ];
           } else {
@@ -1492,49 +1924,31 @@ ANTI-LOOP & PERFORMANCE POLICY:
       }
 
       if (accumulatedAgentContext.length > 0) {
-        setStatusText('SYNTHESIZING...'); 
+        if (midRunBuffer.current.length > 0) {
+          const newInfo = midRunBuffer.current.join('\n');
+          allAddedInfo += (allAddedInfo ? '\n' : '') + newInfo;
+          midRunBuffer.current = [];
+        }
+
+        setStatusText('SYNTHESIZING ANSWER');
         addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS...');
 
         const currentChain = settings["provider:chain"] || [];
         const activeProvIdx = preferredProviderIndexRef.current;
         const fallbackWarning = activeProvIdx > 0 && currentChain[activeProvIdx]
-          ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.` 
+          ? `\n\nSYSTEM_STATUS: Operational on fallback provider (${currentChain[activeProvIdx].provider}:${currentChain[activeProvIdx].model}). Calibration adjusted for decreased capabilities.`
           : "";
 
         const intentToUse = rankedIntents.map(i => i.topic).join(', ');
         const engagedList = Array.from(new Set(accumulatedAgentContext.map(r => r.agentId).filter(id => id !== 'system' && id !== 'athena')));
         
-        const summaryPrompt = athenaServiceRef.current.buildSummaryPrompt({
-          sessionSummary,
-          intent: intentToUse,
-          userQuery,
-          engagedAgents: engagedList,
-          finalOutput: "Athena is generating a final synthesized report based on the agent responses",
-          agentResponses: accumulatedAgentContext,
-          fallbackWarning,
-        }) + `
-
-The summary of this latest turn MUST follow this exact format:
-
-- User asked: "[Brief summary of what the user asked]"
-- Athena: intent is "${intentToUse}" and engaged ${engagedList.length > 0 ? engagedList.join(', ') : 'Athena (direct/moderator)'}
-${accumulatedAgentContext.map(r => `- ${r.agentName}: "[Extracted key findings/message from this agent]"`).join('\n')}
-- Athena synthesized and told the user: "[Brief summary of the final response/report sent to the user]"
-
-IMPORTANT RULES:
-1. Do NOT lose key data, decisions, or facts from the agents' messages.
-2. Keep the user's question, intent, and clean extracted messages in focus.
-3. Keep the previous session summary intact (exactly as it is), and append this new turn summary at the end.
-4. If there is no previous summary, start directly with the new turn summary.
-5. Return ONLY the complete updated session summary (previous summary + appended new turn). Do not include any other conversational text or formatting.
-`;
-
-        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating summary and report in parallel...');
+        addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating final answer...');
 
         const finalPrompt = `
-          You are ATHENA, the MASTER_CONTROL_MODERATOR delivering the FINAL_COMPREHENSIVE_REPORT to the user.
+          You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. You are delivering the FINAL_COMPREHENSIVE_REPORT to the user.
 
           USER'S ORIGINAL REQUEST: "${userQuery}"
+          USER CONTEXT ADDED DURING THE RUN: "${allAddedInfo || "None"}"
           PREVIOUS SESSION SUMMARY: "${sessionSummary || "No previous summary available."}"
           LATEST AGENT INTEL: ${JSON.stringify(accumulatedAgentContext)}
           ${fallbackWarning}
@@ -1544,64 +1958,53 @@ IMPORTANT RULES:
           - Clearly separate verified findings from failed checks and remaining evidence gaps.
           - Never replace the best available evidence-backed answer with a generic failure message when usable evidence exists.
           - Treat cross-check criticism as validation input; resolve material conflicts explicitly in the answer.
+          - Consensus is not evidence. State the strongest counterargument or disconfirming evidence considered.
+          - Use calibrated confidence and preserve uncertainty where evidence is incomplete.
 
-          YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
+          YOUR RESPONSE MUST FOLLOW THIS STRUCTURE:
 
-          ## 1. RESTATE THE ASK
-          In your own words, rephrase what the user asked for. Make sure the user knows you fully understood their intent. Start with something like "You asked..." or "The question was...". Be specific.
+          ## Answer
+          Lead with the direct result or recommendation.
 
-          ## 2. THE ANSWER
-          Give a clear, direct, definitive answer. Do not hedge. If there is a recommendation, make it. If there is a result, present it. The user should be able to read ONLY this section and know the answer.
+          ## Evidence and reasoning
+          Include only the material evidence and how it supports the answer.
 
-          ## 3. HOW IT WORKS — Full Explanation
-          Now explain the "how" in depth. Assume the reader has ZERO prior knowledge about this topic. Walk through:
-          - What each concept is
-          - How the pieces connect to each other
-          - What happens step-by-step when the system/process runs
-          - Why it was designed or works this way
-
-          Use **Mermaid diagrams** liberally. You MUST include at least one diagram. Choose the most appropriate type:
-          - \`\`\`mermaid graph TD\`\`\` for architecture/dependency maps
-          - \`\`\`mermaid sequenceDiagram\`\`\` for step-by-step flows
-          - \`\`\`mermaid flowchart LR\`\`\` for decision trees or pipelines
-          - \`\`\`mermaid classDiagram\`\`\` for data models or type hierarchies
-          - \`\`\`mermaid stateDiagram-v2\`\`\` for state machines or lifecycle flows
-
-          Use multiple diagrams if the topic has multiple dimensions (e.g., architecture + data flow).
-
-          IMPORTANT MERMAID RULES:
-          - For all node labels containing special characters, HTML, or parentheses, you MUST use DOUBLE QUOTES (e.g., A["Label (Text)"] or B["Line 1 <br> Line 2"]).
-          - Ensure all arrows are valid (e.g., use "-->" or "-- text -->" or "<-->").
-
-          ## 4. WHY — Rationale & Context
-          Explain the reasoning behind the approach, trade-offs, or design decisions. Why was this method chosen over alternatives? What constraints or goals informed the design?
-
-          ## 5. FINALIZED NEURAL CROSS-CHECK & EVIDENCE VALIDATION
-          Synthesize and finalize all cross-check results. List each cross-check performed, the confidence scores provided by the reviewing agents, and Athena's final verdict on the validity of the claims. Resolve any discrepancies.
+          ## Uncertainty and counterevidence
+          State unresolved gaps, disagreements, and the strongest plausible challenge. Omit this section only when there are genuinely none.
 
           ${CITATION_CONTRACT_PROMPT}
 
           FORMATTING RULES:
-          - Use rich Markdown throughout (headers, bold, tables, code blocks, bullet lists).
-          - Write in clear, plain language. Avoid unnecessary jargon. When you must use technical terms, define them inline.
-          - Be thorough. The user should NOT need to ask a follow-up question. If they read this report, they should fully understand the topic.
-          - Do NOT include greetings, sign-offs, or filler text. Every sentence must carry information.
-          - Do NOT summarize — EXPLAIN. The difference is critical.
+          - Be concise and information-dense.
+          - Include a diagram only when it materially improves comprehension.
+          - Do not include greetings, sign-offs, process theater, or filler.
         `;
 
-        const [summaryResult, finalResult] = await Promise.all([
-          runWithFallback(summaryPrompt, 'Athena'),
-          runWithFallback(finalPrompt, 'Athena')
-        ]);
-
-        const updatedSummary = summaryResult.content.trim();
-        setSessionSummary(updatedSummary);
-        saveCurrentSession(undefined, undefined, updatedSummary);
-        addThinking('Athena', 'NEURAL_SUMMARY_UPDATED');
-
-        const finalResponseRaw = finalResult.content;
+        const finalResult = await runWithFallback(finalPrompt, 'Athena');
+        let finalResponseRaw = finalResult.content;
         let finalProvider = finalResult.provider;
         let finalModel = finalResult.model;
+
+        if (midRunBuffer.current.length > 0) {
+         const lateInfo = midRunBuffer.current.join('\n');
+         midRunBuffer.current = [];
+         allAddedInfo += (allAddedInfo ? '\n' : '') + lateInfo;
+         setStatusText('APPLYING LATE CONTEXT');
+         const revisionPrompt = `
+You are Athena revising a draft answer because the user added context while synthesis was running.
+
+ORIGINAL REQUEST: "${userQuery}"
+NEW USER CONTEXT: "${lateInfo}"
+DRAFT ANSWER: "${finalResponseRaw}"
+
+Revise the answer so the new context is materially incorporated. Preserve supported findings, correct conflicts, and keep the response concise. Do not mention internal timing.
+${CITATION_CONTRACT_PROMPT}
+`;
+         const revisionResult = await runWithFallback(revisionPrompt, 'Athena');
+         finalResponseRaw = revisionResult.content;
+         finalProvider = revisionResult.provider;
+         finalModel = revisionResult.model;
+        }
 
         const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Athena', finalPrompt, 90000);
         const finalResponseCombined = validationResult.response;
@@ -1609,11 +2012,43 @@ IMPORTANT RULES:
         finalModel = validationResult.model || finalModel;
 
         addMessage('athena', finalResponseCombined, undefined, undefined, finalProvider, finalModel);
+        const answerSection = finalResponseCombined
+          .split(/\n##\s+(?:Evidence and reasoning|Uncertainty and counterevidence|Citations)/i)[0]
+          .replace(/^##\s+Answer\s*/i, "")
+          .trim();
+        const compactAnswer = answerSection.length > 900
+          ? `${answerSection.slice(0, 897).trimEnd()}...`
+          : answerSection;
+        const boundedPreviousSummary = sessionSummary.slice(-5_000);
+        const turnNumber = messagesRef.current.filter(message => message.role === "user").length;
+        const turnTopic = userQuery.replace(/\s+/g, " ").trim().slice(0, 72);
+        const summaryBase = boundedPreviousSummary.trim() || "# Session Summary";
+        const updatedSummary = [
+          summaryBase,
+          "",
+          `## Turn ${turnNumber} — ${turnTopic}`,
+          "",
+          "### Question",
+          "",
+          `> ${userQuery.replace(/\s+/g, " ").trim().slice(0, 320)}`,
+          "",
+          `**Agents:** ${engagedList.length > 0 ? engagedList.join(', ') : 'Athena'}`,
+          "",
+          "### Outcome",
+          "",
+          compactAnswer || "No final outcome was recorded.",
+        ].join('\n');
+        setSessionSummary(updatedSummary);
+        saveCurrentSession(undefined, undefined, updatedSummary);
+        addThinking('Athena', 'SESSION_SUMMARY_UPDATED_WITHOUT_EXTRA_MODEL_CALL');
       }
     } catch (error: any) {
       addMessage('error', `CRITICAL_EXCEPTION: ${error.message}`)
     } finally {
-      setIsLoading(false); 
+      setIsLoading(false);
+      setStreamingAgents({});
+      Object.values(agentRunEventsIntervalRef.current).forEach(clearInterval);
+      agentRunEventsIntervalRef.current = {};
       setStatusText('IDLE');
       setRunningSessionId(null);
     }
@@ -1622,6 +2057,92 @@ IMPORTANT RULES:
   const handleDeleteMessage = (id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }
+
+  const handleRecoverRun = async (runId: string) => {
+    setIsLoading(true);
+    setStatusText('RECONNECTING TO RUN');
+    try {
+      const recoveredResponse = await window.system.resumeAgentRun({
+        runId,
+        timeoutMs: 300_000,
+        agentLabel: 'Recovery',
+      });
+      addMessage('athena', cleanResponse(recoveredResponse));
+      setMessages(prev => {
+        const updated = prev.filter(message => !(
+          message.role === 'error' &&
+          getRecoverableAgentRunId(message.content) === runId
+        ));
+        messagesRef.current = updated;
+        saveCurrentSession(updated);
+        return updated;
+      });
+    } catch (error: any) {
+      addMessage('error', `RUN_RECOVERY_FAILED: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+      setStatusText('IDLE');
+    }
+  };
+
+  const handleAgentRunDecision = async (runId: string, decision: 'kill' | 'wait') => {
+    const entry = Object.entries(streamingAgents).find(([, data]) => data.runId === runId);
+    const agentLabel = entry?.[0] || 'Athena';
+    try {
+      if (decision === 'kill') {
+        await window.system.killAgentRun({ runId });
+        setStreamingAgents(prev => ({
+          ...prev,
+          [agentLabel]: {
+            ...(prev[agentLabel] || {}),
+            runId,
+            status: 'Athena requested termination of the stalled run.',
+          },
+        }));
+        return;
+      }
+
+      const idleTimeoutMs = entry?.[1].idleTimeoutMs || REGULAR_AGENT_TIMEOUT_MS;
+      const extended = await window.system.extendAgentRun({ runId, timeoutMs: idleTimeoutMs, agentLabel });
+      if (!extended) throw new Error('The run is no longer active in the supervisor.');
+      setStreamingAgents(prev => ({
+        ...prev,
+        [agentLabel]: {
+          ...(prev[agentLabel] || {}),
+          runId,
+          lastActivityAt: Date.now(),
+          idleTimeoutMs,
+          status: 'Operator chose to keep waiting. Idle timer reset.',
+        },
+      }));
+    } catch (error: any) {
+      setStreamingAgents(prev => ({
+        ...prev,
+        [agentLabel]: {
+          ...(prev[agentLabel] || {}),
+          runId,
+          status: `Run control failed: ${error.message}`,
+        },
+      }));
+      toast.error(`Unable to ${decision === 'kill' ? 'kill' : 'extend'} run: ${error.message}`);
+    }
+  };
+
+  const handleRetryFailedRequest = async (messageId: string) => {
+    const errorIndex = messagesRef.current.findIndex(message => message.id === messageId);
+    const precedingMessages = errorIndex >= 0
+      ? messagesRef.current.slice(0, errorIndex)
+      : messagesRef.current;
+    const userIndex = precedingMessages.findLastIndex(message => message.role === 'user');
+    if (userIndex < 0) return;
+
+    const request = precedingMessages[userIndex].content;
+    const restoredMessages = precedingMessages.slice(0, userIndex);
+    messagesRef.current = restoredMessages;
+    setMessages(restoredMessages);
+    saveCurrentSession(restoredMessages);
+    await handleSend(request);
+  };
 
   const handleExport = () => {
     if (messages.length === 0) return;
@@ -1724,7 +2245,8 @@ IMPORTANT RULES:
 
   const handleAddFolder = () => {
     setFolders(prev => {
-      const updated = [...prev, { id: `f-${Date.now()}`, name: `folder_${prev.length + 1}` }];
+      const updated = [...prev, { id: `f-${Date.now()}`, name: `folder_${prev.length + 1}`, hint: "" }];
+      foldersRef.current = updated;
       window.system.saveSetting("system:folders", updated);
       return updated;
     });
@@ -1735,6 +2257,7 @@ IMPORTANT RULES:
     if (!hasSessions) {
       setFolders(prev => {
         const updated = prev.filter(folder => folder.id !== id);
+        foldersRef.current = updated;
         window.system.saveSetting("system:folders", updated);
         return updated;
       });
@@ -1744,17 +2267,115 @@ IMPORTANT RULES:
   const handleRenameFolder = (id: string, newName: string) => {
     setFolders(prev => {
       const updated = prev.map(folder => folder.id === id ? { ...folder, name: newName } : folder);
+      foldersRef.current = updated;
       window.system.saveSetting("system:folders", updated);
       return updated;
     });
   }
 
+  const handleUpdateFolderHint = async (id: string, hint: string) => {
+    const updated = foldersRef.current.map(folder => folder.id === id ? { ...folder, hint } : folder);
+    foldersRef.current = updated;
+    setFolders(updated);
+    await window.system.saveSetting("system:folders", updated);
+
+    if (!hint) return;
+    const unfiledSessions = sessions.filter(session => (
+      !Object.prototype.hasOwnProperty.call(sessionFoldersRef.current, session.id)
+    ));
+    for (const session of unfiledSessions) {
+      await classifyChatById(session.id);
+    }
+  }
+
   const handleMoveToFolder = (chatId: string, folderId: string | null) => {
-    setSessionFolders(prev => {
-      const updated = { ...prev, [chatId]: folderId };
-      window.system.saveSetting("system:sessionFolders", updated);
-      return updated;
+    persistSessionFolder(chatId, folderId);
+  }
+
+  const handleReorderChat = (chatId: string, targetChatId: string, placement: "before" | "after") => {
+    if (chatId === targetChatId) return;
+    setSessions(previous => {
+      const reordered = [...previous];
+      const sourceIndex = reordered.findIndex(session => session.id === chatId);
+      const targetIndex = reordered.findIndex(session => session.id === targetChatId);
+      if (sourceIndex < 0 || targetIndex < 0) return previous;
+
+      const [moved] = reordered.splice(sourceIndex, 1);
+      const adjustedTargetIndex = reordered.findIndex(session => session.id === targetChatId);
+      reordered.splice(adjustedTargetIndex + (placement === "after" ? 1 : 0), 0, moved);
+      sessionOrderRef.current = reordered.map(session => session.id);
+      window.system.saveSetting("system:sessionOrder", sessionOrderRef.current);
+      return reordered;
     });
+  };
+
+  const handleMoveChatsToFolder = (chatIds: string[], folderId: string | null) => {
+    const updatedAssignments = { ...sessionFoldersRef.current };
+    chatIds.forEach(chatId => {
+      updatedAssignments[chatId] = folderId;
+    });
+    sessionFoldersRef.current = updatedAssignments;
+    setSessionFolders(updatedAssignments);
+    window.system.saveSetting("system:sessionFolders", updatedAssignments);
+  }
+
+  const handleCreateFolderAndMove = (chatIds: string[], folderName: string) => {
+    const folderId = `f-${Date.now()}`;
+    const updatedFolders = [...foldersRef.current, { id: folderId, name: folderName, hint: "" }];
+    const updatedAssignments = { ...sessionFoldersRef.current };
+    chatIds.forEach(chatId => {
+      updatedAssignments[chatId] = folderId;
+    });
+
+    foldersRef.current = updatedFolders;
+    sessionFoldersRef.current = updatedAssignments;
+    setFolders(updatedFolders);
+    setSessionFolders(updatedAssignments);
+    window.system.saveSetting("system:folders", updatedFolders);
+    window.system.saveSetting("system:sessionFolders", updatedAssignments);
+  }
+
+  const handleSuggestGrouping = async (): Promise<SessionGroupingSuggestion[]> => {
+    const unfiledSessions = sessions.filter(session => (
+      !sessionFoldersRef.current[session.id]
+    ));
+    const groupingInputs = await Promise.all(unfiledSessions.map(async session => {
+      const data = await window.sessions.load(session.id);
+      const userText = (data?.messages || [])
+        .filter((message: Message) => message.role === "user")
+        .map((message: Message) => message.content)
+        .join(" ");
+      return {
+        id: session.id,
+        title: session.title || "Untitled Quorum",
+        text: userText.slice(0, 10_000),
+      };
+    }));
+    return suggestSessionGrouping(groupingInputs, foldersRef.current);
+  }
+
+  const handleApplyGrouping = (suggestions: SessionGroupingSuggestion[]) => {
+    const updatedFolders = [...foldersRef.current];
+    const updatedAssignments = { ...sessionFoldersRef.current };
+
+    suggestions.forEach(suggestion => {
+      let folderId = suggestion.folderId;
+      if (suggestion.isNewFolder) {
+        folderId = `f-${Date.now()}-${updatedFolders.length}`;
+        updatedFolders.push({ id: folderId, name: suggestion.folderName, hint: "" });
+      }
+      if (!folderId) return;
+      suggestion.sessionIds.forEach(sessionId => {
+        updatedAssignments[sessionId] = folderId;
+      });
+    });
+
+    foldersRef.current = updatedFolders;
+    sessionFoldersRef.current = updatedAssignments;
+    setFolders(updatedFolders);
+    setSessionFolders(updatedAssignments);
+    window.system.saveSetting("system:folders", updatedFolders);
+    window.system.saveSetting("system:sessionFolders", updatedAssignments);
   }
 
   if (isInitializing) {
@@ -1802,13 +2423,21 @@ IMPORTANT RULES:
           folders={folders}
           activeChatId={currentSessionId}
           onSelectChat={loadSession}
+          onReorderChat={handleReorderChat}
           onMoveToFolder={handleMoveToFolder}
+          onMoveChatsToFolder={handleMoveChatsToFolder}
+          onCreateFolderAndMove={handleCreateFolderAndMove}
           onDeleteChat={deleteSession}
           onAddFolder={handleAddFolder}
           onDeleteFolder={handleDeleteFolder}
           onRenameFolder={handleRenameFolder}
+          onUpdateFolderHint={handleUpdateFolderHint}
+          onClassifyChat={classifyChatById}
+          onSuggestGrouping={handleSuggestGrouping}
+          onApplyGrouping={handleApplyGrouping}
           onSettingsChanged={handleSettingsChanged}
           onLogout={handleLogout}
+          unreadChatIds={unreadSessionIds}
         />
 
         <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
@@ -1825,6 +2454,9 @@ IMPORTANT RULES:
               isLoading={isLoading && currentSessionId === runningSessionId}
               statusText={statusText}
               thinking={thinking}
+              streamingAgents={streamingAgents}
+              onRecoverRun={handleRecoverRun}
+              onRetryFailedRequest={handleRetryFailedRequest}
               onSummarize={handleSummarize}
               onClearSession={startNewSession}
               onEditMessage={(id: string, newContent: string) => {
@@ -1878,6 +2510,7 @@ IMPORTANT RULES:
         settings={settings}
         activeProviderIndex={activeProviderIndex}
       />
+      <AgentStallDialog agents={streamingAgents} onDecision={handleAgentRunDecision} />
       <Toaster />
     </div>
   );

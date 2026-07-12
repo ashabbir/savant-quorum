@@ -70,6 +70,9 @@ if (!window.system) {
       })),
     }),
     getDbStatus: async () => 'connected',
+    transcribeAudio: async () => {
+      throw new Error('Local speech transcription requires the Electron app.')
+    },
     callMcpTool: async () => ({ content: [] }),
     saveAthenaThread: async () => true,
     getAthenaThreads: async () => [],
@@ -78,6 +81,15 @@ if (!window.system) {
     saveAthenaRun: async () => true,
     getAthenaRuns: async () => [],
     runAgentViaGateway: async (_payload: any) => 'Local browser preview mode. Athena gateway bridge is unavailable.',
+    resumeAgentRun: async (_payload: any) => 'Local browser preview mode. Athena gateway bridge is unavailable.',
+    extendAgentRun: async (_payload: any) => false,
+    killAgentRun: async (_payload: any) => false,
+    onAgentRunStarted: (_cb: any) => {},
+    offAgentRunStarted: () => {},
+    onAgentRunConnectionState: (_cb: any) => {},
+    offAgentRunConnectionState: () => {},
+    onAgentRunActivity: (_cb: any) => {},
+    offAgentRunActivity: () => {},
   }
 }
 

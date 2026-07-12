@@ -39,13 +39,13 @@ export default defineConfig({
           // Explicitly start Electron and point it to the project root
           options.startup()
         },
-        vite: { 
-          build: { 
-            outDir: 'dist-electron',
-            rollupOptions: { 
-              external: ["better-sqlite3"] 
-            } 
-          } 
+        vite: {
+          build: {
+            outDir: '../../dist-electron',
+            rollupOptions: {
+              external: ["better-sqlite3", "@huggingface/transformers"]
+            }
+          }
         },
       },
       {
@@ -55,7 +55,7 @@ export default defineConfig({
         },
         vite: {
           build: {
-            outDir: 'dist-electron',
+            outDir: '../../dist-electron',
           }
         }
       },

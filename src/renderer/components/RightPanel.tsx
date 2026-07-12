@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Activity, GitBranch, FileText, Upload, Sparkles, Search, ListChecks, Terminal, RefreshCcw, Timer, Cpu, Zap, AlertTriangle, X } from "lucide-react";
+import { Activity, GitBranch, FileText, Upload, Sparkles, Search, ListChecks, Terminal, RefreshCcw, Timer, Cpu, Zap, AlertTriangle, X, Copy, Download } from "lucide-react";
 import { AreaChart, Area, LineChart, Line, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Cell, PieChart, Pie, Tooltip as RechartsTooltip, RadialBarChart, RadialBar, Treemap } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -30,13 +30,62 @@ interface RightPanelProps {
   onDeleteSessionFile?: (name: string) => void;
 }
 
-const pulseData = Array.from({ length: 20 }, (_, i) => ({
-  t: i,
-  tokens: Math.floor(Math.random() * 800 + 200),
-  latency: Math.floor(Math.random() * 300 + 80),
-  requests: Math.floor(Math.random() * 50 + 10),
-  memory: Math.floor(Math.random() * 40 + 50),
-}));
+function cleanLegacySummaryValue(value: string) {
+  const trimmed = value.trim();
+  return trimmed.startsWith('"') && trimmed.endsWith('"')
+    ? trimmed.slice(1, -1).trim()
+    : trimmed;
+}
+
+function restoreLegacyOutcomeMarkdown(value: string) {
+  return cleanLegacySummaryValue(value)
+    .replace(/\s+---\s+/g, "\n\n---\n\n")
+    .replace(
+      /\s*##\s+(Answer|Evidence and reasoning|Uncertainty and counterevidence|Citations)\s+/gi,
+      "\n\n#### $1\n\n",
+    )
+    .replace(/\s+(?=##\s+)/g, "\n\n")
+    .replace(/^##\s+/gm, "#### ")
+    .replace(/\s+(?=\d+\.\s+[A-Z])/g, "\n\n");
+}
+
+function normalizeSessionSummaryMarkdown(summary: string) {
+  if (!summary.trim()) return "# Session Summary\n\nNo summary generated yet.";
+
+  let turn = 0;
+  let legacyTurnFound = false;
+  const normalizedLines = summary.split("\n").flatMap(line => {
+    const question = line.match(/^\s*-\s*User asked:\s*(.+)$/i);
+    if (question) {
+      turn += 1;
+      legacyTurnFound = true;
+      return [
+        "",
+        `## Turn ${turn}`,
+        "",
+        "### Question",
+        "",
+        `> ${cleanLegacySummaryValue(question[1])}`,
+      ];
+    }
+
+    const agents = line.match(/^\s*-\s*Athena engaged:\s*(.+)$/i);
+    if (agents) {
+      return ["", `**Agents:** ${cleanLegacySummaryValue(agents[1])}`];
+    }
+
+    const outcome = line.match(/^\s*-\s*Outcome:\s*(.+)$/i);
+    if (outcome) {
+      return ["", "### Outcome", "", restoreLegacyOutcomeMarkdown(outcome[1])];
+    }
+
+    return [line];
+  });
+
+  if (!legacyTurnFound) return summary;
+  const normalized = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return normalized.startsWith("# ") ? normalized : `# Session Summary\n\n${normalized}`;
+}
 
 function NavIcon({
   icon, label, onClick, isActive,
@@ -52,6 +101,7 @@ function NavIcon({
         <Tooltip.Trigger asChild>
           <button
             onClick={onClick}
+            aria-label={`${label} insights`}
             style={{
               color: "var(--primary)",
               opacity: isActive ? 1 : 0.45,
@@ -81,11 +131,999 @@ function NavIcon({
   );
 }
 
+function InsightsDashboard({
+  thinking,
+  messages,
+  statusText,
+}: {
+  thinking: Thinking[];
+  messages: Message[];
+  statusText: string;
+}) {
+  const agentLabel = (message: Message) => {
+    if (message.role === "user") return "YOU";
+    if (message.role === "agent-whisper" && message.from) return message.from.toUpperCase();
+    if (["athena", "moderator", "athena-whisper", "moderator-whisper"].includes(message.role)) return "ATHENA";
+    return message.role.toUpperCase();
+  };
+
+  const visibleMessages = messages.filter(message => !["system", "internal"].includes(message.role));
+  const responseMessages = visibleMessages.filter(message =>
+    !["user", "error", "whisper", "agent-whisper", "athena-whisper", "moderator-whisper"].includes(message.role)
+  );
+  const citationIds = new Set(
+    visibleMessages.flatMap(message => message.content.match(/\[CITE:\d+\]/gi) || [])
+  );
+  const citedResponses = responseMessages.filter(message => /\[CITE:\d+\]/i.test(message.content)).length;
+  const citationCoverage = responseMessages.length > 0
+    ? Math.round((citedResponses / responseMessages.length) * 100)
+    : 0;
+  const citationTablePresent = responseMessages.some(message => /##\s+Citations/i.test(message.content));
+  const crossChecks = visibleMessages.filter(message => /cross-check/i.test(message.content)).length;
+  const errors = visibleMessages.filter(message => message.role === "error");
+  const timeouts = thinking.filter(item => item.type === "timeout").length;
+
+  const contributionMap = new Map<string, { name: string; words: number; messages: number; citations: number }>();
+  visibleMessages
+    .filter(message => !["user", "error", "whisper", "athena-whisper", "moderator-whisper"].includes(message.role))
+    .forEach(message => {
+      const name = agentLabel(message);
+      const current = contributionMap.get(name) || { name, words: 0, messages: 0, citations: 0 };
+      current.words += message.content.trim().split(/\s+/).filter(Boolean).length;
+      current.messages += 1;
+      current.citations += (message.content.match(/\[CITE:\d+\]/gi) || []).length;
+      contributionMap.set(name, current);
+    });
+  const contributions = Array.from(contributionMap.values())
+    .sort((left, right) => right.words - left.words)
+    .slice(0, 6);
+
+  let userTurns = 0;
+  let answerTurns = 0;
+  let evidenceMarkers = 0;
+  const timeline = visibleMessages.map((message, index) => {
+    if (message.role === "user") userTurns += 1;
+    if (responseMessages.includes(message)) answerTurns += 1;
+    evidenceMarkers += (message.content.match(/\[CITE:\d+\]/gi) || []).length;
+    return { step: index + 1, userTurns, answerTurns, evidenceMarkers };
+  });
+
+  const executionEffort = [
+    {
+      name: "MODERATION",
+      value: thinking.filter(item => item.agent.toLowerCase() === "athena" && item.type !== "error").length,
+      color: "var(--primary)",
+    },
+    {
+      name: "SPECIALISTS",
+      value: thinking.filter(item => !["athena", "system"].includes(item.agent.toLowerCase()) && item.type !== "error").length,
+      color: "var(--chart-3)",
+    },
+    {
+      name: "TOOLS",
+      value: thinking.filter(item => ["mcp_call", "mcp_response", "shell"].includes(item.type || "")).length,
+      color: "var(--chart-5)",
+    },
+    {
+      name: "FAILURES",
+      value: thinking.filter(item => ["error", "timeout"].includes(item.type || "")).length + errors.length,
+      color: "var(--accent)",
+    },
+  ];
+
+  const concerns: string[] = [];
+  if (errors.length > 0) concerns.push(`${errors.length} user-visible error${errors.length === 1 ? "" : "s"} occurred.`);
+  if (timeouts > 0) concerns.push(`${timeouts} timeout${timeouts === 1 ? "" : "s"} interrupted execution.`);
+  if (responseMessages.length > 0 && citationCoverage < 100) {
+    concerns.push(`${responseMessages.length - citedResponses} final response${responseMessages.length - citedResponses === 1 ? "" : "s"} lacked inline citations.`);
+  }
+  if (citationIds.size > 0 && !citationTablePresent) concerns.push("Inline citations exist without a citation table.");
+  if (crossChecks === 0 && contributions.length > 1) concerns.push("Multiple agents contributed without a recorded adversarial cross-check.");
+
+  const estimatedTokens = Math.round(
+    (messages.reduce((sum, message) => sum + message.content.length, 0) +
+      thinking.reduce((sum, item) => sum + item.thought.length, 0)) / 4
+  );
+  const runActive = statusText !== "IDLE";
+
+  const cardStyle = {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+  };
+  const chartTooltip = {
+    background: "var(--secondary)",
+    border: "1px solid var(--border)",
+    color: "var(--foreground)",
+    fontSize: "10px",
+  };
+
+  return (
+    <div className="h-full overflow-y-auto p-3 space-y-3" style={{ scrollbarWidth: "thin" }}>
+      <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] opacity-70" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+        01 / Overview
+      </div>
+      <section style={cardStyle} className="p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--foreground)]">What is happening now?</h2>
+            <p className="text-[10px] text-[var(--muted-foreground)] mt-1">
+              Live run state and the observable session footprint.
+            </p>
+          </div>
+          <span
+            className="text-[10px] font-bold px-2 py-1 border"
+            style={{
+              color: runActive ? "var(--warning)" : "var(--good)",
+              borderColor: runActive ? "var(--warning)" : "var(--good)",
+              fontFamily: "'Share Tech Mono', monospace",
+            }}
+          >
+            {statusText}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 mt-3">
+          {[
+            ["MESSAGES", visibleMessages.length],
+            ["AGENTS", contributions.length],
+            ["EVIDENCE", citationIds.size],
+            ["EST. TOKENS", estimatedTokens],
+          ].map(([label, value]) => (
+            <div key={label} className="bg-[var(--secondary)] border border-[var(--border)] p-2">
+              <div className="text-[8px] opacity-50">{label}</div>
+              <div className="text-base font-bold text-[var(--primary)] mt-1" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 text-[9px] uppercase tracking-[0.2em] text-[var(--chart-3)] opacity-70 mt-1" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          02 / Swarm contribution
+        </div>
+        <section style={cardStyle} className="p-3 col-span-2">
+          <h3 className="text-xs font-bold">Who contributed useful output?</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Word volume by contributing agent; hover for messages and citations.
+          </p>
+          {contributions.length > 0 ? (
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={contributions} layout="vertical" margin={{ top: 12, right: 12, bottom: 8, left: 10 }}>
+                <XAxis type="number" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} />
+                <YAxis dataKey="name" type="category" width={72} tick={{ fontSize: 8, fill: "var(--foreground)" }} />
+                <RechartsTooltip contentStyle={chartTooltip} />
+                <Bar dataKey="words" name="Words contributed" fill="var(--chart-3)" radius={[0, 2, 2, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[170px] flex items-center justify-center text-[10px] opacity-40">No agent output yet.</div>
+          )}
+        </section>
+
+        <div className="col-span-2 text-[9px] uppercase tracking-[0.2em] text-[var(--good)] opacity-70 mt-1" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          03 / Evidence
+        </div>
+        <section style={cardStyle} className="p-3">
+          <h3 className="text-xs font-bold">Is the answer evidence-backed?</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Coverage is the share of final responses with inline citations.
+          </p>
+          <div className="flex items-center gap-4 mt-5">
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center"
+              style={{
+                background: `conic-gradient(var(--good) ${citationCoverage * 3.6}deg, var(--secondary) 0deg)`,
+              }}
+            >
+              <div className="w-16 h-16 rounded-full bg-[var(--card)] flex items-center justify-center">
+                <span className="text-xl font-bold text-[var(--good)]">{citationCoverage}%</span>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2 text-[10px]">
+              <div className="flex justify-between"><span>Inline references</span><strong>{citationIds.size}</strong></div>
+              <div className="flex justify-between"><span>Cited final responses</span><strong>{citedResponses}/{responseMessages.length}</strong></div>
+              <div className="flex justify-between"><span>Citation table</span><strong>{citationTablePresent ? "YES" : "NO"}</strong></div>
+              <div className="flex justify-between"><span>Cross-checks</span><strong>{crossChecks}</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <div className="col-span-2 text-[9px] uppercase tracking-[0.2em] text-[var(--chart-5)] opacity-70 mt-1" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          04 / Execution
+        </div>
+        <section style={cardStyle} className="p-3 col-span-2">
+          <h3 className="text-xs font-bold">How did the conversation accumulate evidence?</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Cumulative turns and citation markers across the visible message sequence.
+          </p>
+          {timeline.length > 0 ? (
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={timeline} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
+                <XAxis dataKey="step" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} />
+                <RechartsTooltip contentStyle={chartTooltip} />
+                <Line type="monotone" dataKey="userTurns" name="User turns" stroke="var(--primary)" dot={false} />
+                <Line type="monotone" dataKey="answerTurns" name="Final answers" stroke="var(--chart-3)" dot={false} />
+                <Line type="monotone" dataKey="evidenceMarkers" name="Citation markers" stroke="var(--good)" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[170px] flex items-center justify-center text-[10px] opacity-40">No conversation data yet.</div>
+          )}
+        </section>
+
+        <section style={cardStyle} className="p-3">
+          <h3 className="text-xs font-bold">Where did execution effort go?</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Recorded orchestration events grouped by purpose, not inferred latency.
+          </p>
+          <ResponsiveContainer width="100%" height={170}>
+            <BarChart data={executionEffort} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 8, fill: "var(--foreground)" }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} />
+              <RechartsTooltip contentStyle={chartTooltip} />
+              <Bar dataKey="value" name="Recorded events" radius={[2, 2, 0, 0]}>
+                {executionEffort.map(item => <Cell key={item.name} fill={item.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      </div>
+
+      <section style={cardStyle} className="p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--accent)] opacity-70 mb-2" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          05 / Attention
+        </div>
+        <h3 className="text-xs font-bold">What needs attention?</h3>
+        <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+          Actionable gaps derived from errors, timeouts, citations, and review coverage.
+        </p>
+        <div className="mt-3 space-y-2">
+          {concerns.length > 0 ? concerns.map(concern => (
+            <div key={concern} className="flex items-start gap-2 bg-[rgba(255,0,85,0.05)] border border-[rgba(255,0,85,0.2)] p-2 text-[10px]">
+              <AlertTriangle size={12} className="text-[var(--accent)] mt-0.5 shrink-0" />
+              <span>{concern}</span>
+            </div>
+          )) : (
+            <div className="flex items-center gap-2 bg-[rgba(0,255,136,0.05)] border border-[rgba(0,255,136,0.2)] p-2 text-[10px] text-[var(--good)]">
+              <ListChecks size={12} />
+              No observable evidence, execution, or review gaps.
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function QualityPulseDashboard({
+  thinking,
+  messages,
+  statusText,
+}: {
+  thinking: Thinking[];
+  messages: Message[];
+  statusText: string;
+}) {
+  const stopWords = new Set([
+    "about", "after", "again", "also", "and", "are", "because", "before", "being", "could",
+    "does", "from", "have", "into", "only", "should", "that", "their", "there", "these",
+    "they", "this", "those", "through", "using", "what", "when", "where", "which", "with",
+    "would", "your",
+  ]);
+  const keywords = (text: string) => new Set(
+    text.toLowerCase()
+      .replace(/\[cite:\d+\]/gi, " ")
+      .replace(/[^a-z0-9_\s-]/g, " ")
+      .split(/\s+/)
+      .filter(word => word.length > 3 && !stopWords.has(word))
+  );
+  const overlapPercent = (source: Set<string>, target: Set<string>) => {
+    if (source.size === 0) return 100;
+    let matches = 0;
+    source.forEach(term => {
+      if (target.has(term)) matches += 1;
+    });
+    return Math.round((matches / source.size) * 100);
+  };
+  const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+  const finalRoles = new Set(["athena", "moderator", "ai", "engineer", "architect", "security"]);
+  const intentAnswerRoles = new Set(["athena", "moderator", "ai"]);
+  const operationalPattern = /\b(still working|taking unusually long|done in \d+s|done \d+s|request received|triaging request|decomposing request|engaging specialists?|calling (?:agent|tool)|mcp|gateway|tool call|pulling|digging|searching|working agents?)\b/i;
+  const isSubstantiveAnswer = (message: Message) => (
+    finalRoles.has(message.role)
+    && !message.role.includes("whisper")
+    && !operationalPattern.test(message.content)
+    && keywords(message.content).size >= 3
+  );
+  const participantLabel = (message: Message) => {
+    if (message.role === "user") return "USER";
+    if (message.role === "agent-whisper" && message.from) return message.from.toUpperCase();
+    if (["athena", "moderator", "athena-whisper", "moderator-whisper"].includes(message.role)) return "ATHENA";
+    return message.role.toUpperCase();
+  };
+  const finalAnswers = messages.filter(isSubstantiveAnswer);
+  const intentAnswers = finalAnswers.filter(message => intentAnswerRoles.has(message.role));
+  const userMessages = messages.filter(message => message.role === "user");
+  const latestAnswer = finalAnswers.at(-1);
+  const latestAnswerKeywords = keywords(latestAnswer?.content || "");
+  const recentUserKeywords = new Set(
+    userMessages.slice(-3).flatMap(message => Array.from(keywords(message.content)))
+  );
+
+  const driftPoints = intentAnswers.map(answer => {
+    const answerIndex = messages.indexOf(answer);
+    const precedingUser = messages.slice(0, answerIndex).reverse().find(message => message.role === "user");
+    const alignment = overlapPercent(keywords(precedingUser?.content || ""), keywords(answer.content));
+    return clamp(100 - alignment);
+  });
+  const topicDrift = driftPoints.length > 0
+    ? clamp(driftPoints.reduce((sum, value) => sum + value, 0) / driftPoints.length)
+    : 0;
+  const contextRetention = latestAnswer ? overlapPercent(recentUserKeywords, latestAnswerKeywords) : 0;
+  const driftTimeline = intentAnswers.map(answer => {
+    const answerIndex = messages.indexOf(answer);
+    const intentMessage = messages.slice(0, answerIndex).reverse().find(message => message.role === "user");
+    const intentKeywords = keywords(intentMessage?.content || "");
+    const answerKeywords = keywords(answer.content);
+    return {
+      id: answer.id,
+      actor: participantLabel(answer),
+      previousActor: "USER INTENT",
+      drift: clamp(100 - overlapPercent(intentKeywords, answerKeywords)),
+      topics: Array.from(intentKeywords).slice(0, 4).map(topic => topic.replace(/_/g, " ")),
+      words: answer.content.trim().split(/\s+/).filter(Boolean).length,
+      timestamp: new Date(answer.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+  });
+  const participantDriftMap = new Map<string, { actor: string; total: number; transitions: number; words: number }>();
+  driftTimeline.forEach(item => {
+    const current = participantDriftMap.get(item.actor) || { actor: item.actor, total: 0, transitions: 0, words: 0 };
+    current.total += item.drift;
+    current.transitions += 1;
+    current.words += item.words;
+    participantDriftMap.set(item.actor, current);
+  });
+  const participantDrift = Array.from(participantDriftMap.values())
+    .map(item => ({ ...item, average: clamp(item.total / item.transitions) }))
+    .sort((left, right) => right.average - left.average);
+
+  const analysisText = [...messages.map(message => message.content), ...thinking.map(item => item.thought)].join(" ").toLowerCase();
+  const agreementSignals = (analysisText.match(/\bagree|agreed|confirmed|supports?|consistent|validated\b/g) || []).length;
+  const challengeSignals = (analysisText.match(/\bcontradict|counter|disagree|alternative|uncertain|unverified|limitation|challenge|risk\b/g) || []).length;
+  const activeAgents = new Set(
+    messages
+      .filter(message => message.role === "agent-whisper" && message.from)
+      .map(message => message.from!.toLowerCase())
+  );
+  const confirmationBias = activeAgents.size > 1 && challengeSignals === 0
+    ? 85
+    : clamp((agreementSignals / Math.max(1, agreementSignals + challengeSignals)) * 100);
+
+  const citedAnswers = finalAnswers.filter(answer => /\[CITE:\d+\]/i.test(answer.content));
+  const tableBackedAnswers = finalAnswers.filter(answer => /##\s+Citations/i.test(answer.content));
+  const crossCheckedAnswers = finalAnswers.filter(answer => /cross-check|counterevidence|contradict/i.test(answer.content));
+  const uncitedAnswers = Math.max(0, finalAnswers.length - citedAnswers.length);
+  const shallowCitations = Math.max(0, citedAnswers.length - tableBackedAnswers.length);
+  const tableBackedOnly = Math.max(0, tableBackedAnswers.length - crossCheckedAnswers.length);
+  const hallucinationRisk = finalAnswers.length === 0 ? 0 : clamp(
+    (uncitedAnswers / finalAnswers.length) * 65 +
+    (shallowCitations / finalAnswers.length) * 20 +
+    ((activeAgents.size > 1 && crossCheckedAnswers.length === 0) ? 15 : 0)
+  );
+
+  const capturedInputIndexes = messages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) =>
+      ["athena-whisper", "moderator-whisper"].includes(message.role) &&
+      /added context captured|captured your added intel/i.test(message.content)
+    );
+  const adoptedInputs = capturedInputIndexes.filter(({ index }) =>
+    messages.slice(index + 1).some(message => finalRoles.has(message.role))
+  ).length;
+  const humanInputAdoption = capturedInputIndexes.length > 0
+    ? clamp((adoptedInputs / capturedInputIndexes.length) * 100)
+    : 100;
+
+  const contradictionsDetected = (analysisText.match(/\bcontradict|conflict|disagree|discrepancy|unverified\b/g) || []).length;
+  const contradictionsResolved = (analysisText.match(/\bresolved|corrected|revised|partially-revised|reconciled\b/g) || []).length;
+  const contradictionHandling = contradictionsDetected > 0
+    ? clamp((Math.min(contradictionsResolved, contradictionsDetected) / contradictionsDetected) * 100)
+    : 100;
+
+  const contributionWords = new Map<string, number>();
+  messages
+    .filter(message => message.role === "agent-whisper" && message.from)
+    .forEach(message => {
+      const name = message.from!.toUpperCase();
+      contributionWords.set(name, (contributionWords.get(name) || 0) + message.content.split(/\s+/).length);
+    });
+  const totalContributionWords = Array.from(contributionWords.values()).reduce((sum, value) => sum + value, 0);
+  const contributionShares = Array.from(contributionWords.entries())
+    .map(([name, words]) => ({
+      name,
+      words,
+      share: totalContributionWords > 0 ? Math.round((words / totalContributionWords) * 100) : 0,
+    }))
+    .sort((left, right) => right.share - left.share);
+  const agentDominance = contributionShares[0]?.share || 0;
+
+  const qualityConcerns: Array<{ label: string; detail: string }> = [];
+  if (topicDrift >= 60) qualityConcerns.push({ label: "Topic drift", detail: "Final answers retain less than 40% of the preceding user terms." });
+  if (confirmationBias >= 65) qualityConcerns.push({ label: "Confirmation bias", detail: "Agreement signals substantially outweigh challenge signals." });
+  if (contextRetention < 40 && latestAnswer) qualityConcerns.push({ label: "Context rot", detail: "The latest answer retains few terms from the last three user turns." });
+  if (hallucinationRisk >= 50) qualityConcerns.push({ label: "Hallucination risk", detail: "Evidence provenance is missing or shallow for final answers." });
+  if (humanInputAdoption < 100) qualityConcerns.push({ label: "HIL adoption", detail: "Some mid-run user context has no later final-answer checkpoint." });
+  if (contradictionHandling < 100) qualityConcerns.push({ label: "Contradictions", detail: "Detected conflicts outnumber recorded revisions or resolutions." });
+  if (agentDominance > 75 && contributionShares.length > 1) qualityConcerns.push({ label: "Agent dominance", detail: `${contributionShares[0].name} produced ${agentDominance}% of specialist output.` });
+  const timeoutCount = thinking.filter(item => item.type === "timeout").length;
+  if (timeoutCount > 0) qualityConcerns.push({ label: "Execution reliability", detail: `${timeoutCount} timeout${timeoutCount === 1 ? "" : "s"} recorded.` });
+
+  const topicCounts = new Map<string, number>();
+  messages
+    .filter(message => !["system", "internal", "error"].includes(message.role))
+    .forEach(message => {
+      const contentWithoutCitations = message.content.split(/##\s+Citations/i)[0];
+      new Set(keywords(contentWithoutCitations)).forEach(topic => {
+        topicCounts.set(topic, (topicCounts.get(topic) || 0) + 1);
+      });
+    });
+  const topics = Array.from(topicCounts.entries())
+    .map(([topic, mentions]) => ({ topic: topic.replace(/_/g, " "), mentions }))
+    .sort((left, right) => right.mentions - left.mentions)
+    .slice(0, 10);
+  const maxTopicMentions = Math.max(1, topics[0]?.mentions || 1);
+
+  const toolUsageMap = new Map<string, { tool: string; calls: number; agents: Map<string, number> }>();
+  const recordTool = (tool: string, agent: string) => {
+    const current = toolUsageMap.get(tool) || { tool, calls: 0, agents: new Map<string, number>() };
+    const normalizedAgent = agent.toUpperCase();
+    current.calls += 1;
+    current.agents.set(normalizedAgent, (current.agents.get(normalizedAgent) || 0) + 1);
+    toolUsageMap.set(tool, current);
+  };
+  thinking.forEach(item => {
+    if (item.type === "shell") {
+      recordTool("Shell command", item.agent);
+      return;
+    }
+    if (item.type !== "mcp_call") return;
+    const text = item.thought.toLowerCase();
+    if (text.includes("call_gateway")) {
+      recordTool("Gateway /runs", item.agent);
+      return;
+    }
+    if (text.includes("resolving_abilities") || text.includes("resolve_abilities")) {
+      recordTool("savant-abilities/resolve_abilities", item.agent);
+      return;
+    }
+    const explicitTool = text.match(/(savant-[a-z-]+)[/\s:>_-]+([a-z][a-z0-9_]+)/i);
+    recordTool(explicitTool ? `${explicitTool[1]}/${explicitTool[2]}` : "MCP tool call", item.agent);
+  });
+  const toolsUsed = Array.from(toolUsageMap.values()).sort((left, right) => right.calls - left.calls);
+
+  const agentLedgerMap = new Map<string, {
+    agent: string;
+    part: string;
+    messages: number;
+    words: number;
+    citations: number;
+    tools: number;
+    models: Set<string>;
+  }>();
+  const getLedgerAgent = (message: Message) => {
+    if (message.role === "agent-whisper" && message.from) return message.from.toUpperCase();
+    if (["athena", "moderator", "athena-whisper", "moderator-whisper"].includes(message.role)) return "ATHENA";
+    return message.role.toUpperCase();
+  };
+  messages
+    .filter(message => !["user", "system", "internal", "error", "whisper"].includes(message.role))
+    .forEach(message => {
+      const agent = getLedgerAgent(message);
+      const existing = agentLedgerMap.get(agent) || {
+        agent,
+        part: agent === "ATHENA" ? "Moderation and synthesis" : "Specialist analysis",
+        messages: 0,
+        words: 0,
+        citations: 0,
+        tools: 0,
+        models: new Set<string>(),
+      };
+      existing.messages += 1;
+      existing.words += message.content.split(/\s+/).filter(Boolean).length;
+      existing.citations += (message.content.match(/\[CITE:\d+\]/gi) || []).length;
+      if (/cross-check/i.test(message.content)) existing.part = "Adversarial cross-check";
+      else if (/rebuttal|revised|correction/i.test(message.content)) existing.part = "Revision and conflict resolution";
+      else if (message.role === "agent-whisper") existing.part = "Specialist evidence and analysis";
+      if (message.provider || message.model) {
+        existing.models.add(`${message.provider || "unknown"}:${message.model || "unknown"}`);
+      }
+      agentLedgerMap.set(agent, existing);
+    });
+  toolsUsed.forEach(tool => {
+      tool.agents.forEach((calls, agent) => {
+      const existing = agentLedgerMap.get(agent) || {
+        agent,
+        part: agent === "ATHENA" ? "Moderation and orchestration" : "Tool-assisted analysis",
+        messages: 0,
+        words: 0,
+        citations: 0,
+        tools: 0,
+        models: new Set<string>(),
+      };
+      existing.tools += calls;
+      agentLedgerMap.set(agent, existing);
+    });
+  });
+  const agentLedger = Array.from(agentLedgerMap.values()).sort((left, right) => right.words - left.words);
+
+  const modelUsageMap = new Map<string, {
+    provider: string;
+    model: string;
+    outputs: number;
+    estimatedOutputTokens: number;
+    agents: Set<string>;
+  }>();
+  messages
+    .filter(message => !["user", "system", "internal", "error", "whisper"].includes(message.role))
+    .forEach(message => {
+      const provider = message.provider || "unattributed";
+      const model = message.model || "unattributed";
+      const key = `${provider}:${model}`;
+      const existing = modelUsageMap.get(key) || {
+        provider,
+        model,
+        outputs: 0,
+        estimatedOutputTokens: 0,
+        agents: new Set<string>(),
+      };
+      existing.outputs += 1;
+      existing.estimatedOutputTokens += Math.ceil(message.content.length / 4);
+      existing.agents.add(getLedgerAgent(message));
+      modelUsageMap.set(key, existing);
+    });
+  const modelUsage = Array.from(modelUsageMap.values())
+    .sort((left, right) => right.estimatedOutputTokens - left.estimatedOutputTokens);
+  const totalEstimatedOutputTokens = modelUsage.reduce((sum, item) => sum + item.estimatedOutputTokens, 0);
+
+  const severity = (risk: number) => risk >= 65 ? "HIGH" : risk >= 35 ? "WATCH" : "LOW";
+  const riskColor = (risk: number) => risk >= 65 ? "var(--accent)" : risk >= 35 ? "var(--warning)" : "var(--good)";
+  const retentionColor = (score: number) => score < 40 ? "var(--accent)" : score < 70 ? "var(--warning)" : "var(--good)";
+
+  const MetricCard = ({
+    title,
+    icon,
+    value,
+    label,
+    color,
+    description,
+    children,
+  }: {
+    title: string;
+    icon: React.ReactNode;
+    value: string;
+    label: string;
+    color: string;
+    description: string;
+    children: React.ReactNode;
+  }) => (
+    <article
+      className="relative overflow-hidden p-3 min-h-[190px]"
+      style={{
+        background: "linear-gradient(145deg, color-mix(in srgb, var(--card) 94%, transparent), var(--secondary))",
+        border: `1px solid color-mix(in srgb, ${color} 35%, var(--border))`,
+      }}
+    >
+      <div className="absolute inset-x-0 top-0 h-[2px]" style={{ background: color }} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span style={{ color }}>{icon}</span>
+          <h3 className="text-xs font-bold">{title}</h3>
+        </div>
+        <span className="text-[8px] font-bold border px-1.5 py-0.5" style={{ color, borderColor: color }}>
+          {label}
+        </span>
+      </div>
+      <div className="text-2xl font-bold mt-3" style={{ color, fontFamily: "'Share Tech Mono', monospace" }}>{value}</div>
+      <p className="text-[9px] text-[var(--muted-foreground)] mt-1 min-h-[28px]">{description}</p>
+      <div className="mt-3">{children}</div>
+    </article>
+  );
+
+  const sparklinePoints = (driftPoints.length > 0 ? driftPoints : [0])
+    .map((value, index, values) => `${values.length === 1 ? 100 : (index / (values.length - 1)) * 200},${70 - (value / 100) * 60}`)
+    .join(" ");
+
+  return (
+    <div className="h-full overflow-y-auto p-3 space-y-4" style={{ scrollbarWidth: "thin" }}>
+      <header className="flex items-start justify-between gap-3 border border-[var(--border)] bg-[var(--card)] p-3">
+        <div>
+          <div className="text-[9px] uppercase tracking-[0.22em] text-[var(--primary)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            AI conversation quality control
+          </div>
+          <h2 className="text-base font-bold mt-1">Pulse quality signals</h2>
+          <p className="text-[10px] text-[var(--muted-foreground)] mt-1">
+            Observable risk indicators. Lexical signals are diagnostics, not proof of model intent.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[9px] opacity-50">RUN STATE</div>
+          <div className="text-[10px] font-bold mt-1 text-[var(--primary)]">{statusText}</div>
+        </div>
+      </header>
+
+      <section>
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] mb-2" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          01 / Quality risk matrix
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <MetricCard
+            title="Topic drift"
+            icon={<GitBranch size={14} />}
+            value={`${topicDrift}%`}
+            label={severity(topicDrift)}
+            color={riskColor(topicDrift)}
+            description="Lexical distance between each final answer and its preceding user request."
+          >
+            <svg viewBox="0 0 200 80" className="w-full h-16" role="img" aria-label="Topic drift across final answers">
+              <line x1="0" y1="40" x2="200" y2="40" stroke="var(--border)" strokeDasharray="4 4" />
+              <polyline points={sparklinePoints} fill="none" stroke={riskColor(topicDrift)} strokeWidth="3" />
+            </svg>
+          </MetricCard>
+
+          <MetricCard
+            title="Confirmation bias"
+            icon={<ListChecks size={14} />}
+            value={`${confirmationBias}%`}
+            label={severity(confirmationBias)}
+            color={riskColor(confirmationBias)}
+            description="Risk rises when agreement dominates explicit challenge or counterevidence."
+          >
+            <div className="space-y-2 text-[9px]">
+             <div className="flex justify-between gap-3">
+               <span className="text-[var(--accent)]">Agreement <strong>{agreementSignals}</strong></span>
+               <span className="text-[var(--good)]">Challenge <strong>{challengeSignals}</strong></span>
+              </div>
+             <div
+               className="h-3 flex bg-[var(--background)] border border-[var(--border)] overflow-hidden"
+               role="img"
+               aria-label={`Agreement ${agreementSignals}, challenge ${challengeSignals}`}
+             >
+               <div
+                 className="h-full bg-[var(--accent)]"
+                 style={{ width: `${(agreementSignals / Math.max(1, agreementSignals + challengeSignals)) * 100}%` }}
+               />
+               <div
+                 className="h-full bg-[var(--good)]"
+                 style={{ width: `${(challengeSignals / Math.max(1, agreementSignals + challengeSignals)) * 100}%` }}
+               />
+             </div>
+           </div>
+          </MetricCard>
+
+          <MetricCard
+            title="Context retention"
+            icon={<Cpu size={14} />}
+            value={`${contextRetention}%`}
+            label={contextRetention < 40 ? "ROT RISK" : contextRetention < 70 ? "WATCH" : "HEALTHY"}
+            color={retentionColor(contextRetention)}
+            description="Recent user terms retained in the latest final answer; low overlap flags context rot."
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-3 bg-[var(--background)] border border-[var(--border)] overflow-hidden">
+                <div className="h-full" style={{ width: `${contextRetention}%`, background: retentionColor(contextRetention) }} />
+              </div>
+              <span className="text-[9px] opacity-60">LAST 3 TURNS</span>
+            </div>
+          </MetricCard>
+
+          <MetricCard
+            title="Hallucination risk"
+            icon={<AlertTriangle size={14} />}
+            value={`${hallucinationRisk}%`}
+            label={severity(hallucinationRisk)}
+            color={riskColor(hallucinationRisk)}
+            description="Evidence-depth signal: uncited, inline-only, table-backed, and cross-checked answers."
+          >
+            <div className="h-4 flex overflow-hidden border border-[var(--border)]" title="Evidence provenance depth">
+              {[
+                { value: uncitedAnswers, color: "var(--accent)", label: "Uncited" },
+                { value: shallowCitations, color: "var(--warning)", label: "Inline only" },
+                { value: tableBackedOnly, color: "var(--primary)", label: "Table backed" },
+                { value: crossCheckedAnswers.length, color: "var(--good)", label: "Cross-checked" },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  aria-label={`${item.label}: ${item.value}`}
+                  style={{
+                    width: `${finalAnswers.length > 0 ? (item.value / finalAnswers.length) * 100 : 0}%`,
+                    background: item.color,
+                  }}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[8px]">
+              <span>■ Uncited: {uncitedAnswers}</span>
+              <span>■ Inline only: {shallowCitations}</span>
+              <span>■ Table backed: {tableBackedOnly}</span>
+              <span>■ Cross-checked: {crossCheckedAnswers.length}</span>
+            </div>
+          </MetricCard>
+
+          <MetricCard
+            title="Human input adoption"
+            icon={<Activity size={14} />}
+            value={`${humanInputAdoption}%`}
+            label={humanInputAdoption < 100 ? "CHECK" : "ADOPTED"}
+            color={humanInputAdoption < 100 ? "var(--warning)" : "var(--good)"}
+            description="Mid-run context acknowledgements followed by a later final-answer checkpoint."
+          >
+            <div className="flex items-center gap-2">
+              {(capturedInputIndexes.length > 0 ? capturedInputIndexes : [{ index: 0 }]).map((_, index) => (
+                <div key={index} className="flex items-center flex-1">
+                  <span
+                    className="w-3 h-3 rounded-full border-2"
+                    style={{
+                      borderColor: index < adoptedInputs ? "var(--good)" : "var(--warning)",
+                      background: index < adoptedInputs ? "var(--good)" : "transparent",
+                    }}
+                  />
+                  {index < Math.max(0, capturedInputIndexes.length - 1) && <span className="h-[2px] flex-1 bg-[var(--border)]" />}
+                </div>
+              ))}
+              <span className="text-[9px]">{adoptedInputs}/{capturedInputIndexes.length}</span>
+            </div>
+          </MetricCard>
+
+          <MetricCard
+            title="Contradiction handling"
+            icon={<RefreshCcw size={14} />}
+            value={`${contradictionHandling}%`}
+            label={contradictionHandling < 100 ? "UNRESOLVED" : "CLEAR"}
+            color={contradictionHandling < 100 ? "var(--warning)" : "var(--good)"}
+            description="Detected conflicts that are followed by an explicit revision or reconciliation signal."
+          >
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="border border-[var(--border)] bg-[var(--background)] p-2">
+                <div className="text-lg font-bold text-[var(--warning)]">{contradictionsDetected}</div>
+                <div className="text-[8px] opacity-50">DETECTED</div>
+              </div>
+              <div className="border border-[var(--border)] bg-[var(--background)] p-2">
+                <div className="text-lg font-bold text-[var(--good)]">{Math.min(contradictionsResolved, contradictionsDetected)}</div>
+                <div className="text-[8px] opacity-50">RESOLVED</div>
+              </div>
+            </div>
+          </MetricCard>
+        </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--card)] p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--accent)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          02 / Topic drift attribution
+        </div>
+        <h3 className="text-xs font-bold mt-2">Topic drift timeline</h3>
+        <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+          Each row measures Athena's final synthesis against the latest user intent. Specialist output, MCP/tool traffic, whispers, and status updates are excluded.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+          {participantDrift.length > 0 ? participantDrift.map(item => (
+            <div key={item.actor} className="border border-[var(--border)] bg-[var(--background)] p-2">
+              <div className="flex items-center justify-between gap-2 text-[9px]">
+                <strong className="truncate text-[var(--primary)]">{item.actor}</strong>
+                <span style={{ color: riskColor(item.average) }}>{item.average}%</span>
+              </div>
+              <div className="h-1.5 bg-[var(--secondary)] border border-[var(--border)] mt-1">
+                <div className="h-full" style={{ width: `${item.average}%`, background: riskColor(item.average) }} />
+              </div>
+              <div className="text-[8px] opacity-50 mt-1">{item.transitions} shifts · {item.words} words</div>
+            </div>
+          )) : <div className="text-[10px] opacity-40">No message transitions yet.</div>}
+        </div>
+
+        <div className="mt-3 overflow-x-auto">
+          <div className="min-w-[680px]">
+            <div className="grid grid-cols-12 gap-2 text-[8px] uppercase tracking-wider opacity-50 border-b border-[var(--border)] pb-1">
+              <span className="col-span-1">Time</span>
+              <span className="col-span-2">Shift</span>
+              <span className="col-span-1 text-right">Drift</span>
+              <span className="col-span-1 text-right">Size</span>
+              <span className="col-span-7">User intent keywords</span>
+            </div>
+            {driftTimeline.length > 0 ? driftTimeline.slice(-12).map(item => (
+              <div key={item.id} className="grid grid-cols-12 gap-2 items-center border-b border-[color-mix(in_srgb,var(--border)_60%,transparent)] py-2 text-[9px]">
+                <span className="col-span-1 font-mono opacity-60">{item.timestamp}</span>
+                <span className="col-span-2 truncate" aria-label={`${item.previousActor} to ${item.actor}`}>
+                  <span className="opacity-50">{item.previousActor}</span>
+                  <span className="mx-1 text-[var(--primary)]">→</span>
+                  <strong>{item.actor}</strong>
+                </span>
+                <span className="col-span-1 text-right font-bold" style={{ color: riskColor(item.drift) }}>{item.drift}%</span>
+                <span className="col-span-1 text-right">{item.words}w</span>
+                <span className="col-span-7 flex flex-wrap gap-1">
+                  {item.topics.length > 0 ? item.topics.map(topic => (
+                    <span key={topic} className="border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">{topic}</span>
+                  )) : <span className="opacity-40">No distinct terms</span>}
+                </span>
+              </div>
+            )) : <div className="text-[10px] opacity-40 py-3">No message transitions yet.</div>}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3">
+        <div className="border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--chart-3)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            03 / Agent independence
+          </div>
+          <h3 className="text-xs font-bold mt-2">Is one agent dominating the conclusion?</h3>
+          <div className="space-y-2 mt-3">
+            {contributionShares.length > 0 ? contributionShares.map(item => (
+              <div key={item.name}>
+                <div className="flex justify-between text-[9px] mb-1"><span>{item.name}</span><strong>{item.share}%</strong></div>
+                <div className="h-2 bg-[var(--background)] border border-[var(--border)]">
+                  <div className="h-full bg-[var(--chart-3)]" style={{ width: `${item.share}%` }} />
+                </div>
+              </div>
+            )) : <div className="text-[10px] opacity-40">No specialist output yet.</div>}
+          </div>
+        </div>
+
+        <div className="border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--accent)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            04 / Quality attention queue
+          </div>
+          <h3 className="text-xs font-bold mt-2">Quality attention queue</h3>
+          <div className="space-y-2 mt-3">
+            {qualityConcerns.length > 0 ? qualityConcerns.map(concern => (
+              <div key={concern.label} className="border-l-2 border-[var(--accent)] bg-[rgba(255,0,85,0.05)] px-2 py-1.5">
+                <div className="text-[10px] font-bold">{concern.label}</div>
+                <div className="text-[9px] text-[var(--muted-foreground)] mt-0.5">{concern.detail}</div>
+              </div>
+            )) : (
+              <div className="border-l-2 border-[var(--good)] bg-[rgba(0,255,136,0.05)] px-2 py-2 text-[10px] text-[var(--good)]">
+                No quality thresholds are currently breached.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--card)] p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--primary)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          05 / Conversation map
+        </div>
+        <h3 className="text-xs font-bold mt-2">Topics discussed</h3>
+        <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+          Terms ranked by the number of distinct messages in which they appear.
+        </p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
+          {topics.length > 0 ? topics.map((topic, index) => (
+            <div key={topic.topic}>
+              <div className="flex items-center justify-between text-[9px] mb-1">
+                <span className="truncate"><strong className="text-[var(--primary)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
+                <span>{topic.mentions}</span>
+              </div>
+              <div className="h-1.5 bg-[var(--background)] border border-[var(--border)]">
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${(topic.mentions / maxTopicMentions) * 100}%`,
+                    background: index === 0 ? "var(--primary)" : "var(--chart-3)",
+                  }}
+                />
+              </div>
+            </div>
+          )) : <div className="text-[10px] opacity-40">No topic data yet.</div>}
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3">
+        <div className="border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--chart-5)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            06 / Tool inventory
+          </div>
+          <h3 className="text-xs font-bold mt-2">Tools used</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Persisted tool-call events only; unreported agent-internal calls are not inferred.
+          </p>
+          <div className="space-y-2 mt-3">
+            {toolsUsed.length > 0 ? toolsUsed.map(tool => (
+              <div key={tool.tool} className="border border-[var(--border)] bg-[var(--secondary)] p-2">
+                <div className="flex justify-between gap-2 text-[10px]">
+                  <span className="font-mono text-[var(--chart-5)] truncate">{tool.tool}</span>
+                  <strong>{tool.calls}</strong>
+                </div>
+                <div className="text-[8px] opacity-55 mt-1">
+                  {Array.from(tool.agents.entries()).map(([agent, calls]) => `${agent} ×${calls}`).join(", ")}
+                </div>
+              </div>
+            )) : <div className="text-[10px] opacity-40">No persisted tool calls.</div>}
+          </div>
+        </div>
+
+        <div className="border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--good)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            07 / Model telemetry
+          </div>
+          <h3 className="text-xs font-bold mt-2">Models and usage</h3>
+          <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+            Output tokens are estimated from stored text (~4 characters/token); provider billing usage is not yet persisted.
+          </p>
+          <div className="mt-3 flex items-end justify-between border-b border-[var(--border)] pb-2">
+            <span className="text-[9px] opacity-55">ESTIMATED OUTPUT TOKENS</span>
+            <strong className="text-lg text-[var(--good)]">{totalEstimatedOutputTokens.toLocaleString()}</strong>
+          </div>
+          <div className="space-y-2 mt-3">
+            {modelUsage.length > 0 ? modelUsage.map(item => (
+              <div key={`${item.provider}:${item.model}`}>
+                <div className="flex justify-between gap-3 text-[9px]">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[var(--primary)] truncate">{item.provider}:{item.model}</div>
+                    <div className="text-[8px] opacity-50">{Array.from(item.agents).join(", ")} · {item.outputs} outputs</div>
+                  </div>
+                  <strong>{item.estimatedOutputTokens.toLocaleString()}</strong>
+                </div>
+                <div className="h-1.5 bg-[var(--background)] border border-[var(--border)] mt-1">
+                  <div
+                    className="h-full bg-[var(--good)]"
+                    style={{ width: `${totalEstimatedOutputTokens > 0 ? (item.estimatedOutputTokens / totalEstimatedOutputTokens) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )) : <div className="text-[10px] opacity-40">No provider/model attribution stored yet.</div>}
+          </div>
+        </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--card)] p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--chart-3)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          08 / Responsibility and contribution
+        </div>
+        <h3 className="text-xs font-bold mt-2">Agent contribution ledger</h3>
+        <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+          Observed responsibility, output volume, evidence markers, tools, and model attribution.
+        </p>
+        <div className="overflow-x-auto mt-3">
+          <div className="min-w-[720px]">
+            <div className="grid grid-cols-12 gap-2 text-[8px] uppercase tracking-wider opacity-50 border-b border-[var(--border)] pb-1">
+              <span className="col-span-2">Agent</span>
+              <span className="col-span-4">Observed part</span>
+              <span className="col-span-1 text-right">Msgs</span>
+              <span className="col-span-1 text-right">Words</span>
+              <span className="col-span-1 text-right">Cites</span>
+              <span className="col-span-1 text-right">Tools</span>
+              <span className="col-span-2">Model(s)</span>
+            </div>
+            {agentLedger.length > 0 ? agentLedger.map(agent => (
+              <div key={agent.agent} className="grid grid-cols-12 gap-2 text-[9px] items-center border-b border-[color-mix(in_srgb,var(--border)_60%,transparent)] py-2">
+                <span className="col-span-2 font-bold text-[var(--chart-3)] truncate">{agent.agent}</span>
+                <span className="col-span-4 text-[var(--foreground)]">{agent.part}</span>
+                <span className="col-span-1 text-right">{agent.messages}</span>
+                <span className="col-span-1 text-right">{agent.words}</span>
+                <span className="col-span-1 text-right text-[var(--good)]">{agent.citations}</span>
+                <span className="col-span-1 text-right text-[var(--chart-5)]">{agent.tools}</span>
+                <span className="col-span-2 font-mono text-[8px] text-[var(--muted-foreground)] truncate">
+                  {Array.from(agent.models).join(", ") || "unattributed"}
+                </span>
+              </div>
+            )) : <div className="text-[10px] opacity-40 py-3">No agent contribution data yet.</div>}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function RightPanel({
   thinking, messages, statusText, sessionSummary, onSummarize, settings, sessionFiles = [], onUploadFile, onDeleteSessionFile
 }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
   const [computingStep, setComputingStep] = useState(0);
+  const [summaryMode, setSummaryMode] = useState<"rendered" | "source">("rendered");
+  const summaryMarkdown = normalizeSessionSummaryMarkdown(sessionSummary);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -1185,6 +2223,10 @@ export function RightPanel({
 
               <div className="flex-1 overflow-hidden">
                 {activeTab === "pulse" && (
+                  <QualityPulseDashboard thinking={thinking} messages={messages} statusText={statusText} />
+                )}
+
+                {false && (
                   <div className="p-3 h-full overflow-y-auto space-y-4" style={{ scrollbarWidth: "thin", scrollbarColor: "var(--primary) transparent" }}>
                     
                     {/* 1. CHAT VISUALIZATIONS CONTAINER (1 per row at top) */}
@@ -1447,19 +2489,19 @@ export function RightPanel({
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
                             <div className="text-[9px] opacity-50 uppercase">Most Facts</div>
                             <div style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
-                              {mostFactsAgent ? `${mostFactsAgent.agent} (${mostFactsAgent.factsClaimed})` : "N/A"}
+                              {mostFactsAgent ? `${mostFactsAgent?.agent} (${mostFactsAgent?.factsClaimed})` : "N/A"}
                             </div>
                           </div>
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
                             <div className="text-[9px] opacity-50 uppercase">Least Facts</div>
                             <div style={{ color: "var(--chart-5)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
-                              {leastFactsAgent ? `${leastFactsAgent.agent} (${leastFactsAgent.factsClaimed})` : "N/A"}
+                              {leastFactsAgent ? `${leastFactsAgent?.agent} (${leastFactsAgent?.factsClaimed})` : "N/A"}
                             </div>
                           </div>
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
                             <div className="text-[9px] opacity-50 uppercase">Champion</div>
-                            <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1" title={factCheckChampion ? `Checked ${factCheckChampion.factsChecked}, Verified ${factCheckChampion.factsVerifiedRight} right` : ""}>
-                              {factCheckChampion ? `${factCheckChampion.agent} (${factCheckChampion.factsVerifiedRight}✓)` : "N/A"}
+                            <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1" title={factCheckChampion ? `Checked ${factCheckChampion?.factsChecked}, Verified ${factCheckChampion?.factsVerifiedRight} right` : ""}>
+                              {factCheckChampion ? `${factCheckChampion?.agent} (${factCheckChampion?.factsVerifiedRight}✓)` : "N/A"}
                             </div>
                           </div>
                         </div>
@@ -1499,7 +2541,7 @@ export function RightPanel({
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
                             <div className="text-[9px] opacity-50 uppercase">Most On-Topic</div>
                             <div style={{ color: "var(--good)", fontFamily: "'Share Tech Mono', monospace" }} className="text-sm font-bold truncate mt-1">
-                              {mostOnTopicAgent ? `${mostOnTopicAgent.agent} (${mostOnTopicAgent.onTopicPercentage}%)` : "N/A"}
+                              {mostOnTopicAgent ? `${mostOnTopicAgent?.agent} (${mostOnTopicAgent?.onTopicPercentage}%)` : "N/A"}
                             </div>
                           </div>
                           <div className="bg-[var(--secondary)] border border-[var(--border)] p-2 text-center">
@@ -1748,30 +2790,48 @@ export function RightPanel({
 
                 {activeTab === "summary" && (
                   <div className="p-3 h-full flex flex-col min-h-0 space-y-3">
-                    <button
-                      onClick={onSummarize}
-                      disabled={statusText === 'RECALIBRATING...'}
-                      style={{
-                        background: "var(--primary)",
-                        color: "var(--background)",
-                        fontFamily: "'Share Tech Mono', monospace",
-                        opacity: statusText === 'RECALIBRATING...' ? 0.7 : 1,
-                        cursor: statusText === 'RECALIBRATING...' ? "not-allowed" : "pointer"
-                      }}
-                      className="w-full px-3 py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shrink-0"
-                    >
-                      {statusText === 'RECALIBRATING...' ? (
-                        <>
-                          <RefreshCcw size={12} className="animate-spin" />
-                          COMPUTING...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={12} />
-                          Neural Recalibration
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={onSummarize}
+                        disabled={statusText === 'RECALIBRATING...'}
+                        style={{
+                          background: "var(--primary)",
+                          color: "var(--background)",
+                          fontFamily: "'Share Tech Mono', monospace",
+                          opacity: statusText === 'RECALIBRATING...' ? 0.7 : 1,
+                          cursor: statusText === 'RECALIBRATING...' ? "not-allowed" : "pointer"
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                      >
+                        {statusText === 'RECALIBRATING...' ? (
+                          <>
+                            <RefreshCcw size={12} className="animate-spin" />
+                            COMPUTING...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={12} />
+                            Regenerate
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Rendered markdown"
+                        onClick={() => setSummaryMode("rendered")}
+                        className={`px-2 py-2 text-[10px] border ${summaryMode === "rendered" ? "text-[var(--primary)] border-[var(--primary)]" : "text-[var(--muted-foreground)] border-[var(--border)]"}`}
+                      >
+                        PREVIEW
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Markdown source"
+                        onClick={() => setSummaryMode("source")}
+                        className={`px-2 py-2 text-[10px] border ${summaryMode === "source" ? "text-[var(--primary)] border-[var(--primary)]" : "text-[var(--muted-foreground)] border-[var(--border)]"}`}
+                      >
+                        MARKDOWN
+                      </button>
+                    </div>
 
                     {statusText === 'RECALIBRATING...' ? (
                       <div
@@ -1854,14 +2914,50 @@ export function RightPanel({
                           fontFamily: "'Rajdhani', sans-serif",
                           color: "var(--foreground)",
                         }}
-                        className="flex-1 min-h-0 p-3 text-[11px] leading-relaxed opacity-80 overflow-y-auto"
+                        className="flex-1 min-h-0 p-4 text-[12px] leading-relaxed overflow-y-auto"
                       >
-                        <p className="mb-2" style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}>
-                          // session_summary
-                        </p>
-                        <div className="markdown-content text-sm">
-                          <ChatMarkdown content={sessionSummary || "Neural state analysis complete. All agents verified and ready for deployment."} />
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <p style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}>
+                            // session_summary.md
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Copy markdown"
+                              title="Copy markdown"
+                              onClick={() => navigator.clipboard.writeText(summaryMarkdown)}
+                              className="p-1.5 border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+                            >
+                              <Copy size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Download markdown"
+                              title="Download markdown"
+                              onClick={() => {
+                                const blob = new Blob([summaryMarkdown], { type: "text/markdown" });
+                                const url = URL.createObjectURL(blob);
+                                const anchor = document.createElement("a");
+                                anchor.href = url;
+                                anchor.download = "session-summary.md";
+                                anchor.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="p-1.5 border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--primary)]"
+                            >
+                              <Download size={11} />
+                            </button>
+                          </div>
                         </div>
+                        {summaryMode === "rendered" ? (
+                          <div className="summary-markdown">
+                            <ChatMarkdown content={summaryMarkdown} />
+                          </div>
+                        ) : (
+                          <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words font-mono text-[var(--foreground)]">
+                            {summaryMarkdown}
+                          </pre>
+                        )}
                       </div>
                     )}
                   </div>
