@@ -1,1 +1,2 @@
+build/stsb-cache/v1/onnx/*.onnx filter=lfs diff=lfs merge=lfs -text
 build/stsb-cache/v1/onnx/model.onnx filter=lfs diff=lfs merge=lfs -text
