@@ -7,6 +7,10 @@ import { Thinking } from "../App";
 import { Message } from "./ChatArea";
 import { ChatMarkdown } from "./ChatMarkdown";
 import * as d3 from "d3";
+import {
+  clusterSemanticTopics,
+  type PulseIntent,
+} from "../services/pulseAnalytics";
 
 const TABS = [
   { id: "pulse", icon: Activity, label: "pulse" },
@@ -416,10 +420,12 @@ function QualityPulseDashboard({
   thinking,
   messages,
   statusText,
+  sessionMetadata,
 }: {
   thinking: Thinking[];
   messages: Message[];
   statusText: string;
+  sessionMetadata?: Record<string, any>;
 }) {
   const stopWords = new Set([
     "about", "after", "again", "also", "and", "are", "because", "before", "being", "could",
@@ -462,6 +468,19 @@ function QualityPulseDashboard({
   const finalAnswers = messages.filter(isSubstantiveAnswer);
   const intentAnswers = finalAnswers.filter(message => intentAnswerRoles.has(message.role));
   const userMessages = messages.filter(message => message.role === "user");
+  const pulseIntents = (Array.isArray(sessionMetadata?.pulseIntents)
+    ? sessionMetadata.pulseIntents
+    : []) as PulseIntent[];
+  const latestPulseIntent = pulseIntents.at(-1);
+  const intentForAnswer = (answer: Message) => {
+    const answerIndex = messages.indexOf(answer);
+    const precedingUser = messages.slice(0, answerIndex).reverse().find(message => message.role === "user");
+    const answerTimestamp = Number(answer.timestamp);
+    return [...pulseIntents].reverse().find(intent => (
+      intent.timestamp <= answerTimestamp
+      && (!precedingUser || precedingUser.content.includes(intent.request) || intent.request.includes(precedingUser.content))
+    )) || [...pulseIntents].reverse().find(intent => intent.timestamp <= answerTimestamp);
+  };
   const latestAnswer = finalAnswers.at(-1);
   const latestAnswerKeywords = keywords(latestAnswer?.content || "");
   const recentUserKeywords = new Set(
@@ -469,9 +488,8 @@ function QualityPulseDashboard({
   );
 
   const driftPoints = intentAnswers.map(answer => {
-    const answerIndex = messages.indexOf(answer);
-    const precedingUser = messages.slice(0, answerIndex).reverse().find(message => message.role === "user");
-    const alignment = overlapPercent(keywords(precedingUser?.content || ""), keywords(answer.content));
+    const generatedIntent = intentForAnswer(answer);
+    const alignment = overlapPercent(keywords(generatedIntent?.summary || ""), keywords(answer.content));
     return clamp(100 - alignment);
   });
   const topicDrift = driftPoints.length > 0
@@ -479,16 +497,16 @@ function QualityPulseDashboard({
     : 0;
   const contextRetention = latestAnswer ? overlapPercent(recentUserKeywords, latestAnswerKeywords) : 0;
   const driftTimeline = intentAnswers.map(answer => {
-    const answerIndex = messages.indexOf(answer);
-    const intentMessage = messages.slice(0, answerIndex).reverse().find(message => message.role === "user");
-    const intentKeywords = keywords(intentMessage?.content || "");
+    const generatedIntent = intentForAnswer(answer);
+    const intentKeywords = keywords(generatedIntent?.summary || "");
     const answerKeywords = keywords(answer.content);
     return {
       id: answer.id,
       actor: participantLabel(answer),
-      previousActor: "USER INTENT",
+      previousActor: generatedIntent?.source === "ai" ? "AI INTENT" : "USER INTENT",
       drift: clamp(100 - overlapPercent(intentKeywords, answerKeywords)),
-      topics: Array.from(intentKeywords).slice(0, 4).map(topic => topic.replace(/_/g, " ")),
+      topics: generatedIntent?.topics?.slice(0, 4)
+        || Array.from(intentKeywords).slice(0, 4).map(topic => topic.replace(/_/g, " ")),
       words: answer.content.trim().split(/\s+/).filter(Boolean).length,
       timestamp: new Date(answer.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
@@ -506,17 +524,6 @@ function QualityPulseDashboard({
     .sort((left, right) => right.average - left.average);
 
   // Semantic (DistilBERT) async metric calculations
-  const TOPIC_DOMAINS = [
-    "Database & SQL",
-    "Frontend & UI",
-    "Backend API",
-    "Security & Auth",
-    "Testing & CI",
-    "Performance",
-    "Documentation",
-    "Devops & Build"
-  ];
-
   const [semanticMetrics, setSemanticMetrics] = useState<{
     topicDrift: number;
     contextRetention: number;
@@ -529,118 +536,68 @@ function QualityPulseDashboard({
   useEffect(() => {
     let active = true;
     async function runSemanticCalculation() {
-      if (intentAnswers.length === 0) {
-        if (active) {
-          setSemanticMetrics({
-            topicDrift: 0,
-            contextRetention: 0,
-            driftPoints: [],
-            driftTimeline: [],
-          });
-          setSemanticTopicModel([]);
-        }
-        return;
-      }
-      
       try {
-        // Pre-calculate embeddings for the TOPIC_DOMAINS
-        const domainEmbeds = await Promise.all(
-          TOPIC_DOMAINS.map(async (domain) => {
+        const topicLabels = Array.from(new Set(
+          pulseIntents.flatMap(intent => intent.topics || []).filter(Boolean)
+        ));
+        const topicCandidates = await Promise.all(
+          topicLabels.map(async (label) => {
             try {
-              const res = await window.system.getEmbeddings(domain);
-              return { domain, embed: res };
-            } catch (e) {
-              return { domain, embed: [] as number[] };
+              return { label, vector: await window.system.getEmbeddings(label) };
+            } catch {
+              return { label, vector: [] as number[] };
             }
           })
         );
 
-        // Classify each message in messages to build the topic distribution model
-        const messageTopicsList = await Promise.all(
-          messages.map(async (msg) => {
-            if (!msg.content || msg.role === "system" || msg.role === "internal" || msg.role === "error") return null;
+        const embeddedMessages = (await Promise.all(
+          messages.map(async message => {
+            if (
+              !message.content
+              || ["system", "internal", "error", "athena-whisper", "agent-whisper"].includes(message.role)
+              || operationalPattern.test(message.content)
+            ) return null;
+
             try {
-              const msgEmbed = await window.system.getEmbeddings(msg.content);
-              if (!msgEmbed || msgEmbed.length === 0) return null;
-              
-              let maxSim = -Infinity;
-              let bestTopic = null;
-              for (const { domain, embed } of domainEmbeds) {
-                if (embed.length === 0) continue;
-                const sim = cosineSimilarity(msgEmbed, embed);
-                if (sim > maxSim) {
-                  maxSim = sim;
-                  bestTopic = domain;
-                }
-              }
-              return { messageId: msg.id, topic: bestTopic };
-            } catch (e) {
+              const vector = await window.system.getEmbeddings(message.content);
+              return vector.length > 0
+                ? { id: message.id, content: message.content, vector }
+                : null;
+            } catch {
               return null;
             }
           })
-        );
-
-        const topicAssignments = messageTopicsList.filter(Boolean) as { messageId: string; topic: string }[];
-        
-        // Count topic occurrences for topic modeling
-        const topicCountsMap: Record<string, number> = {};
-        topicAssignments.forEach(item => {
-          topicCountsMap[item.topic] = (topicCountsMap[item.topic] || 0) + 1;
-        });
-
-        const totalClassified = topicAssignments.length;
-        const computedModel = TOPIC_DOMAINS.map(domain => ({
-          topic: domain,
-          percentage: totalClassified > 0 ? Math.round(((topicCountsMap[domain] || 0) / totalClassified) * 100) : 0
-        })).sort((a, b) => b.percentage - a.percentage);
+        )).filter(Boolean) as { id: string; content: string; vector: number[] }[];
+        const computedModel = clusterSemanticTopics(embeddedMessages, topicCandidates);
 
         const driftPointsPromises = intentAnswers.map(async (answer) => {
-          const answerIndex = messages.indexOf(answer);
-          const precedingUser = messages.slice(0, answerIndex).reverse().find(msg => msg.role === "user");
-          const defaultDrift = clamp(100 - overlapPercent(keywords(precedingUser?.content || ""), keywords(answer.content)));
+          const generatedIntent = intentForAnswer(answer);
+          const intentText = generatedIntent?.summary || "";
+          const defaultDrift = clamp(100 - overlapPercent(keywords(intentText), keywords(answer.content)));
           
-          if (!precedingUser?.content || !answer.content) {
+          if (!intentText || !answer.content) {
             return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
           }
           
           try {
-            const uEmbed = await window.system.getEmbeddings(precedingUser.content);
+            const uEmbed = await window.system.getEmbeddings(intentText);
             const aEmbed = await window.system.getEmbeddings(answer.content);
             if (uEmbed.length === 0 || aEmbed.length === 0) {
               return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
             }
-            
-            // Find query topic and answer topic
-            let maxUSim = -Infinity, bestUTopic = null;
-            let maxASim = -Infinity, bestATopic = null;
-            for (const { domain, embed } of domainEmbeds) {
-              if (embed.length === 0) continue;
-              const uSim = cosineSimilarity(uEmbed, embed);
-              if (uSim > maxUSim) {
-                maxUSim = uSim;
-                bestUTopic = domain;
-              }
-              const aSim = cosineSimilarity(aEmbed, embed);
-              if (aSim > maxASim) {
-                maxASim = aSim;
-                bestATopic = domain;
-              }
-            }
 
             const rawSim = cosineSimilarity(uEmbed, aEmbed);
-            let drift = clamp(100 - Math.max(0, Math.min(100, Math.round(rawSim * 100))));
-            
-            // Apply drift penalty if the topics mismatch, or reward similarity
-            if (bestUTopic && bestATopic) {
-              if (bestUTopic !== bestATopic) {
-                drift = clamp(Math.round(drift * 1.25)); // shift topic -> drift penalty
-              } else {
-                drift = clamp(Math.round(drift * 0.75)); // same topic -> drift reduction
-              }
-            }
+            const drift = clamp(100 - Math.max(0, Math.min(100, Math.round(rawSim * 100))));
+            const classifiedTopic = topicCandidates
+              .filter(candidate => candidate.vector.length === aEmbed.length)
+              .map(candidate => ({
+                label: candidate.label,
+                similarity: cosineSimilarity(aEmbed, candidate.vector),
+              }))
+              .sort((left, right) => right.similarity - left.similarity)[0]?.label;
 
-            return { drift, answerId: answer.id, classifiedTopic: bestATopic };
-          } catch (e) {
+            return { drift, answerId: answer.id, classifiedTopic };
+          } catch {
             return { drift: defaultDrift, answerId: answer.id, classifiedTopic: undefined };
           }
         });
@@ -696,7 +653,7 @@ function QualityPulseDashboard({
     return () => {
       active = false;
     };
-  }, [messages]);
+  }, [messages, sessionMetadata]);
 
   const analysisText = [...messages.map(message => message.content), ...thinking.map(item => item.thought)].join(" ").toLowerCase();
   const agreementSignals = (analysisText.match(/\bagree|agreed|confirmed|supports?|consistent|validated\b/g) || []).length;
@@ -769,20 +726,40 @@ function QualityPulseDashboard({
   const timeoutCount = thinking.filter(item => item.type === "timeout").length;
   if (timeoutCount > 0) qualityConcerns.push({ label: "Execution reliability", detail: `${timeoutCount} timeout${timeoutCount === 1 ? "" : "s"} recorded.` });
 
-  const topicCounts = new Map<string, number>();
-  messages
-    .filter(message => !["system", "internal", "error"].includes(message.role))
-    .forEach(message => {
-      const contentWithoutCitations = message.content.split(/##\s+Citations/i)[0];
-      new Set(keywords(contentWithoutCitations)).forEach(topic => {
-        topicCounts.set(topic, (topicCounts.get(topic) || 0) + 1);
+  const requestTopicMap = new Map<string, {
+    topic: string;
+    requests: number;
+    relatedTerms: Set<string>;
+  }>();
+  pulseIntents.forEach(intent => {
+    const relatedTerms = [...(intent.entities || []), ...(intent.constraints || [])];
+    const labels = intent.topics?.length > 0
+      ? intent.topics
+      : intent.rankedIntents.map(item => item.topic);
+
+    labels.forEach(label => {
+      const key = label.trim().toLowerCase();
+      if (!key) return;
+      const current = requestTopicMap.get(key) || {
+        topic: label.trim(),
+        requests: 0,
+        relatedTerms: new Set<string>(),
+      };
+      current.requests += 1;
+      relatedTerms.forEach(term => {
+        const normalized = term.trim();
+        if (normalized && normalized.toLowerCase() !== key) current.relatedTerms.add(normalized);
       });
+      requestTopicMap.set(key, current);
     });
-  const topics = Array.from(topicCounts.entries())
-    .map(([topic, mentions]) => ({ topic: topic.replace(/_/g, " "), mentions }))
-    .sort((left, right) => right.mentions - left.mentions)
+  });
+  const requestTopics = Array.from(requestTopicMap.values())
+    .map(topic => ({
+      ...topic,
+      relatedTerms: Array.from(topic.relatedTerms).slice(0, 5),
+    }))
+    .sort((left, right) => right.requests - left.requests)
     .slice(0, 10);
-  const maxTopicMentions = Math.max(1, topics[0]?.mentions || 1);
 
   const toolUsageMap = new Map<string, { tool: string; calls: number; agents: Map<string, number> }>();
   const recordTool = (tool: string, agent: string) => {
@@ -957,7 +934,7 @@ function QualityPulseDashboard({
           </div>
           <h2 className="text-base font-bold mt-1">Pulse quality signals</h2>
           <p className="text-[10px] text-[var(--muted-foreground)] mt-1">
-            Observable risk indicators. Lexical signals are diagnostics, not proof of model intent.
+            Observable semantic, intent-alignment, evidence, and execution signals.
           </p>
         </div>
         <div className="text-right">
@@ -965,6 +942,44 @@ function QualityPulseDashboard({
           <div className="text-[10px] font-bold mt-1 text-[var(--primary)]">{statusText}</div>
         </div>
       </header>
+
+      <section className="border border-[var(--border)] bg-[var(--card)] p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--chart-3)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+              AI-generated intent
+            </div>
+            <h3 className="text-xs font-bold mt-2">
+              {latestPulseIntent?.summary || "Awaiting the next user request"}
+            </h3>
+          </div>
+          <span
+            className="text-[8px] font-bold border px-1.5 py-0.5"
+            style={{
+              color: latestPulseIntent?.source === "ai" ? "var(--good)" : "var(--warning)",
+              borderColor: latestPulseIntent?.source === "ai" ? "var(--good)" : "var(--warning)",
+            }}
+          >
+            {latestPulseIntent?.source === "ai" ? "ATHENA" : "FALLBACK"}
+          </span>
+        </div>
+        {latestPulseIntent && (
+          <div className="grid grid-cols-3 gap-2 mt-3 text-[9px]">
+            <div className="border border-[var(--border)] bg-[var(--background)] p-2">
+              <div className="text-[8px] uppercase opacity-50 mb-1">Goal</div>
+              <div>{latestPulseIntent.goal}</div>
+            </div>
+            <div className="border border-[var(--border)] bg-[var(--background)] p-2">
+              <div className="text-[8px] uppercase opacity-50 mb-1">Action</div>
+              <div>{latestPulseIntent.action}</div>
+            </div>
+            <div className="border border-[var(--border)] bg-[var(--background)] p-2">
+              <div className="text-[8px] uppercase opacity-50 mb-1">Expected outcome</div>
+              <div>{latestPulseIntent.expectedOutcome}</div>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section>
         <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--primary)] mb-2" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
@@ -1126,7 +1141,7 @@ function QualityPulseDashboard({
         </div>
         <h3 className="text-xs font-bold mt-2">Topic drift timeline</h3>
         <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
-          Each row measures Athena's final synthesis against the latest user intent. Specialist output, MCP/tool traffic, whispers, and status updates are excluded.
+          Each row measures Athena's final synthesis against the persisted AI-generated intent. Specialist output, MCP/tool traffic, whispers, and status updates are excluded.
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
@@ -1152,7 +1167,7 @@ function QualityPulseDashboard({
               <span className="col-span-1 text-right">Sem Drift</span>
               <span className="col-span-1 text-right">Lex Drift</span>
               <span className="col-span-1 text-right">Size</span>
-              <span className="col-span-6">User intent keywords</span>
+              <span className="col-span-6">AI intent topics</span>
             </div>
             {(() => {
               const timelineToRender = (semanticMetrics && semanticMetrics.driftTimeline) || driftTimeline;
@@ -1230,38 +1245,36 @@ function QualityPulseDashboard({
         </div>
         <h3 className="text-xs font-bold mt-2">Topics discussed</h3>
         <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
-          Lexical term frequencies compared against zero-shot BERT topic classification. Topic modeling requires 4+ messages.
+          Athena-derived topics from user requests compared with DistilBERT semantic clusters. Status messages, MCP calls, agent chatter, and internal plumbing are excluded.
         </p>
         <div className="grid grid-cols-2 gap-4 mt-3">
           <div>
-            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">Lexical Keyword Frequency</div>
+            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">User Request Topics</div>
             <div className="space-y-2">
-              {topics.length > 0 ? topics.map((topic, index) => (
+              {requestTopics.length > 0 ? requestTopics.map((topic, index) => (
                 <div key={topic.topic}>
                   <div className="flex items-center justify-between text-[9px] mb-1">
                     <span className="truncate"><strong className="text-[var(--primary)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
-                    <span>{topic.mentions}</span>
+                    <span>{topic.requests} request{topic.requests === 1 ? "" : "s"}</span>
                   </div>
-                  <div className="h-1.5 bg-[var(--background)] border border-[var(--border)]">
-                    <div
-                      className="h-full"
-                      style={{
-                        width: `${(topic.mentions / maxTopicMentions) * 100}%`,
-                        background: index === 0 ? "var(--primary)" : "var(--chart-3)",
-                      }}
-                    />
-                  </div>
+                  {topic.relatedTerms.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pl-6">
+                      {topic.relatedTerms.map(term => (
+                        <span key={term} className="border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[8px] opacity-70">
+                          {term}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )) : <div className="text-[10px] opacity-40">No topic data yet.</div>}
+              )) : <div className="text-[10px] opacity-40">No AI-derived user request topics yet.</div>}
             </div>
           </div>
           
           <div>
-            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">BERT Topic Modeling Distribution</div>
+            <div className="text-[8px] uppercase tracking-wider opacity-50 mb-2 border-b border-[var(--border)] pb-1">DistilBERT Modeled Topic Distribution</div>
             <div className="space-y-2">
-              {messages.length < 4 ? (
-                <div className="text-[10px] opacity-40 py-2">Awaiting enough conversation context (4+ messages) to model...</div>
-              ) : semanticTopicModel.length > 0 ? semanticTopicModel.filter(t => t.percentage > 0).map((topic, index) => (
+              {semanticTopicModel.length > 0 ? semanticTopicModel.filter(t => t.percentage > 0).map((topic, index) => (
                 <div key={topic.topic}>
                   <div className="flex items-center justify-between text-[9px] mb-1">
                     <span className="truncate"><strong className="text-[var(--chart-3)] mr-2">{String(index + 1).padStart(2, "0")}</strong>{topic.topic}</span>
@@ -1277,7 +1290,7 @@ function QualityPulseDashboard({
                     />
                   </div>
                 </div>
-              )) : <div className="text-[10px] opacity-40 py-2">Computing semantic topic distribution...</div>}
+              )) : <div className="text-[10px] opacity-40 py-2">Computing semantic topic clusters...</div>}
             </div>
           </div>
         </div>
@@ -2486,7 +2499,12 @@ export function RightPanel({
 
               <div className="flex-1 overflow-hidden">
                 {activeTab === "pulse" && (
-                  <QualityPulseDashboard thinking={thinking} messages={messages} statusText={statusText} />
+                  <QualityPulseDashboard
+                    thinking={thinking}
+                    messages={messages}
+                    statusText={statusText}
+                    sessionMetadata={sessionMetadata}
+                  />
                 )}
 
                 {false && (

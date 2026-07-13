@@ -33,16 +33,31 @@ describe("RightPanel insights", () => {
             timestamp: 3,
           },
         ]}
+        sessionMetadata={{
+          pulseIntents: [{
+            request: "Check the PMI status",
+            timestamp: 1,
+            source: "ai",
+            summary: "Verify the current PMI delivery status",
+            goal: "Determine whether PMI is active",
+            action: "Check current project evidence",
+            entities: ["PMI"],
+            constraints: [],
+            expectedOutcome: "A confirmed PMI status",
+            topics: ["PMI delivery status"],
+            rankedIntents: [],
+          }],
+        }}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /pulse insights/i }));
 
-    expect(screen.getByText("Topic drift")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Topic drift" })).toBeInTheDocument();
     expect(screen.getByText("Topic drift timeline")).toBeInTheDocument();
     expect(screen.getByText("Confirmation bias")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /agreement \d+, challenge \d+/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("USER INTENT to ATHENA")).toBeInTheDocument();
+    expect(screen.getByLabelText("AI INTENT to ATHENA")).toBeInTheDocument();
     expect(screen.queryByText(/Engineer still digging/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Search savant-knowledge/i)).not.toBeInTheDocument();
     expect(screen.getByText("Context retention")).toBeInTheDocument();
@@ -51,9 +66,13 @@ describe("RightPanel insights", () => {
     expect(screen.getByText("Contradiction handling")).toBeInTheDocument();
     expect(screen.getByText("Quality attention queue")).toBeInTheDocument();
     expect(screen.getByText("Topics discussed")).toBeInTheDocument();
+    expect(screen.getByText("User Request Topics")).toBeInTheDocument();
+    expect(screen.getAllByText("PMI delivery status").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Lexical Keyword Frequency")).not.toBeInTheDocument();
     expect(screen.getByText("Tools used")).toBeInTheDocument();
     expect(screen.getByText("Agent contribution ledger")).toBeInTheDocument();
     expect(screen.getByText("Models and usage")).toBeInTheDocument();
+    expect(screen.getByText("Verify the current PMI delivery status")).toBeInTheDocument();
   });
 
   it("offers rendered and source modes for markdown summaries", () => {

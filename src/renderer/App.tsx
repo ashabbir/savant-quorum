@@ -28,6 +28,11 @@ import {
   suggestSessionGrouping,
   type SessionGroupingSuggestion,
 } from "./services/sessionService";
+import {
+  createFallbackPulseIntent,
+  parsePulseIntentAnalysis,
+  type PulseIntent,
+} from "./services/pulseAnalytics";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import { AgentStallDialog } from "./components/AgentStallDialog";
@@ -1308,6 +1313,68 @@ ${transcript}`,
       }
     };
 
+    const generatePulseIntent = async (request: string): Promise<PulseIntent> => {
+      const timestamp = Date.now();
+      const intentPrompt = `
+You are Athena, the intent analyst for a multi-agent system.
+
+Analyze the user request and return ONLY valid JSON with this exact shape:
+{
+  "summary": "one concise sentence describing the user's intent",
+  "goal": "the result the user wants",
+  "action": "the primary action requested",
+  "entities": ["important systems, objects, or concepts"],
+  "constraints": ["explicit requirements or limits"],
+  "expectedOutcome": "what a successful answer or execution produces",
+  "topics": ["two to five concise semantic topic labels"],
+  "rankedIntents": [
+    {
+      "rank": 1,
+      "topic": "brief task label",
+      "intent": "specific executable sub-request",
+      "reason": "why this task has this rank"
+    }
+  ]
+}
+
+Rules:
+- Infer intent from the request, not from keywords alone.
+- Preserve technical names.
+- Include at least one ranked intent.
+- Do not use markdown or code fences.
+
+USER REQUEST:
+${JSON.stringify(request)}
+`;
+
+      let intent: PulseIntent;
+      try {
+        addThinking('Athena', 'GENERATING_AI_INTENT');
+        const { content } = await runWithFallback(intentPrompt, 'Athena');
+        intent = parsePulseIntentAnalysis(content, request, timestamp);
+        addThinking('Athena', `AI_INTENT_IDENTIFIED: ${intent.summary}`);
+      } catch (error: any) {
+        intent = createFallbackPulseIntent(request, timestamp);
+        addThinking('Athena', `AI_INTENT_ANALYSIS_FAILED: ${error.message}`, 'error');
+      }
+
+      const previousIntents = Array.isArray(sessionMetadataRef.current.pulseIntents)
+        ? sessionMetadataRef.current.pulseIntents
+        : [];
+      const nextMetadata = {
+        ...sessionMetadataRef.current,
+        pulseIntents: [...previousIntents, intent].slice(-50),
+      };
+      updateSessionMetadata(nextMetadata);
+      try {
+        await saveCurrentSession(undefined, undefined, undefined, nextMetadata);
+      } catch (error: any) {
+        console.error("Failed to persist AI intent metadata:", error);
+        addThinking('Athena', `AI_INTENT_PERSISTENCE_FAILED: ${error.message}`, 'error');
+      }
+      return intent;
+    };
+
     // Scan for reference chat in the user query
     let referencedSession = null;
     for (const s of sessions) {
@@ -1409,6 +1476,8 @@ ${transcript}`,
         const cleanQuery = firstWordMatch[2].trim();
         addMessage('user', userQuery);
         setIsLoading(true);
+        setStatusText('ANALYZING INTENT');
+        const pulseIntent = await generatePulseIntent(cleanQuery);
         setStatusText(`DIRECT: ATHENA...`);
         addThinking('Athena', `DIRECT_ATHENA_EXECUTION_TRIGGERED: Bypassing Swarm processing.`);
         
@@ -1445,7 +1514,7 @@ ${transcript}`,
             
             LATEST_TURN_DATA:
             - User Asked: "${cleanQuery}"
-            - Intent: "Direct chat with Athena"
+            - Intent: "${pulseIntent.summary}"
             - Engaged Agents: ["Athena"]
             - Agent Responses: ${JSON.stringify([{ agentId: 'athena', agentName: 'Athena', persona: 'moderator', content: finalResponse }])}
             - Final Output Sent to User: "${finalResponse}"
@@ -1455,7 +1524,7 @@ ${transcript}`,
             The summary of this latest turn MUST follow this exact format:
 
             - User asked: "[Brief summary of what the user asked]"
-            - Athena: intent is "Direct chat" and engaged Athena
+            - Athena: intent is "${pulseIntent.summary}" and engaged Athena
             - Athena: "[Extracted key findings/message]"
             - Athena synthesized and told the user: "[Brief summary of the final response]"
 
@@ -1500,6 +1569,8 @@ ${transcript}`,
       const { agent, cleanQuery } = directAgentMatch;
         addMessage('user', userQuery);
         setIsLoading(true);
+        setStatusText('ANALYZING INTENT');
+        const pulseIntent = await generatePulseIntent(cleanQuery);
         setStatusText(`DIRECT: ${agent.name.toUpperCase()}...`);
         addThinking(agent.name, `DIRECT_AGENT_EXECUTION_TRIGGERED: Bypassing Moderator.`);
 
@@ -1555,7 +1626,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
             
             LATEST_TURN_DATA:
             - User Asked: "${cleanQuery}"
-            - Intent: "Direct chat with ${agentLabel}"
+            - Intent: "${pulseIntent.summary}"
             - Engaged Agents: ["${agentLabel}"]
             - Agent Responses: ${JSON.stringify([{ agentId: agent.id, agentName: agentLabel, persona: agent.persona, content: finalResponse }])}
             - Final Output Sent to User: "${finalResponse}"
@@ -1565,7 +1636,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
             The summary of this latest turn MUST follow this exact format:
 
             - User asked: "[Brief summary of what the user asked]"
-            - Athena: intent is "Direct chat with ${agentLabel}" and engaged ${agentLabel}
+            - Athena: intent is "${pulseIntent.summary}" and engaged ${agentLabel}
             - ${agentLabel}: "[Extracted key findings/message]"
             - Athena synthesized and told the user: "[Brief summary of the final response]"
 
@@ -1604,50 +1675,19 @@ ANTI-LOOP & PERFORMANCE POLICY:
       `Request received. Athena is deciding whether to answer directly or engage the smallest specialist roster that adds distinct value.`
     );
 
-    let rankedIntents: { rank: number, topic: string, intent: string, reason: string }[] = [];
-    if (shouldDecomposeRequest(userQuery)) try {
-      setStatusText('DECOMPOSING REQUEST');
-      const intentAnalysisPrompt = `
-        You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system.
-        The user has sent a request. You need to analyze this request and determine if there are multiple topics, tasks, or intents.
-        
-        User Request: "${userQuery}"
-        
-        Task:
-        1. Identify all distinct topics, tasks, or intents in the request.
-        2. Rank them in a logical processing order (e.g. dependency-first or importance-first).
-        3. Output a clean JSON object containing:
-           - "hasMultiple": true or false
-           - "rankedIntents": an array of objects, each containing:
-             - "rank": number (starting from 1)
-             - "topic": brief description of this specific topic/task
-             - "intent": the specific intent/sub-query for this topic/task
-             - "reason": why this topic is ranked here
-             
-        Example JSON Output:
-        {
-          "hasMultiple": true,
-          "rankedIntents": [
-            { "rank": 1, "topic": "Check database connection status", "intent": "Analyze if the db is reachable", "reason": "Pre-requisite for querying data" },
-            { "rank": 2, "topic": "Retrieve agent configuration", "intent": "List agent specs", "reason": "Requires database verification first" }
-          ]
-        }
-        
-        Output ONLY the valid JSON block inside markdown code ticks.
-      `;
-      const { content: analysisRaw } = await runWithFallback(intentAnalysisPrompt, 'Athena');
-      const jsonBlockMatch = analysisRaw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
-      const jsonStr = jsonBlockMatch ? jsonBlockMatch[1] : analysisRaw;
-      const parsed = JSON.parse(jsonStr);
-      if (parsed && Array.isArray(parsed.rankedIntents) && parsed.rankedIntents.length > 0) {
-        rankedIntents = parsed.rankedIntents.slice(0, 3);
-      }
-    } catch (e: any) {
-      console.error("Intent analysis failed, falling back to single intent:", e);
-    }
+    setStatusText('ANALYZING INTENT');
+    const pulseIntent = await generatePulseIntent(userQuery);
+    let rankedIntents = shouldDecomposeRequest(userQuery)
+      ? pulseIntent.rankedIntents.slice(0, 3)
+      : pulseIntent.rankedIntents.slice(0, 1);
 
     if (rankedIntents.length === 0) {
-      rankedIntents = [{ rank: 1, topic: "General request", intent: userQuery, reason: "Fallback single topic" }];
+      rankedIntents = [{
+        rank: 1,
+        topic: pulseIntent.topics[0] || "General request",
+        intent: pulseIntent.summary,
+        reason: "Primary AI-generated intent",
+      }];
     }
 
     let accumulatedAgentContext: { agentId: string, agentName: string, persona: string, content: string }[] = [];
