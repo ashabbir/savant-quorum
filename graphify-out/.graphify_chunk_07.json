@@ -1,0 +1,138 @@
+{
+  "nodes": [
+    {
+      "id": "public_main_agent1",
+      "label": "Active Agent 1 (Top Orchestrator)",
+      "file_type": "image",
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_main_agent2",
+      "label": "Active Agent 2 (Bottom Left)",
+      "file_type": "image",
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_main_agent3",
+      "label": "Active Agent 3 (Bottom Right)",
+      "file_type": "image",
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_main_core",
+      "label": "Central Orchestrator Core Glow",
+      "file_type": "image",
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_main_network",
+      "label": "Network Interconnection Paths",
+      "file_type": "image",
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "public_main_agent1",
+      "target": "public_main_network",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_main_agent2",
+      "target": "public_main_network",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_main_agent3",
+      "target": "public_main_network",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_main_agent1",
+      "target": "public_main_core",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_main_agent2",
+      "target": "public_main_core",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_main_agent3",
+      "target": "public_main_core",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "public_main_agent_quorum",
+      "label": "Agent Quorum Network",
+      "nodes": [
+        "public_main_agent1",
+        "public_main_agent2",
+        "public_main_agent3"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/main.svg"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,631 @@
+{
+  "nodes": [
+    {
+      "id": "renderer_app_app",
+      "label": "App Component",
+      "file_type": "code",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "renderer_index_html",
+      "label": "Index HTML",
+      "file_type": "code",
+      "source_file": "src/renderer/index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "renderer_main_main",
+      "label": "Vite Entrypoint",
+      "file_type": "code",
+      "source_file": "src/renderer/main.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "renderer_vite_env_window",
+      "label": "Window Typings",
+      "file_type": "code",
+      "source_file": "src/renderer/vite-env.d.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_actionbar_actionbar",
+      "label": "ActionBar",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ActionBar.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_agentstalldialog_agentstalldialog",
+      "label": "AgentStallDialog",
+      "file_type": "code",
+      "source_file": "src/renderer/components/AgentStallDialog.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_agentstalldialog_cosinesimilarity",
+      "label": "Cosine Similarity (Stall Dialog)",
+      "file_type": "code",
+      "source_file": "src/renderer/components/AgentStallDialog.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_bottombar_bottombar",
+      "label": "BottomBar",
+      "file_type": "code",
+      "source_file": "src/renderer/components/BottomBar.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_chatarea_chatarea",
+      "label": "ChatArea",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ChatArea.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_chatmarkdown_chatmarkdown",
+      "label": "ChatMarkdown",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ChatMarkdown.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_chatmodeselector_chatmodeselector",
+      "label": "ChatModeSelector",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ChatModeSelector.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_debateresults_debateresults",
+      "label": "DebateResults",
+      "file_type": "code",
+      "source_file": "src/renderer/components/DebateResults.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_debateroundview_debateroundcontent",
+      "label": "DebateRoundContent",
+      "file_type": "code",
+      "source_file": "src/renderer/components/DebateRoundView.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_debateroundview_debateroundtab",
+      "label": "DebateRoundTab",
+      "file_type": "code",
+      "source_file": "src/renderer/components/DebateRoundView.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_debateroundview_debateagentresponse",
+      "label": "DebateAgentResponse",
+      "file_type": "code",
+      "source_file": "src/renderer/components/DebateRoundView.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_leftsidebar_leftsidebar",
+      "label": "LeftSidebar",
+      "file_type": "code",
+      "source_file": "src/renderer/components/LeftSidebar.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_loginscreen_loginscreen",
+      "label": "LoginScreen",
+      "file_type": "code",
+      "source_file": "src/renderer/components/LoginScreen.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_mermaid_mermaid",
+      "label": "Mermaid Rendering",
+      "file_type": "code",
+      "source_file": "src/renderer/components/Mermaid.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_mermaideditormodal_mermaideditormodal",
+      "label": "MermaidEditorModal",
+      "file_type": "code",
+      "source_file": "src/renderer/components/MermaidEditorModal.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_profilemodal_profilemodal",
+      "label": "ProfileModal",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ProfileModal.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_rightpanel_rightpanel",
+      "label": "RightPanel",
+      "file_type": "code",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_rightpanel_insightsdashboard",
+      "label": "InsightsDashboard",
+      "file_type": "code",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_rightpanel_qualitypulsedashboard",
+      "label": "QualityPulseDashboard",
+      "file_type": "code",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_rightpanel_cosinesimilarity",
+      "label": "Cosine Similarity (RightPanel)",
+      "file_type": "code",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_sessionmodal_sessionmodal",
+      "label": "SessionModal",
+      "file_type": "code",
+      "source_file": "src/renderer/components/SessionModal.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_settingsmodal_settingsmodal",
+      "label": "SettingsModal",
+      "file_type": "code",
+      "source_file": "src/renderer/components/SettingsModal.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_startupscreen_startupscreen",
+      "label": "StartupScreen",
+      "file_type": "code",
+      "source_file": "src/renderer/components/StartupScreen.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "components_topbar_topbar",
+      "label": "TopBar",
+      "file_type": "code",
+      "source_file": "src/renderer/components/TopBar.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "figma_imagewithfallback_imagewithfallback",
+      "label": "ImageWithFallback",
+      "file_type": "code",
+      "source_file": "src/renderer/components/figma/ImageWithFallback.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ui_accordion_accordion",
+      "label": "Accordion UI",
+      "file_type": "code",
+      "source_file": "src/renderer/components/ui/accordion.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "renderer_index_html",
+      "target": "renderer_main_main",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/index.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_main_main",
+      "target": "renderer_app_app",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/main.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_main_main",
+      "target": "renderer_vite_env_window",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/renderer/main.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_topbar_topbar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_actionbar_actionbar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_leftsidebar_leftsidebar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_chatarea_chatarea",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_rightpanel_rightpanel",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_bottombar_bottombar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_startupscreen_startupscreen",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_loginscreen_loginscreen",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_app",
+      "target": "components_agentstalldialog_agentstalldialog",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/App.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_actionbar_actionbar",
+      "target": "components_sessionmodal_sessionmodal",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/ActionBar.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_leftsidebar_leftsidebar",
+      "target": "components_profilemodal_profilemodal",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/LeftSidebar.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_leftsidebar_leftsidebar",
+      "target": "components_settingsmodal_settingsmodal",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/LeftSidebar.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_chatarea_chatarea",
+      "target": "components_chatmarkdown_chatmarkdown",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/ChatArea.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_chatmarkdown_chatmarkdown",
+      "target": "components_mermaid_mermaid",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/ChatMarkdown.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_mermaid_mermaid",
+      "target": "components_mermaideditormodal_mermaideditormodal",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/Mermaid.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel_rightpanel",
+      "target": "components_chatmarkdown_chatmarkdown",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel_rightpanel",
+      "target": "components_rightpanel_insightsdashboard",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel_rightpanel",
+      "target": "components_rightpanel_qualitypulsedashboard",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_debateresults_debateresults",
+      "target": "components_debateroundview_debateroundtab",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/DebateResults.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_debateresults_debateresults",
+      "target": "components_debateroundview_debateroundcontent",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/DebateResults.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_debateroundview_debateroundcontent",
+      "target": "components_debateroundview_debateagentresponse",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/components/DebateRoundView.tsx",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "components_agentstalldialog_cosinesimilarity",
+      "target": "components_rightpanel_cosinesimilarity",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/renderer/components/AgentStallDialog.tsx",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "credential_management_flow",
+      "label": "Credential and Authentication Management Flow",
+      "nodes": [
+        "components_loginscreen_loginscreen",
+        "components_profilemodal_profilemodal",
+        "components_settingsmodal_settingsmodal"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/renderer/components/LeftSidebar.tsx"
+    },
+    {
+      "id": "agent_debate_flow",
+      "label": "Agent Debate Orchestration and Visualization",
+      "nodes": [
+        "components_chatmodeselector_chatmodeselector",
+        "components_debateresults_debateresults",
+        "components_debateroundview_debateroundcontent",
+        "components_debateroundview_debateroundtab",
+        "components_debateroundview_debateagentresponse"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/renderer/components/DebateResults.tsx"
+    },
+    {
+      "id": "mermaid_diagram_workflow",
+      "label": "Mermaid Diagram Rendering and Editing Workflow",
+      "nodes": [
+        "components_mermaid_mermaid",
+        "components_mermaideditormodal_mermaideditormodal",
+        "components_chatmarkdown_chatmarkdown"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/renderer/components/Mermaid.tsx"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

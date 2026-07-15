@@ -1,0 +1,789 @@
+{
+  "nodes": [
+    {
+      "id": "quorum_system",
+      "label": "Savant Quorum Multi-Agent Environment",
+      "file_type": "concept",
+      "source_file": "QUORUM.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "package_dev",
+      "label": "npm run dev",
+      "file_type": "code",
+      "source_file": "package.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "package_build",
+      "label": "npm run build",
+      "file_type": "code",
+      "source_file": "package.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "package_prepare_models",
+      "label": "npm run prepare:models",
+      "file_type": "code",
+      "source_file": "package.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_download_stsb_model_downloadfile",
+      "label": "downloadFile",
+      "file_type": "code",
+      "source_file": "scripts/download-stsb-model.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_download_stsb_model_main",
+      "label": "main",
+      "file_type": "code",
+      "source_file": "scripts/download-stsb-model.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_download_whisper_model_downloadfile",
+      "label": "downloadFile",
+      "file_type": "code",
+      "source_file": "scripts/download-whisper-model.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_download_whisper_model",
+      "label": "download-whisper-model",
+      "file_type": "code",
+      "source_file": "scripts/download-whisper-model.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_setup_dev_models_copydir",
+      "label": "copyDir",
+      "file_type": "code",
+      "source_file": "scripts/setup-dev-models.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_setup_dev_models_syncmodel",
+      "label": "syncModel",
+      "file_type": "code",
+      "source_file": "scripts/setup-dev-models.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_setup_dev_models_main",
+      "label": "main",
+      "file_type": "code",
+      "source_file": "scripts/setup-dev-models.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_start_electron_dev_run",
+      "label": "run",
+      "file_type": "code",
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_start_electron_dev_isserverrunning",
+      "label": "isServerRunning",
+      "file_type": "code",
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_start_electron_dev_waitforserver",
+      "label": "waitForServer",
+      "file_type": "code",
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_start_electron_dev",
+      "label": "start-electron-dev",
+      "file_type": "code",
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "scripts_svg_to_png",
+      "label": "svg-to-png",
+      "file_type": "code",
+      "source_file": "scripts/svg-to-png.js",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_initdb",
+      "label": "initDb",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_getwhispertranscriber",
+      "label": "getWhisperTranscriber",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_getstsbextractor",
+      "label": "getStsbExtractor",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_getgatewayproviders",
+      "label": "getGatewayProviders",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_createwindow",
+      "label": "createWindow",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_createtray",
+      "label": "createTray",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_runagentviagateway",
+      "label": "runAgentViaGateway",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_resumeagentrun",
+      "label": "resumeAgentRun",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_pollgatewayrun",
+      "label": "pollGatewayRun",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_mcp_tool_routes",
+      "label": "MCP_TOOL_ROUTES",
+      "file_type": "code",
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_preload_ipcrenderer",
+      "label": "window.ipcRenderer",
+      "file_type": "code",
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_preload_agents",
+      "label": "window.agents",
+      "file_type": "code",
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_preload_sessions",
+      "label": "window.sessions",
+      "file_type": "code",
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_preload_system",
+      "label": "window.system",
+      "file_type": "code",
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_spawn_execution_rationale",
+      "label": "Spawn-based Execution Architecture",
+      "file_type": "rationale",
+      "source_file": "QUORUM.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "memory_bank_architecture_sqlite_persistence",
+      "label": "SQLite Persistence Design",
+      "file_type": "rationale",
+      "source_file": "memory-bank/architecture.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "memory_bank_architecture_fallback_mode",
+      "label": "Browser Fallback Mode Shimming",
+      "file_type": "rationale",
+      "source_file": "memory-bank/architecture.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "memory_bank_architecture_swarm_orchestration",
+      "label": "Parallel Specialist Orchestration",
+      "file_type": "rationale",
+      "source_file": "memory-bank/architecture.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_preload_bridge_security",
+      "label": "Hardened Preload Bridge IPC",
+      "file_type": "rationale",
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "package_auto_versioning",
+      "label": "Automated Patch Versioning Policy",
+      "file_type": "rationale",
+      "source_file": "GEMINI.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "electron_main_jira_db_integration",
+      "label": "SQLite Jira Ticket Integration",
+      "file_type": "rationale",
+      "source_file": "GEMINI.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "style_guide_visual_system",
+      "label": "Tokyo Night Cyberpunk Aesthetics",
+      "file_type": "rationale",
+      "source_file": "style-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "style_guide_left_collapsible_panel",
+      "label": "Left Collapsible Entity Panel",
+      "file_type": "rationale",
+      "source_file": "style-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "style_guide_right_context_rail",
+      "label": "Right Context Rail Inspector",
+      "file_type": "rationale",
+      "source_file": "style-guide.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "package_dev",
+      "target": "package_prepare_models",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_dev",
+      "target": "scripts_setup_dev_models_main",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_dev",
+      "target": "scripts_start_electron_dev",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_prepare_models",
+      "target": "scripts_download_whisper_model",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_prepare_models",
+      "target": "scripts_download_stsb_model_main",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_build",
+      "target": "package_prepare_models",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_setup_dev_models_main",
+      "target": "scripts_setup_dev_models_syncmodel",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/setup-dev-models.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_setup_dev_models_syncmodel",
+      "target": "scripts_setup_dev_models_copydir",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/setup-dev-models.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_start_electron_dev",
+      "target": "scripts_start_electron_dev_run",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_start_electron_dev",
+      "target": "scripts_start_electron_dev_waitforserver",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_start_electron_dev",
+      "target": "scripts_start_electron_dev_isserverrunning",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/start-electron-dev.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_download_stsb_model_main",
+      "target": "scripts_download_stsb_model_downloadfile",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/download-stsb-model.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_download_whisper_model",
+      "target": "scripts_download_whisper_model_downloadfile",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/download-whisper-model.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_spawn_execution_rationale",
+      "target": "electron_main_runagentviagateway",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "memory_bank_architecture_sqlite_persistence",
+      "target": "electron_main_initdb",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "memory_bank_architecture_fallback_mode",
+      "target": "electron_preload_ipcrenderer",
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_bridge_security",
+      "target": "electron_preload_ipcrenderer",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "package_auto_versioning",
+      "target": "package_build",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_jira_db_integration",
+      "target": "electron_main_initdb",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "style_guide_visual_system",
+      "target": "quorum_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "style-guide.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_agents",
+      "target": "electron_main_runagentviagateway",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_sessions",
+      "target": "electron_main_initdb",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_system",
+      "target": "electron_main_getwhispertranscriber",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_system",
+      "target": "electron_main_getstsbextractor",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_preload_system",
+      "target": "electron_main_getgatewayproviders",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/main/electron/preload.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_runagentviagateway",
+      "target": "electron_main_pollgatewayrun",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_resumeagentrun",
+      "target": "electron_main_pollgatewayrun",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "scripts_download_stsb_model_downloadfile",
+      "target": "scripts_download_whisper_model_downloadfile",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "scripts/download-stsb-model.mjs",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_getwhispertranscriber",
+      "target": "electron_main_getstsbextractor",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.90,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "electron_main_runagentviagateway",
+      "target": "electron_main_resumeagentrun",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "local_ml_models_setup",
+      "label": "Local ML Models Setup Flow",
+      "nodes": [
+        "scripts_download_stsb_model_main",
+        "scripts_download_whisper_model",
+        "scripts_setup_dev_models_main"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "scripts/setup-dev-models.mjs"
+    },
+    {
+      "id": "ipc_bridge_interfaces",
+      "label": "IPC Bridge Interfaces",
+      "nodes": [
+        "electron_preload_sessions",
+        "electron_preload_system",
+        "electron_preload_agents"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/preload.ts"
+    },
+    {
+      "id": "athena_agent_run_flow",
+      "label": "Athena Agent Run Flow",
+      "nodes": [
+        "electron_main_runagentviagateway",
+        "electron_main_resumeagentrun",
+        "electron_main_pollgatewayrun"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/main/electron/main.ts"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

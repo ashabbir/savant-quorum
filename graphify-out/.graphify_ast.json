@@ -1365,7 +1365,7 @@
       "label": "getStsbExtractor()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L78",
+      "source_location": "L80",
       "_origin": "ast"
     },
     {
@@ -1373,7 +1373,7 @@
       "label": "initDb()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L134",
+      "source_location": "L140",
       "_origin": "ast"
     },
     {
@@ -1381,7 +1381,7 @@
       "label": "normalizeGatewayProviders()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L237",
+      "source_location": "L243",
       "_origin": "ast"
     },
     {
@@ -1389,7 +1389,7 @@
       "label": "getGatewayProviders()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L287",
+      "source_location": "L293",
       "_origin": "ast"
     },
     {
@@ -1397,7 +1397,7 @@
       "label": "resolveAsset()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L317",
+      "source_location": "L323",
       "_origin": "ast"
     },
     {
@@ -1405,7 +1405,7 @@
       "label": "createWindow()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L325",
+      "source_location": "L331",
       "_origin": "ast"
     },
     {
@@ -1413,7 +1413,7 @@
       "label": "createTray()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L361",
+      "source_location": "L369",
       "_origin": "ast"
     },
     {
@@ -1421,7 +1421,7 @@
       "label": "getGatewayConnection()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L409",
+      "source_location": "L417",
       "_origin": "ast"
     },
     {
@@ -1429,7 +1429,7 @@
       "label": "sendAgentRunConnectionState()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L430",
+      "source_location": "L438",
       "_origin": "ast"
     },
     {
@@ -1437,7 +1437,7 @@
       "label": "AgentRunControl",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L435",
+      "source_location": "L443",
       "_origin": "ast"
     },
     {
@@ -1445,7 +1445,7 @@
       "label": "agentRunControls",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L443",
+      "source_location": "L451",
       "_origin": "ast"
     },
     {
@@ -1453,7 +1453,7 @@
       "label": "sendAgentRunActivity()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L445",
+      "source_location": "L453",
       "_origin": "ast"
     },
     {
@@ -1461,7 +1461,7 @@
       "label": "pollGatewayRun()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L457",
+      "source_location": "L465",
       "_origin": "ast"
     },
     {
@@ -1469,7 +1469,7 @@
       "label": "runAgentViaGateway()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L575",
+      "source_location": "L583",
       "_origin": "ast"
     },
     {
@@ -1477,7 +1477,7 @@
       "label": "resumeAgentRun()",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L626",
+      "source_location": "L634",
       "_origin": "ast"
     },
     {
@@ -1485,7 +1485,7 @@
       "label": "MCP_TOOL_ROUTES",
       "file_type": "code",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L789",
+      "source_location": "L801",
       "_origin": "ast"
     },
     {
@@ -1541,7 +1541,7 @@
       "label": "Thinking",
       "file_type": "code",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L35",
+      "source_location": "L40",
       "_origin": "ast"
     },
     {
@@ -1549,7 +1549,7 @@
       "label": "AgentConfig",
       "file_type": "code",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L43",
+      "source_location": "L48",
       "_origin": "ast"
     },
     {
@@ -1557,7 +1557,7 @@
       "label": "DEFAULT_AGENTS",
       "file_type": "code",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L51",
+      "source_location": "L56",
       "_origin": "ast"
     },
     {
@@ -1565,7 +1565,7 @@
       "label": "App()",
       "file_type": "code",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L57",
+      "source_location": "L62",
       "_origin": "ast"
     },
     {
@@ -1617,11 +1617,19 @@
       "_origin": "ast"
     },
     {
+      "id": "components_agentstalldialog_isterminalrunstatus",
+      "label": "isTerminalRunStatus()",
+      "file_type": "code",
+      "source_file": "src/renderer/components/AgentStallDialog.tsx",
+      "source_location": "L30",
+      "_origin": "ast"
+    },
+    {
       "id": "components_agentstalldialog_agentstalldialog",
       "label": "AgentStallDialog()",
       "file_type": "code",
       "source_file": "src/renderer/components/AgentStallDialog.tsx",
-      "source_location": "L30",
+      "source_location": "L35",
       "_origin": "ast"
     },
     {
@@ -2045,7 +2053,7 @@
       "label": "TABS",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L11",
+      "source_location": "L15",
       "_origin": "ast"
     },
     {
@@ -2053,7 +2061,7 @@
       "label": "TabId",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L19",
+      "source_location": "L23",
       "_origin": "ast"
     },
     {
@@ -2061,7 +2069,7 @@
       "label": "RightPanelProps",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L21",
+      "source_location": "L25",
       "_origin": "ast"
     },
     {
@@ -2069,7 +2077,7 @@
       "label": "cleanLegacySummaryValue()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L33",
+      "source_location": "L38",
       "_origin": "ast"
     },
     {
@@ -2077,7 +2085,7 @@
       "label": "restoreLegacyOutcomeMarkdown()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L40",
+      "source_location": "L45",
       "_origin": "ast"
     },
     {
@@ -2085,7 +2093,7 @@
       "label": "normalizeSessionSummaryMarkdown()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L52",
+      "source_location": "L57",
       "_origin": "ast"
     },
     {
@@ -2093,7 +2101,7 @@
       "label": "NavIcon()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L90",
+      "source_location": "L95",
       "_origin": "ast"
     },
     {
@@ -2101,7 +2109,7 @@
       "label": "InsightsDashboard()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L134",
+      "source_location": "L139",
       "_origin": "ast"
     },
     {
@@ -2109,7 +2117,7 @@
       "label": "cosineSimilarity()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L400",
+      "source_location": "L405",
       "_origin": "ast"
     },
     {
@@ -2117,7 +2125,7 @@
       "label": "QualityPulseDashboard()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L414",
+      "source_location": "L419",
       "_origin": "ast"
     },
     {
@@ -2125,7 +2133,7 @@
       "label": "RightPanel()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L1382",
+      "source_location": "L1396",
       "_origin": "ast"
     },
     {
@@ -2133,7 +2141,7 @@
       "label": "NeuralFactNetwork()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3327",
+      "source_location": "L3425",
       "_origin": "ast"
     },
     {
@@ -2141,7 +2149,7 @@
       "label": "SunburstNode",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3697",
+      "source_location": "L3795",
       "_origin": "ast"
     },
     {
@@ -2149,7 +2157,7 @@
       "label": "NeuralPathSunburstProps",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3703",
+      "source_location": "L3801",
       "_origin": "ast"
     },
     {
@@ -2157,7 +2165,7 @@
       "label": "NeuralPathSunburst()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3708",
+      "source_location": "L3806",
       "_origin": "ast"
     },
     {
@@ -2165,7 +2173,7 @@
       "label": "AgentGraph()",
       "file_type": "code",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L4074",
+      "source_location": "L4172",
       "_origin": "ast"
     },
     {
@@ -5353,6 +5361,110 @@
       "_origin": "ast"
     },
     {
+      "id": "services_pulseanalytics",
+      "label": "pulseAnalytics.ts",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_rankedpulseintent",
+      "label": "RankedPulseIntent",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_pulseintent",
+      "label": "PulseIntent",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L8",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_embeddedpulsemessage",
+      "label": "EmbeddedPulseMessage",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L22",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_embeddedtopiccandidate",
+      "label": "EmbeddedTopicCandidate",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_semanticpulsetopic",
+      "label": "SemanticPulseTopic",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L33",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_cosinesimilarity",
+      "label": "cosineSimilarity()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L39",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_stringvalue",
+      "label": "stringValue()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L55",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_stringarray",
+      "label": "stringArray()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L62",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_parsepulseintentanalysis",
+      "label": "parsePulseIntentAnalysis()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L69",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_createfallbackpulseintent",
+      "label": "createFallbackPulseIntent()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L98",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_meanvector",
+      "label": "meanVector()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L119",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_clustersemantictopics",
+      "label": "clusterSemanticTopics()",
+      "file_type": "code",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L125",
+      "_origin": "ast"
+    },
+    {
       "id": "services_sessionservice",
       "label": "sessionService.ts",
       "file_type": "code",
@@ -5597,6 +5709,14 @@
       "label": "debateCitations.test.ts",
       "file_type": "code",
       "source_file": "src/renderer/test/services/debateCitations.test.ts",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "services_pulseanalytics_test",
+      "label": "pulseAnalytics.test.ts",
+      "file_type": "code",
+      "source_file": "src/renderer/test/services/pulseAnalytics.test.ts",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -8615,7 +8735,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L78",
+      "source_location": "L80",
       "weight": 1.0
     },
     {
@@ -8624,7 +8744,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L134",
+      "source_location": "L140",
       "weight": 1.0
     },
     {
@@ -8633,7 +8753,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L237",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -8642,7 +8762,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L287",
+      "source_location": "L293",
       "weight": 1.0
     },
     {
@@ -8651,7 +8771,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L317",
+      "source_location": "L323",
       "weight": 1.0
     },
     {
@@ -8660,7 +8780,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L325",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -8669,7 +8789,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L361",
+      "source_location": "L369",
       "weight": 1.0
     },
     {
@@ -8678,7 +8798,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L409",
+      "source_location": "L417",
       "weight": 1.0
     },
     {
@@ -8687,7 +8807,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L430",
+      "source_location": "L438",
       "weight": 1.0
     },
     {
@@ -8696,7 +8816,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L435",
+      "source_location": "L443",
       "weight": 1.0
     },
     {
@@ -8705,7 +8825,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L443",
+      "source_location": "L451",
       "weight": 1.0
     },
     {
@@ -8714,7 +8834,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L445",
+      "source_location": "L453",
       "weight": 1.0
     },
     {
@@ -8723,7 +8843,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L457",
+      "source_location": "L465",
       "weight": 1.0
     },
     {
@@ -8732,7 +8852,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L575",
+      "source_location": "L583",
       "weight": 1.0
     },
     {
@@ -8741,7 +8861,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L626",
+      "source_location": "L634",
       "weight": 1.0
     },
     {
@@ -8750,7 +8870,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L789",
+      "source_location": "L801",
       "weight": 1.0
     },
     {
@@ -8760,7 +8880,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L299",
+      "source_location": "L305",
       "weight": 1.0
     },
     {
@@ -8770,7 +8890,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L327",
+      "source_location": "L333",
       "weight": 1.0
     },
     {
@@ -8780,7 +8900,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L364",
+      "source_location": "L372",
       "weight": 1.0
     },
     {
@@ -8790,7 +8910,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L502",
+      "source_location": "L510",
       "weight": 1.0
     },
     {
@@ -8800,7 +8920,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L544",
+      "source_location": "L552",
       "weight": 1.0
     },
     {
@@ -8810,7 +8930,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L576",
+      "source_location": "L584",
       "weight": 1.0
     },
     {
@@ -8820,7 +8940,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L623",
+      "source_location": "L631",
       "weight": 1.0
     },
     {
@@ -8830,7 +8950,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L628",
+      "source_location": "L636",
       "weight": 1.0
     },
     {
@@ -8840,7 +8960,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L643",
+      "source_location": "L651",
       "weight": 1.0
     },
     {
@@ -8850,7 +8970,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/main/electron/main.ts",
-      "source_location": "L647",
+      "source_location": "L655",
       "weight": 1.0
     },
     {
@@ -9351,12 +9471,52 @@
     },
     {
       "source": "renderer_app",
-      "target": "ui_sonner",
+      "target": "services_pulseanalytics",
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
       "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app",
+      "target": "services_pulseanalytics_createfallbackpulseintent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app",
+      "target": "services_pulseanalytics_parsepulseintentanalysis",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app",
+      "target": "services_pulseanalytics_pulseintent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app",
+      "target": "ui_sonner",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -9366,7 +9526,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L31",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -9376,7 +9536,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L32",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -9386,7 +9546,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L33",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -9396,7 +9556,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L33",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -9405,7 +9565,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L35",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -9414,7 +9574,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L43",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -9423,7 +9583,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L51",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -9432,7 +9592,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L57",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -9633,11 +9793,20 @@
     },
     {
       "source": "components_agentstalldialog",
-      "target": "components_agentstalldialog_agentstalldialog",
+      "target": "components_agentstalldialog_isterminalrunstatus",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/AgentStallDialog.tsx",
       "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "components_agentstalldialog",
+      "target": "components_agentstalldialog_agentstalldialog",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/components/AgentStallDialog.tsx",
+      "source_location": "L35",
       "weight": 1.0
     },
     {
@@ -10772,11 +10941,41 @@
     },
     {
       "source": "components_rightpanel",
+      "target": "services_pulseanalytics",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel",
+      "target": "services_pulseanalytics_clustersemantictopics",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel",
+      "target": "services_pulseanalytics_pulseintent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/components/RightPanel.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "components_rightpanel",
       "target": "components_rightpanel_tabs",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L11",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -10785,7 +10984,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L19",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -10794,7 +10993,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L21",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
@@ -10803,7 +11002,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L33",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -10812,7 +11011,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L40",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -10821,7 +11020,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L52",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -10830,7 +11029,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L90",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -10839,7 +11038,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L134",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -10848,7 +11047,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L400",
+      "source_location": "L405",
       "weight": 1.0
     },
     {
@@ -10857,7 +11056,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L414",
+      "source_location": "L419",
       "weight": 1.0
     },
     {
@@ -10866,7 +11065,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L1382",
+      "source_location": "L1396",
       "weight": 1.0
     },
     {
@@ -10875,7 +11074,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3327",
+      "source_location": "L3425",
       "weight": 1.0
     },
     {
@@ -10884,7 +11083,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3697",
+      "source_location": "L3795",
       "weight": 1.0
     },
     {
@@ -10893,7 +11092,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3703",
+      "source_location": "L3801",
       "weight": 1.0
     },
     {
@@ -10902,7 +11101,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L3708",
+      "source_location": "L3806",
       "weight": 1.0
     },
     {
@@ -10911,7 +11110,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L4074",
+      "source_location": "L4172",
       "weight": 1.0
     },
     {
@@ -10921,7 +11120,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L41",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -10931,7 +11130,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L1388",
+      "source_location": "L1402",
       "weight": 1.0
     },
     {
@@ -17069,6 +17268,134 @@
       "weight": 1.0
     },
     {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_rankedpulseintent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_pulseintent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_embeddedpulsemessage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_embeddedtopiccandidate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_semanticpulsetopic",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_cosinesimilarity",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_stringvalue",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L55",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_stringarray",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_parsepulseintentanalysis",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L69",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_createfallbackpulseintent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_meanvector",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L119",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics",
+      "target": "services_pulseanalytics_clustersemantictopics",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L125",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics_parsepulseintentanalysis",
+      "target": "services_pulseanalytics_stringvalue",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics_parsepulseintentanalysis",
+      "target": "services_pulseanalytics_stringarray",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/services/pulseAnalytics.ts",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
       "source": "services_sessionservice",
       "target": "services_sessionservice_validatesessionname",
       "relation": "contains",
@@ -17810,6 +18137,46 @@
       "weight": 1.0
     },
     {
+      "source": "services_pulseanalytics_test",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/test/services/pulseAnalytics.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics_test",
+      "target": "services_pulseanalytics",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/test/services/pulseAnalytics.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics_test",
+      "target": "services_pulseanalytics_clustersemantictopics",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/test/services/pulseAnalytics.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "services_pulseanalytics_test",
+      "target": "services_pulseanalytics_parsepulseintentanalysis",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/test/services/pulseAnalytics.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
       "source": "services_sessionservice_test",
       "target": "vitest",
       "relation": "imports_from",
@@ -18302,7 +18669,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L445",
+      "source_location": "L467",
       "weight": 1.0
     },
     {
@@ -18312,7 +18679,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L605",
+      "source_location": "L627",
       "weight": 1.0
     },
     {
@@ -18322,7 +18689,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L617",
+      "source_location": "L639",
       "weight": 1.0
     },
     {
@@ -18332,7 +18699,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L781",
+      "source_location": "L804",
       "weight": 1.0
     },
     {
@@ -18342,7 +18709,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L874",
+      "source_location": "L897",
       "weight": 1.0
     },
     {
@@ -18352,7 +18719,27 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L929",
+      "source_location": "L952",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_handlesend",
+      "target": "services_pulseanalytics_parsepulseintentanalysis",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L1354",
+      "weight": 1.0
+    },
+    {
+      "source": "renderer_app_handlesend",
+      "target": "services_pulseanalytics_createfallbackpulseintent",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/renderer/App.tsx",
+      "source_location": "L1357",
       "weight": 1.0
     },
     {
@@ -18362,7 +18749,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L1474",
+      "source_location": "L1680",
       "weight": 1.0
     },
     {
@@ -18372,7 +18759,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L1625",
+      "source_location": "L1799",
       "weight": 1.0
     },
     {
@@ -18382,7 +18769,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L1767",
+      "source_location": "L1941",
       "weight": 1.0
     },
     {
@@ -18392,7 +18779,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L1852",
+      "source_location": "L2026",
       "weight": 1.0
     },
     {
@@ -18402,7 +18789,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L1855",
+      "source_location": "L2029",
       "weight": 1.0
     },
     {
@@ -18412,7 +18799,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L2074",
+      "source_location": "L2248",
       "weight": 1.0
     },
     {
@@ -18422,7 +18809,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L2354",
+      "source_location": "L2528",
       "weight": 1.0
     },
     {
@@ -18602,7 +18989,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L22",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -18612,7 +18999,7 @@
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "src/renderer/components/RightPanel.tsx",
-      "source_location": "L23",
+      "source_location": "L27",
       "weight": 1.0
     },
     {
@@ -18673,7 +19060,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L74",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -18684,7 +19071,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/renderer/App.tsx",
-      "source_location": "L2385",
+      "source_location": "L2559",
       "weight": 1.0
     },
     {
@@ -18695,7 +19082,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/renderer/components/AgentStallDialog.tsx",
-      "source_location": "L111",
+      "source_location": "L118",
       "weight": 1.0
     },
     {
@@ -18706,7 +19093,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/renderer/components/AgentStallDialog.tsx",
-      "source_location": "L139",
+      "source_location": "L146",
       "weight": 1.0
     },
     {

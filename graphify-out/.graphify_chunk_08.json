@@ -1,0 +1,108 @@
+{
+  "nodes": [
+    {
+      "id": "public_tray_icon",
+      "label": "Tray Icon SVG",
+      "file_type": "image",
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_tray_orchestration_ring",
+      "label": "Central Orchestration Ring",
+      "file_type": "concept",
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_tray_agent_nodes",
+      "label": "Agent Nodes",
+      "file_type": "concept",
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "public_tray_quorum_topology",
+      "label": "Quorum Topology",
+      "file_type": "concept",
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "public_tray_icon",
+      "target": "public_tray_quorum_topology",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_tray_orchestration_ring",
+      "target": "public_tray_quorum_topology",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_tray_agent_nodes",
+      "target": "public_tray_quorum_topology",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "public_tray_orchestration_ring",
+      "target": "public_tray_agent_nodes",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/renderer/public/tray.svg",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "public_tray_topology_elements",
+      "label": "Quorum Topology Elements",
+      "nodes": [
+        "public_tray_icon",
+        "public_tray_orchestration_ring",
+        "public_tray_agent_nodes",
+        "public_tray_quorum_topology"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/renderer/public/tray.svg"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
