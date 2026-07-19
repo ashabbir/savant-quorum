@@ -155,7 +155,9 @@ export default function App() {
           const settingsData: Record<string, any> = await window.system.getSettings().catch(() => ({}));
           const gwCfg = settingsData?.['gateway:config'];
           const gatewayUrl = (gwCfg?.url || 'http://127.0.0.1:3100').replace(/\/$/, '');
-          const res = await fetch(`${gatewayUrl}/runs/${runId}/events`);
+          const res = await fetch(`${gatewayUrl}/runs/${runId}/events`, {
+            headers: { "X-App-Name": "savant-quorum" },
+          });
           if (res.status === 404) {
             clearInterval(agentRunEventsIntervalRef.current[agentLabel]);
             delete agentRunEventsIntervalRef.current[agentLabel];
@@ -488,7 +490,7 @@ export default function App() {
     let res: Response;
     try {
       res = await fetch(`${serverUrl.replace(/\/+$/, "")}/api/auth/validate`, {
-        headers: { "X-API-Key": apiKey },
+        headers: { "X-API-Key": apiKey, "X-App-Name": "savant-quorum" },
       });
     } catch (_e) {
       throw new Error("Cannot reach Savant server auth. Check that savant-server is running and allows X-API-Key CORS preflight.");
@@ -532,7 +534,9 @@ export default function App() {
 
     if (gatewayEnabled) {
       try {
-        const res = await fetch(`${gatewayUrl.replace(/\/$/, "")}/health`)
+        const res = await fetch(`${gatewayUrl.replace(/\/$/, "")}/health`, {
+          headers: { "X-App-Name": "savant-quorum" },
+        })
         if (res.ok) {
           addThinking('System', `GATEWAY_ACP_LINK_ESTABLISHED (${gatewayUrl})`)
         } else {

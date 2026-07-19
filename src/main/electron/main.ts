@@ -298,7 +298,10 @@ async function getGatewayProviders(gatewayUrl: string) {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 2500)
-      const response = await fetch(`${baseUrl}${endpoint}`, { signal: controller.signal })
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        signal: controller.signal,
+        headers: { 'X-App-Name': 'savant-quorum' },
+      })
       clearTimeout(timeout)
       if (!response.ok) continue
 
@@ -488,7 +491,7 @@ async function pollGatewayRun(id: string, timeoutMs: number, baseUrl: string, ap
 
     try {
       const pollRes = await fetch(`${baseUrl}/runs/${id}`, {
-        headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+        headers: { 'X-App-Name': 'savant-quorum', ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
       });
 
       if (!pollRes.ok) {
@@ -532,7 +535,7 @@ async function pollGatewayRun(id: string, timeoutMs: number, baseUrl: string, ap
         lastEventPollAt = now;
         try {
           const eventsRes = await fetch(`${baseUrl}/runs/${id}/events`, {
-            headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+            headers: { 'X-App-Name': 'savant-quorum', ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
           });
           if (eventsRes.ok) {
             const eventsData = await eventsRes.json();
@@ -585,6 +588,7 @@ async function runAgentViaGateway(payload: { provider: string; model: string; pr
   const runRes = await fetch(`${baseUrl}/runs`, {
     method: 'POST',
     headers: {
+      'X-App-Name': 'savant-quorum',
       'Content-Type': 'application/json',
       ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
     },
@@ -880,7 +884,10 @@ ipcMain.handle('call-mcp-tool', async (_event, { serverName, toolName, args }) =
 
     const resolvedPath = typeof route.path === 'function' ? route.path(args) : route.path;
     const url = `${baseUrl}${resolvedPath}`;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-App-Name': 'savant-quorum',
+    };
     if (apiKey) headers['X-API-Key'] = apiKey;
 
     const fetchOpts: RequestInit = { method: route.method, headers };
@@ -945,7 +952,7 @@ ipcMain.handle('kill-agent-run', async (_event, payload: { runId: string }) => {
   const { baseUrl, apiKey } = getGatewayConnection();
   const response = await fetch(`${baseUrl}/runs/${payload.runId}`, {
     method: 'DELETE',
-    headers: { ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
+    headers: { 'X-App-Name': 'savant-quorum', ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}) }
   });
   if (db) {
     db.prepare(`UPDATE athena_runs SET status = ?, error = ?, updated_at = ? WHERE id = ?`).run(

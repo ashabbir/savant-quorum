@@ -39,3 +39,6 @@ dist-electron
 # CLI
 .antigravitycli/
 
+# Release / Build outputs
+release/
+
