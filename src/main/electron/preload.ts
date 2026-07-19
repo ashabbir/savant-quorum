@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('system', {
   resumeAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => ipcRenderer.invoke('resume-agent-run', payload),
   extendAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => ipcRenderer.invoke('extend-agent-run', payload),
   killAgentRun: (payload: { runId: string }) => ipcRenderer.invoke('kill-agent-run', payload),
+  steerAgentRun: (payload: { runId: string; feedback: string }) => ipcRenderer.invoke('steer-agent-run', payload),
   onAgentRunStarted: (cb: (data: { runId: string; agentLabel: string; provider: string; model: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number }) => void) => {
     ipcRenderer.on('agent-run-started', (_event, data) => cb(data));
   },

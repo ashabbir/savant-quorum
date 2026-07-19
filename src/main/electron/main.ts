@@ -965,6 +965,21 @@ ipcMain.handle('kill-agent-run', async (_event, payload: { runId: string }) => {
   return response.ok;
 })
 
+ipcMain.handle('steer-agent-run', async (_event, payload: { runId: string; feedback: string }) => {
+  if (!payload?.runId || !payload?.feedback) return false;
+  const { baseUrl, apiKey } = getGatewayConnection();
+  const response = await fetch(`${baseUrl}/runs/${payload.runId}/feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-App-Name': 'savant-quorum',
+      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+    },
+    body: JSON.stringify({ feedback: payload.feedback })
+  });
+  return response.ok;
+})
+
 ipcMain.handle('save-athena-thread', async (_event, thread) => {
   if (!db || !thread?.id) return false
   const now = Date.now()

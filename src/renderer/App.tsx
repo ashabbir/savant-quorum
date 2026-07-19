@@ -33,6 +33,7 @@ import {
   parsePulseIntentAnalysis,
   type PulseIntent,
 } from "./services/pulseAnalytics";
+import { extractMeaningfulTopics } from "./services/topicExtraction";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import { AgentStallDialog } from "./components/AgentStallDialog";
@@ -1021,29 +1022,9 @@ ${transcript}`,
       const chatEmbedding = await window.system.getEmbeddings(chatText.slice(0, 4000));
       const summaryEmbedding = prevSummary ? await window.system.getEmbeddings(prevSummary.slice(0, 4000)) : [];
       
-      // Keyword/Topic extraction
-      const stopWords = new Set([
-        'about', 'above', 'after', 'again', 'against', 'along', 'already', 'would', 'could', 'should',
-        'the', 'and', 'a', 'of', 'to', 'is', 'in', 'that', 'it', 'for', 'you', 'was', 'with', 'on', 'as', 'at', 'by', 'an', 'be', 'this', 'are', 'from', 'or', 'have', 'i', 'your', 'we', 'but', 'not', 'this', 'that', 'with', 'what', 'how', 'why', 'who', 'our', 'more', 'some', 'than', 'them', 'their', 'there', 'then', 'here', 'when', 'where', 'been', 'were', 'has', 'had', 'does', 'did', 'doing', 'done'
-      ]);
-      
-      const extractTopics = (text: string): string[] => {
-        const words = text
-          .toLowerCase()
-          .replace(/[^\w\s-]/g, ' ')
-          .split(/\s+/)
-          .filter(w => w.length > 3 && !stopWords.has(w));
-        const freqs: Record<string, number> = {};
-        for (const w of words) {
-          freqs[w] = (freqs[w] || 0) + 1;
-        }
-        return Object.entries(freqs)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8)
-          .map(entry => entry[0]);
-      };
-      
-      const topics = extractTopics(chatText);
+      // Keyword/Topic extraction using high-precision NLP engine
+      const extractedTopicObjects = extractMeaningfulTopics(chatText, 8);
+      const topics = extractedTopicObjects.map(t => t.label);
       
       // Semantic Clustering of Turns/Messages
       const candidateMessages = messages.filter(m => m.content && m.content.trim().length > 10).slice(-15);
@@ -1092,8 +1073,8 @@ ${transcript}`,
       
       for (const cluster of clusters) {
         const clusterText = cluster.items.join(" ");
-        const clusterTopics = extractTopics(clusterText);
-        cluster.label = clusterTopics.slice(0, 3).join(", ") || `Theme ${clusters.indexOf(cluster) + 1}`;
+        const clusterTopicObjs = extractMeaningfulTopics(clusterText, 3);
+        cluster.label = clusterTopicObjs.map(t => t.label).join(", ") || `Theme ${clusters.indexOf(cluster) + 1}`;
       }
       
       const preprocessData = {
@@ -1117,10 +1098,10 @@ ${transcript}`,
       addThinking('Athena', 'PREPROCESSING_SESSION_TEXT_COMPLETE');
       
       const summaryPrompt = `
-        You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The user has requested a manual neural recalibration of the session state.
+        You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The operator has requested an executive recalibration and meeting-style summary of the session state.
         
-        We have preprocessed the session text using local BERT models:
-        - Extracted Topics: ${topics.join(', ')}
+        We have preprocessed the session text using local BERT models and keyphrase extraction:
+        - Extracted Semantic Topics: ${topics.join(', ')}
         - Semantic Clusters:
           ${clusters.map(c => `* Cluster "${c.label}" (${c.items.length} messages): \n    ${c.items.slice(0, 3).map(item => `- ${item.slice(0, 100)}...`).join('\n    ')}`).join('\n')}
         
@@ -1130,37 +1111,36 @@ ${transcript}`,
         FULL_CHAT_HISTORY:
         ${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
         
-        TASK: Produce polished Markdown that helps the user quickly understand the session. Incorporate the preprocessed semantic topics and clusters to structure the summary.
+        TASK: Produce a highly structured, executive meeting-style debrief in Markdown.
 
         REQUIRED STRUCTURE:
-        # Session Summary
+        # Executive Meeting Summary
 
-        ## Overview
-        A concise paragraph describing the session's purpose and current conclusion.
+        ## 🎯 Objective & Key Outcomes
+        A clear, executive summary describing the session purpose, primary conclusions, and strategic result achieved.
 
-        ## Conversation Timeline
-        ### Turn 1 — [short topic]
-        **Question:** [concise user question]
-        **Agents:** [engaged agents]
+        ## 📝 Key Decisions Made
+        - Explicit architectural, technical, or policy decisions finalized during the session.
+
+        ## ⚡ Action Items & Specialist Assignments
+        - [Agent/Role] Specific actionable next steps or follow-ups.
+
+        ## 📌 Technical & Architecture Insights
+        - Important technical specifications, algorithms, components, or findings uncovered.
+
+        ## 💬 Detailed Conversation Timeline
+        ### Turn 1 — [Short Topic Title]
+        **Question:** [Concise user request]
+        **Agents Engaged:** [Engaged agent roles]
         **Outcome:**
-        - [direct conclusion]
-        - [material fact or decision]
-        - [remaining gap, only if one exists]
+        - [Direct conclusion and key takeaways]
 
-        Repeat the Turn section for each user request.
-
-        ## Key Facts and Decisions
-        - Preserve important technical facts, decisions, identifiers, and relationships.
-
-        ## Open Questions
-        - Include only unresolved items. Write "None" when everything is resolved.
+        Repeat Turn section for each conversation turn.
 
         IMPORTANT RULES:
-        1. Do NOT lose key data, decisions, or facts from the agents' messages or the history.
-        2. Summarize outcomes; do not paste full answers or citation tables.
-        3. Use real Markdown headings, bullets, bold labels, and whitespace.
-        4. Never wrap whole questions or answers in quotation marks.
-        5. Return only the Markdown summary.
+        1. Do NOT lose key data, decisions, or technical facts.
+        2. Format clearly with bold labels, Markdown headers, and actionable bullets.
+        3. Return ONLY the complete Markdown summary.
       `;
       
       const { content: updatedSummary } = await runWithFallback(summaryPrompt, 'Athena', REGULAR_AGENT_TIMEOUT_MS, {
@@ -1438,9 +1418,21 @@ ${JSON.stringify(request)}
     if (isLoading) {
       addMessage('user', text)
       midRunBuffer.current.push(text)
+
+      // Send real-time steering feedback directly to active gateway runs
+      const activeRunIds = Object.values(streamingAgents)
+        .map(agentState => agentState?.runId)
+        .filter(Boolean) as string[];
+
+      for (const runId of activeRunIds) {
+        if (typeof window.system?.steerAgentRun === 'function') {
+          void window.system.steerAgentRun({ runId, feedback: text });
+        }
+      }
+
       addMessage(
         'athena-whisper' as any,
-        `Added context captured: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}". Active agent calls cannot be rewritten, so Athena will apply it at the next moderation checkpoint before finalizing.`
+        `Steering directive dispatched: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}". Real-time feedback sent to active gateway runs & buffered for next moderation checkpoint.`
       );
       return
     }

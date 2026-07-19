@@ -1053,6 +1053,17 @@ export function ChatArea({
           </div>
         </div>
 
+        {/* Quick Action Chips Bar */}
+        <div className="quick-action-chips-row">
+          <span className="text-[9px] font-mono opacity-50 uppercase tracking-wider self-center mr-1">⚡ Quick Actions:</span>
+          <button type="button" onClick={() => onSend("@athena Answer concisely with direct facts.")} className="quick-chip">⚡ Direct Answer</button>
+          <button type="button" onClick={() => onSend("Analyze this topic thoroughly across architecture, engineering, and security implications.")} className="quick-chip">🧠 Swarm Analysis</button>
+          <button type="button" onClick={() => onSend("Provide a complete Mermaid diagram visualizing the system workflow.")} className="quick-chip">📊 Architecture Map</button>
+          <button type="button" onClick={() => onSummarize ? onSummarize() : onSend("/summarize")} className="quick-chip">📝 Executive Debrief</button>
+          <button type="button" onClick={() => onSend("@security Perform a comprehensive security and vulnerability audit.")} className="quick-chip">🛡️ Security Audit</button>
+          <button type="button" onClick={() => onSend("@engineer Propose an optimized code refactoring plan.")} className="quick-chip">🛠️ Code Refactor</button>
+        </div>
+
         {/* Attachment badges */}
         {sessionFiles.length > 0 && (
           <div className="attachment-badges-row">

@@ -41,4 +41,6 @@ dist-electron
 
 # Release / Build outputs
 release/
+.codegraph/
+graphify-out/
 

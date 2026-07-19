@@ -421,11 +421,13 @@ function QualityPulseDashboard({
   messages,
   statusText,
   sessionMetadata,
+  sessionSummary = "",
 }: {
   thinking: Thinking[];
   messages: Message[];
   statusText: string;
   sessionMetadata?: Record<string, any>;
+  sessionSummary?: string;
 }) {
   const stopWords = new Set([
     "about", "after", "again", "also", "and", "are", "because", "before", "being", "could",
@@ -1236,6 +1238,28 @@ function QualityPulseDashboard({
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* 04b / Executive Meeting Debrief */}
+      <section className="border border-[var(--border)] bg-[var(--card)] p-3">
+        <div className="text-[9px] uppercase tracking-[0.2em] text-[var(--good)]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+          04b / Executive Meeting Debrief & Key Outcomes
+        </div>
+        <h3 className="text-xs font-bold mt-2">Executive Summary & Action Debrief</h3>
+        <p className="text-[9px] text-[var(--muted-foreground)] mt-1">
+          Structured meeting notes, technical decisions, and assigned specialist action items compiled from session history.
+        </p>
+        <div className="mt-3 space-y-2">
+          {sessionSummary ? (
+            <div className="text-[10px] leading-relaxed bg-[var(--secondary)] border border-[var(--border)] p-2.5 rounded font-sans max-h-48 overflow-y-auto whitespace-pre-wrap">
+              {sessionSummary}
+            </div>
+          ) : (
+            <div className="text-[10px] opacity-50 italic border border-[var(--border)] p-2.5 bg-[var(--secondary)]">
+              No session debrief generated yet. Click "Recalibrate" or trigger "/summarize" to produce executive meeting notes.
+            </div>
+          )}
         </div>
       </section>
 
@@ -2504,6 +2528,7 @@ export function RightPanel({
                     messages={messages}
                     statusText={statusText}
                     sessionMetadata={sessionMetadata}
+                    sessionSummary={sessionSummary}
                   />
                 )}
 

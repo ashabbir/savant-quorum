@@ -1,3 +1,5 @@
+import { extractMeaningfulTopics } from "./topicExtraction";
+
 export interface RankedPulseIntent {
   rank: number;
   topic: string;
@@ -65,7 +67,6 @@ function stringArray(value: unknown): string[] {
     .filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
     .map(item => item.trim());
 }
-
 export function parsePulseIntentAnalysis(raw: string, request: string, timestamp: number): PulseIntent {
   const fencedMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/i);
   const parsed = JSON.parse(fencedMatch ? fencedMatch[1] : raw.trim()) as Record<string, unknown>;
@@ -80,6 +81,11 @@ export function parsePulseIntentAnalysis(raw: string, request: string, timestamp
     };
   });
 
+  let extractedTopics = stringArray(parsed.topics);
+  if (extractedTopics.length === 0) {
+    extractedTopics = extractMeaningfulTopics(request, 5).map(t => t.label);
+  }
+
   return {
     request,
     timestamp,
@@ -90,12 +96,16 @@ export function parsePulseIntentAnalysis(raw: string, request: string, timestamp
     entities: stringArray(parsed.entities),
     constraints: stringArray(parsed.constraints),
     expectedOutcome: stringValue(parsed.expectedOutcome, "expectedOutcome"),
-    topics: stringArray(parsed.topics),
+    topics: extractedTopics,
     rankedIntents,
   };
 }
 
 export function createFallbackPulseIntent(request: string, timestamp: number): PulseIntent {
+  const extracted = extractMeaningfulTopics(request, 5);
+  const topics = extracted.map(t => t.label);
+  const primaryTopic = topics[0] || "General Request";
+
   return {
     request,
     timestamp,
@@ -106,10 +116,10 @@ export function createFallbackPulseIntent(request: string, timestamp: number): P
     entities: [],
     constraints: [],
     expectedOutcome: "A response that directly addresses the request",
-    topics: [],
+    topics,
     rankedIntents: [{
       rank: 1,
-      topic: "General request",
+      topic: primaryTopic,
       intent: request,
       reason: "AI intent analysis was unavailable",
     }],

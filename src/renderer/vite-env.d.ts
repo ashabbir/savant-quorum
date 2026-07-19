@@ -47,6 +47,7 @@ interface Window {
     resumeAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => Promise<string>
     extendAgentRun: (payload: { runId: string; timeoutMs?: number; agentLabel?: string }) => Promise<boolean>
     killAgentRun: (payload: { runId: string }) => Promise<boolean>
+    steerAgentRun: (payload: { runId: string; feedback: string }) => Promise<boolean>
     onAgentRunStarted: (cb: (data: { runId: string; agentLabel: string; provider: string; model: string; startedAt: number; lastActivityAt: number; idleTimeoutMs: number }) => void) => void
     offAgentRunStarted: () => void
     onAgentRunConnectionState: (cb: (data: { runId: string; agentLabel: string; state: 'disconnected' | 'reconnected'; detail?: string }) => void) => void

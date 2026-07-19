@@ -85,6 +85,7 @@ if (!window.system) {
     resumeAgentRun: async (_payload: any) => 'Local browser preview mode. Athena gateway bridge is unavailable.',
     extendAgentRun: async (_payload: any) => false,
     killAgentRun: async (_payload: any) => false,
+    steerAgentRun: async (_payload: any) => false,
     onAgentRunStarted: (_cb: any) => {},
     offAgentRunStarted: () => {},
     onAgentRunConnectionState: (_cb: any) => {},
