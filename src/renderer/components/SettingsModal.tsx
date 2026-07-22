@@ -124,8 +124,11 @@ function ServicePanel({
   apiKey?: string;
   includeApiKey?: boolean;
 }) {
+  const [serviceVersion, setServiceVersion] = useState<string | null>(null);
+
   async function checkHealth() {
     onChange({ status: "checking" });
+    setServiceVersion(null);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 4000);
     try {
@@ -134,6 +137,13 @@ function ServicePanel({
         headers: { "X-App-Name": "savant-quorum", ...(includeApiKey && apiKey ? { "X-API-Key": apiKey } : {}) },
       });
       clearTimeout(timer);
+      let payload: any = {};
+      try {
+        payload = await res.json();
+      } catch {
+        // Some gateway health endpoints return no JSON body.
+      }
+      setServiceVersion(res.ok && typeof payload?.version === "string" ? payload.version : null);
       onChange({ status: res.ok ? "connected" : "failed" });
     } catch (_e) {
       clearTimeout(timer);
@@ -222,6 +232,11 @@ function ServicePanel({
               {config.status === "checking" ? "checking..." : config.status}
             </span>
           </div>
+        )}
+        {config.status === "connected" && serviceVersion && (
+          <span className="text-xs" style={{ color: "var(--foreground)", fontFamily: "'Share Tech Mono', monospace" }}>
+            SERVER v{serviceVersion}
+          </span>
         )}
       </div>
     </div>
