@@ -129,9 +129,29 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
-        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        const renderer = new marked.Renderer();
+        const originalCode = renderer.code.bind(renderer);
+        renderer.code = function(code, lang, escaped) {
+            let text = typeof code === 'object' ? code.text : code;
+            let language = typeof code === 'object' ? code.lang : lang;
+            if (language === 'mermaid') {
+                return '<pre class="mermaid">' + text + '</pre>';
+            }
+            return originalCode.call(this, code, lang, escaped);
+        };
+        marked.use({ renderer });
+
+        mermaid.initialize({ startOnLoad: false, theme: 'default' });
         const rawContent = \`${content.replace(/`/g, '\\`').replace(/\${/g, '\\${')}\`;
         document.getElementById('content').innerHTML = marked.parse(rawContent);
+
+        if (typeof mermaid.run === 'function') {
+            mermaid.run();
+        } else if (typeof mermaid.init === 'function') {
+            mermaid.init();
+        } else if (typeof mermaid.contentLoaded === 'function') {
+            mermaid.contentLoaded();
+        }
     </script>
 </body>
 </html>`;

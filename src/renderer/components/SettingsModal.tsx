@@ -229,7 +229,18 @@ function ServicePanel({
 }
 
 export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModalProps) {
+  const applyTheme = (themeName: string) => {
+    if (themeName === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<TabId>("system");
+  const [theme, setTheme] = useState<string>("dark");
   const [defaultDirectory, setDefaultDirectory] = useState<string>("");
   const [moderatorPrompt, setModeratorPrompt] = useState<string>("");
   const [providerChain, setProviderChain] = useState<ProviderChainItem[]>([
@@ -271,7 +282,8 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
       const settings = await window.system.getSettings();
       if (cancelled) return;
 
-      if (settings["system:defaultDirectory"]) setDefaultDirectory(settings["system:defaultDirectory"]);
+       if (settings["system:defaultDirectory"]) setDefaultDirectory(settings["system:defaultDirectory"]);
+      if (settings["system:theme"]) setTheme(settings["system:theme"]);
       if (settings["moderator:prompt"]) setModeratorPrompt(settings["moderator:prompt"]);
       if (settings["provider:chain"]) setProviderChain(settings["provider:chain"]);
       setUserApiKey(getStoredApiKey() || settings["user:apiKey"] || "");
@@ -298,6 +310,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
 
       backupRef.current = {
         "system:defaultDirectory": settings["system:defaultDirectory"] || "",
+        "system:theme": settings["system:theme"] || "dark",
         "moderator:prompt": settings["moderator:prompt"] || "",
         "provider:chain": settings["provider:chain"] || "",
         "agents:list": settings["agents:list"] || [],
@@ -329,6 +342,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
 
     const saveTimer = setTimeout(async () => {
       await window.system.saveSetting("system:defaultDirectory", defaultDirectory);
+      await window.system.saveSetting("system:theme", theme);
       await window.system.saveSetting("moderator:prompt", moderatorPrompt);
       await window.system.saveSetting("provider:chain", providerChain);
       await window.system.saveSetting("agents:list", agents);
@@ -338,10 +352,11 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
     }, 500);
 
     return () => clearTimeout(saveTimer);
-  }, [defaultDirectory, moderatorPrompt, providerChain, agents, gateway, server]);
+  }, [defaultDirectory, theme, moderatorPrompt, providerChain, agents, gateway, server]);
 
   async function handleSave() {
     await window.system.saveSetting("system:defaultDirectory", defaultDirectory);
+    await window.system.saveSetting("system:theme", theme);
     await window.system.saveSetting("moderator:prompt", moderatorPrompt);
     await window.system.saveSetting("provider:chain", providerChain);
     await window.system.saveSetting("agents:list", agents);
@@ -357,11 +372,13 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
       return;
     }
     await window.system.saveSetting("system:defaultDirectory", backupRef.current["system:defaultDirectory"]);
+    await window.system.saveSetting("system:theme", backupRef.current["system:theme"]);
     await window.system.saveSetting("moderator:prompt", backupRef.current["moderator:prompt"]);
     await window.system.saveSetting("provider:chain", backupRef.current["provider:chain"]);
     await window.system.saveSetting("agents:list", backupRef.current["agents:list"]);
     await window.system.saveSetting("gateway:config", backupRef.current["gateway:config"]);
     await window.system.saveSetting("server:config", backupRef.current["server:config"]);
+    applyTheme(backupRef.current["system:theme"] || "dark");
     if (onSettingsChanged) onSettingsChanged();
     onClose();
   }
@@ -599,6 +616,21 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                     </button>
                   </div>
                   <input ref={directoryInputRef} type="file" onChange={handleDirectorySelect} className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} />
+                </div>
+                <div>
+                  <label style={labelStyle} className="block text-xs mb-2 opacity-70">Theme</label>
+                  <select
+                    value={theme}
+                    onChange={e => {
+                      setTheme(e.target.value);
+                      applyTheme(e.target.value);
+                    }}
+                    style={{ ...inputStyle }}
+                    className="w-full px-3 py-2 text-xs focus:outline-none focus:border-[var(--primary)]"
+                  >
+                    <option value="dark">Tokyo Night (Dark)</option>
+                    <option value="light">Light Mode</option>
+                  </select>
                 </div>
               </div>
             )}

@@ -61,6 +61,16 @@ const DEFAULT_AGENTS: AgentConfig[] = [
 ]
 
 export default function App() {
+  const applyTheme = (themeName: string) => {
+    if (themeName === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
   const [isInitializing, setIsInitializing] = useState(true)
   const [startupProgress, setStartupProgress] = useState('BOOTING_SYSTEM')
   const [startupSubtext, setStartupSubtext] = useState('Initializing secure kernel...')
@@ -483,6 +493,11 @@ export default function App() {
       unreadSessionIdsRef.current = restoredUnread;
       setUnreadSessionIds(restoredUnread);
     }
+    if (loadedSettings["system:theme"]) {
+      applyTheme(loadedSettings["system:theme"]);
+    } else {
+      applyTheme("dark");
+    }
     addThinking('System', 'SETTINGS_UPDATED_FROM_DATABASE');
   }
 
@@ -571,6 +586,11 @@ export default function App() {
       setStartupSubtext('Checking local Savant credential...')
 
       const loadedSettings = await window.system.getSettings();
+      if (loadedSettings["system:theme"]) {
+        applyTheme(loadedSettings["system:theme"]);
+      } else {
+        applyTheme("dark");
+      }
       if (loadedSettings["system:folders"]) {
         setFolders(loadedSettings["system:folders"]);
       }
@@ -2376,7 +2396,19 @@ ${CITATION_CONTRACT_PROMPT}
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
-        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        const renderer = new marked.Renderer();
+        const originalCode = renderer.code.bind(renderer);
+        renderer.code = function(code, lang, escaped) {
+            let text = typeof code === 'object' ? code.text : code;
+            let language = typeof code === 'object' ? code.lang : lang;
+            if (language === 'mermaid') {
+                return '<pre class="mermaid">' + text + '</pre>';
+            }
+            return originalCode.call(this, code, lang, escaped);
+        };
+        marked.use({ renderer });
+
+        mermaid.initialize({ startOnLoad: false, theme: 'default' });
         const messages = [
             ${messages.filter(m => m.role !== 'system' && m.role !== 'internal' && m.role !== 'error').map(m => `
             {
@@ -2400,6 +2432,14 @@ ${CITATION_CONTRACT_PROMPT}
             \`;
             container.appendChild(div);
         });
+
+        if (typeof mermaid.run === 'function') {
+            mermaid.run();
+        } else if (typeof mermaid.init === 'function') {
+            mermaid.init();
+        } else if (typeof mermaid.contentLoaded === 'function') {
+            mermaid.contentLoaded();
+        }
     </script>
 </body>
 </html>`;
