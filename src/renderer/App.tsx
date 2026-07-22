@@ -2368,15 +2368,21 @@ ${CITATION_CONTRACT_PROMPT}
             margin: 0 auto;
         }
         .header {
-            border-bottom: 1px solid var(--cp-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+            border-bottom: 2px solid var(--cp-cyan);
             margin-bottom: 30px;
-            padding-bottom: 10px;
+            padding-bottom: 16px;
         }
-        h1 { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
+        .savant-wordmark { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; font-weight: 700; letter-spacing: .24em; font-size: .85rem; }
+        h1 { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; margin: 6px 0 0; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; }
         .session-title { opacity: 0.6; font-size: 0.9rem; }
-        .message { margin-bottom: 20px; padding: 15px; border: 1px solid var(--cp-border); background: rgba(255,255,255,0.02); }
-        .message.user { border-left: 4px solid var(--cp-cyan); }
-        .message.bot { border-left: 4px solid var(--cp-purple); }
+        .message { width: min(82%, 720px); margin-bottom: 20px; padding: 15px; border: 1px solid var(--cp-border); background: rgba(255,255,255,0.02); }
+        .message.user { margin-left: auto; margin-right: 0; border-right: 4px solid var(--cp-cyan); text-align: right; }
+        .message.bot { margin-left: 0; margin-right: auto; border-left: 4px solid var(--cp-purple); text-align: left; }
+        .message.user .message-header { flex-direction: row-reverse; }
         .message-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.8rem; font-family: 'Share Tech Mono', monospace; opacity: 0.7; }
         .role { color: var(--cp-cyan); font-weight: bold; }
         pre { background: #1a1a1a; padding: 15px; border-radius: 4px; overflow-x: auto; border: 1px solid #333; }
@@ -2385,11 +2391,12 @@ ${CITATION_CONTRACT_PROMPT}
         th, td { border: 1px solid #333; padding: 10px; text-align: left; }
         th { background-color: #1a1a1a; color: var(--cp-cyan); }
         .mermaid { background: white !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
+        .savant-footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 34px; padding-top: 12px; border-top: 1px solid var(--cp-border); color: rgba(224,224,224,.55); font: .65rem/1.4 'Share Tech Mono', monospace; letter-spacing: .06em; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>// QUORUM_SESSION_EXPORT</h1>
+        <div><div class="savant-wordmark">SAVANT</div><h1>Quorum · Athena conversation</h1></div>
         <div class="session-title">${sessionTitle}</div>
     </div>
     <div id="messages"></div>
@@ -2441,6 +2448,7 @@ ${CITATION_CONTRACT_PROMPT}
             mermaid.contentLoaded();
         }
     </script>
+    <footer class="savant-footer"><span>SAVANT QUORUM · ATHENA</span><span>Generated ${new Date().toLocaleString()}</span></footer>
 </body>
 </html>`;
 

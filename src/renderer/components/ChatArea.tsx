@@ -104,13 +104,20 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
             margin: 0 auto;
         }
         .header {
-            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+            border-bottom: 2px solid var(--cp-cyan);
             margin-bottom: 30px;
-            padding-bottom: 10px;
+            padding-bottom: 16px;
         }
-        h1 { color: #00e5ff; font-family: 'Share Tech Mono', monospace; margin: 0; font-size: 1.5rem; }
+        .savant-wordmark { color: var(--cp-cyan); font-family: 'Share Tech Mono', monospace; font-weight: 700; letter-spacing: .24em; font-size: .85rem; }
+        h1 { color: #00e5ff; font-family: 'Share Tech Mono', monospace; margin: 6px 0 0; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; }
         .session-title { opacity: 0.6; font-size: 0.9rem; }
-        #content { background: var(--background); border: 1px solid var(--border); padding: 20px; }
+        #content { width: min(82%, 720px); background: rgba(255,255,255,0.02); border: 1px solid var(--cp-border); padding: 20px; }
+        body.user-export #content { margin-left: auto; margin-right: 0; border-right: 4px solid var(--cp-cyan); text-align: right; }
+        body.agent-export #content { margin-left: 0; margin-right: auto; border-left: 4px solid #b624ff; text-align: left; }
         pre { background: #1a1a1a; padding: 15px; border-radius: 4px; overflow-x: auto; border: 1px solid #333; }
         code { font-family: 'Share Tech Mono', monospace; color: #00e5ff; }
         table { border-collapse: collapse; width: 100%; margin: 20px 0; }
@@ -118,11 +125,12 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
         th { background-color: #1a1a1a; color: #00e5ff; }
         .mermaid { background: #080b12 !important; padding: 10px; border-radius: 4px; margin: 20px 0; }
         .fact-marker { color: #00e5ff; font-weight: bold; }
+        .savant-footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 34px; padding-top: 12px; border-top: 1px solid var(--cp-border); color: rgba(224,224,224,.55); font: .65rem/1.4 'Share Tech Mono', monospace; letter-spacing: .06em; }
     </style>
 </head>
-<body>
+<body class="${isUser ? 'user-export' : 'agent-export'}">
     <div class="header">
-        <h1>// QUORUM_REPORT</h1>
+        <div><div class="savant-wordmark">SAVANT</div><h1>Quorum · ${isUser ? 'User message' : 'Athena agent message'}</h1></div>
         <div class="session-title">${sessionTitle}</div>
     </div>
     <div id="content"></div>
@@ -153,6 +161,7 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
             mermaid.contentLoaded();
         }
     </script>
+    <footer class="savant-footer"><span>SAVANT QUORUM · ${isUser ? 'USER' : 'ATHENA'}</span><span>Generated ${new Date().toLocaleString()}</span></footer>
 </body>
 </html>`;
 
@@ -184,18 +193,29 @@ function MessageActions({ messageId, content, sessionTitle, onDelete, onStartEdi
             <title>${normalizedTitle}_${messageId}</title>
             <style>
               body { font-family: 'Rajdhani', sans-serif; padding: 40px; background: #fff; color: #333; line-height: 1.6; }
+              .header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; border-bottom: 2px solid #00a9bd; margin-bottom: 30px; padding-bottom: 16px; }
+              .savant-wordmark { color: #007f91; font-family: monospace; font-weight: 700; letter-spacing: .24em; font-size: .85rem; }
+              .export-kind { color: #007f91; font-family: monospace; margin-top: 6px; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; }
+              .session-title { color: #666; font-size: .9rem; }
+              #content { width: min(82%, 720px); padding: 20px; border: 1px solid #ddd; }
+              body.user-export #content { margin-left: auto; margin-right: 0; border-right: 4px solid #00a9bd; text-align: right; }
+              body.agent-export #content { margin-left: 0; margin-right: auto; border-left: 4px solid #7b2ca0; text-align: left; }
               pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
-              h1, h2, h3 { color: #000; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+              h1, h2, h3 { color: #000; }
               table { border-collapse: collapse; width: 100%; margin: 20px 0; }
               th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
               th { background-color: #f2f2f2; }
               .fact-marker { color: #00e5ff; font-weight: bold; }
+              .savant-footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 34px; padding-top: 12px; border-top: 1px solid #ddd; color: #777; font: .65rem/1.4 monospace; letter-spacing: .06em; }
             </style>
           </head>
-          <body>
-            <h1>Quorum - Fact Report</h1>
-            <h2>${sessionTitle}</h2>
+          <body class="${isUser ? 'user-export' : 'agent-export'}">
+            <header class="header">
+              <div><div class="savant-wordmark">SAVANT</div><div class="export-kind">Quorum · ${isUser ? 'User message' : 'Athena agent message'}</div></div>
+              <div class="session-title">${sessionTitle}</div>
+            </header>
             <div id="content"></div>
+            <footer class="savant-footer"><span>SAVANT QUORUM · ${isUser ? 'USER' : 'ATHENA'}</span><span>Generated ${new Date().toLocaleString()}</span></footer>
             <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
             <script>
               window.onload = () => {
