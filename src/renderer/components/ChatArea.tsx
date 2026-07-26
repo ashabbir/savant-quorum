@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo } from "react";
-import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert, Globe, Search, RefreshCw, X, Edit, Paperclip, Mic, MicOff } from "lucide-react";
+import { Send, Bot, User, Info, FileDown, Trash2, Copy, FileText, Shield, Code, Layout, Settings, AlertTriangle, Cpu, Terminal, ShieldAlert, Globe, Search, RefreshCw, X, Edit, Paperclip, Mic, MicOff, Link } from "lucide-react";
 import { ChatMarkdown } from './ChatMarkdown';
 import {
   formatRunDuration,
@@ -18,6 +18,7 @@ export interface Message {
   model?: string;
   timestamp: Date | number;
   attachments?: { name: string; content: string; summary?: string; loading?: boolean }[];
+  references?: { id: string; title: string; summary?: string }[];
 }
 
 interface ChatAreaProps {
@@ -41,6 +42,10 @@ interface ChatAreaProps {
   streamingAgents?: Record<string, AgentRunDisplayState>;
   onRecoverRun?: (runId: string) => Promise<void>;
   onRetryFailedRequest?: (messageId: string) => Promise<void>;
+  sessions?: any[];
+  currentSessionId?: string;
+  linkedSessionIds?: string[];
+  onLinkSessions?: (sessionIds: string[]) => void;
 }
 
 const getRoleIcon = (role: Message['role']) => {
@@ -487,6 +492,22 @@ const MemoizedMessageItem = memo(({ msg, sessionTitle, onDeleteMessage, onEditMe
                   ))}
                 </div>
               )}
+              {msg.references && msg.references.length > 0 && (
+                <div className="message-attachments-container mt-2">
+                  {msg.references.map((ref, idx) => (
+                    <details key={idx} className="collapsible-summary-details">
+                      <summary className="collapsible-summary-title">
+                        <Link size={10} style={{ color: "var(--primary)" }} />
+                        <span className="font-semibold">{ref.title}</span>
+                        <span className="summary-status-hint"> (click to view referenced chat summary)</span>
+                      </summary>
+                      <div className="collapsible-summary-content">
+                        <ChatMarkdown content={ref.summary || "No summary available."} />
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -640,6 +661,10 @@ export function ChatArea({
   streamingAgents = {},
   onRecoverRun,
   onRetryFailedRequest,
+  sessions = [],
+  currentSessionId = "",
+  linkedSessionIds = [],
+  onLinkSessions,
 }: ChatAreaProps) {
   const [input, setInput] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -651,6 +676,9 @@ export function ChatArea({
   const [isTranscribing, setIsTranscribing] = useState(false);
 
   const [isDragOver, setIsDragOver] = useState(false);
+  
+  const [showReferenceModal, setShowReferenceModal] = useState(false);
+  const [refSearchQuery, setRefSearchQuery] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -661,6 +689,16 @@ export function ChatArea({
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const recordedAudioChunksRef = useRef<Blob[]>([]);
   const speechBaseInputRef = useRef("");
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowReferenceModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1139,7 +1177,99 @@ export function ChatArea({
           </div>
         )}
 
+        {/* Linked Session References Badges */}
+        {linkedSessionIds && linkedSessionIds.length > 0 && sessions && sessions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 p-2 bg-[rgba(0,0,0,0.1)] border-b border-[var(--border)] rounded-t">
+            <span className="text-[9px] font-mono uppercase text-[var(--cp-cyan,var(--primary))] flex items-center mr-1">Linked Reference Chats:</span>
+            {linkedSessionIds.map(id => {
+              const s = sessions.find(x => x.id === id);
+              if (!s) return null;
+              return (
+                <div key={id} className="flex items-center gap-1 px-1.5 py-0.5 border border-[var(--primary)] bg-[rgba(192,38,211,0.05)] text-[10px] rounded flex-row">
+                  <span className="font-semibold truncate max-w-[150px]">{s.title}</span>
+                  <button
+                    type="button"
+                    className="text-[var(--cp-magenta,var(--accent))] hover:opacity-80 border-0 bg-transparent cursor-pointer p-0 ml-1 flex items-center"
+                    onClick={() => {
+                      onLinkSessions?.(linkedSessionIds.filter(x => x !== id));
+                    }}
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="chat-input-control-box">
+          {/* Reference Modal Dropdown popover */}
+          {showReferenceModal && (
+            <div className="absolute bottom-full left-0 mb-2 w-80 bg-[var(--cp-bg-3,var(--card))] border border-[var(--border)] rounded shadow-xl z-50 p-3 flex flex-col gap-2">
+              <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 mb-1">
+                <span style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-xs font-mono uppercase tracking-wider font-bold">Link Reference Sessions</span>
+                <button
+                  type="button"
+                  onClick={() => setShowReferenceModal(false)}
+                  className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] border-0 bg-transparent cursor-pointer flex items-center"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={refSearchQuery}
+                onChange={e => setRefSearchQuery(e.target.value)}
+                placeholder="search sessions..."
+                style={{
+                  background: "var(--background)",
+                  border: "1px solid var(--border)",
+                  color: "var(--foreground)",
+                  padding: "0.4rem",
+                  borderRadius: "3px",
+                  fontSize: "11px",
+                  fontFamily: "'Share Tech Mono', monospace",
+                  outline: "none"
+                }}
+                className="w-full"
+              />
+              <div className="max-h-48 overflow-y-auto space-y-1 mt-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                {sessions && sessions
+                  .filter(s => s.id !== currentSessionId)
+                  .filter(s => !refSearchQuery || s.title.toLowerCase().includes(refSearchQuery.toLowerCase()) || s.id.toLowerCase().includes(refSearchQuery.toLowerCase()))
+                  .map(s => {
+                    const isLinked = linkedSessionIds?.includes(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          const currentLinked = linkedSessionIds || [];
+                          const nextLinked = isLinked
+                            ? currentLinked.filter(x => x !== s.id)
+                            : [...currentLinked, s.id];
+                          onLinkSessions?.(nextLinked);
+                        }}
+                        style={{
+                          background: isLinked ? 'rgba(192,38,211,0.15)' : 'transparent',
+                          color: isLinked ? 'var(--primary)' : 'var(--foreground)',
+                          fontFamily: isLinked ? "'Rajdhani', sans-serif" : "inherit",
+                          fontWeight: isLinked ? "600" : "normal"
+                        }}
+                        className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors flex items-center justify-between border-0 cursor-pointer hover:bg-[var(--cp-bg-2,rgba(255,255,255,0.05))]`}
+                      >
+                        <span className="truncate">{s.title}</span>
+                        {isLinked && <span style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="text-[10px] uppercase font-mono tracking-wider">Linked</span>}
+                      </button>
+                    );
+                  })}
+                {(!sessions || sessions.filter(s => s.id !== currentSessionId).length === 0) && (
+                  <div className="text-center text-xs opacity-50 p-2 font-mono">No other sessions.</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Hidden File Input */}
           <input
             type="file"
@@ -1162,6 +1292,28 @@ export function ChatArea({
             type="button"
           >
             <Paperclip size={13} />
+          </button>
+
+          {/* Reference Sessions Button */}
+          <button
+            onClick={() => setShowReferenceModal(!showReferenceModal)}
+            className={`chat-reference-button ${showReferenceModal ? 'active' : ''}`}
+            title="Link reference sessions"
+            type="button"
+            style={{
+              background: showReferenceModal ? 'var(--cp-bg-2,rgba(255,255,255,0.08))' : 'transparent',
+              border: 'none',
+              color: 'var(--cp-cyan,var(--primary))',
+              cursor: 'pointer',
+              padding: '0.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '3px',
+              marginLeft: '4px',
+            }}
+          >
+            <Link size={13} />
           </button>
 
           {/* Slash Suggestion Overlay */}

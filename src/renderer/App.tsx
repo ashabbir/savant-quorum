@@ -704,7 +704,7 @@ export default function App() {
     setThinking(prev => [newThink, ...prev])
   }
 
-  const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string, attachments?: { name: string; content: string }[]) => {
+  const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string, attachments?: { name: string; content: string }[], references?: { id: string; title: string; summary?: string }[]) => {
     let resolvedProvider = provider;
     let resolvedModel = model;
     if (!resolvedProvider || !resolvedModel) {
@@ -738,6 +738,7 @@ export default function App() {
       provider: resolvedProvider,
       model: resolvedModel,
       attachments,
+      references,
       timestamp: Date.now()
     }
     messagesRef.current = [...messagesRef.current, newMsg]
@@ -1336,7 +1337,7 @@ ${transcript}`,
       saveSessionDirectly(sessionForThisRun, runMessages, runThinking);
     };
 
-    const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string) => {
+    const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string, attachments?: any[], references?: { id: string; title: string; summary?: string }[]) => {
       let resolvedProvider = provider;
       let resolvedModel = model;
       if (!resolvedProvider || !resolvedModel) {
@@ -1369,6 +1370,8 @@ ${transcript}`,
         to,
         provider: resolvedProvider,
         model: resolvedModel,
+        attachments,
+        references,
         timestamp: Date.now()
       };
       const latestMessages = currentSessionIdRef.current === sessionForThisRun
@@ -1452,8 +1455,17 @@ ${JSON.stringify(request)}
       return intent;
     };
 
-    // Scan for reference chat in the user query
-    let referencedSession = null;
+    // Scan for reference chat in the user query OR use linked sessions
+    const sessionsToLoad = new Set<string>();
+    
+    // 1. Add explicitly linked reference sessions
+    if (sessionMetadataRef.current?.linkedSessionIds) {
+      sessionMetadataRef.current.linkedSessionIds.forEach((id: string) => {
+        if (id !== sessionForThisRun) sessionsToLoad.add(id);
+      });
+    }
+    
+    // 2. Add inline mentioned sessions
     for (const s of sessions) {
       if (s.id === sessionForThisRun) continue; // Don't reference current session
       const matchesId = text.includes(`@${s.id}`);
@@ -1461,22 +1473,24 @@ ${JSON.stringify(request)}
                            text.toLowerCase().includes(`referencing chat ${s.title.toLowerCase()}`) ||
                            text.toLowerCase().includes(`reference chat ${s.title.toLowerCase()}`);
       if (matchesId || matchesTitle) {
-        referencedSession = s;
-        break;
+        sessionsToLoad.add(s.id);
       }
     }
 
+    const msgReferences: { id: string; title: string; summary?: string }[] = [];
     let injectedReferencePrompt = "";
-    if (referencedSession) {
-      addThinking('Athena', `LOADING_REFERENCE_CHAT: "${referencedSession.title}"`);
+    for (const refId of sessionsToLoad) {
+      const referencedSession = sessions.find(s => s.id === refId);
+      const title = referencedSession?.title || refId;
+      addThinking('Athena', `LOADING_REFERENCE_CHAT: "${title}"`);
       try {
-        const refData = await window.sessions.load(referencedSession.id);
+        const refData = await window.sessions.load(refId);
         if (refData) {
           let refSummary = refData.summary || "";
           if (!refSummary.trim() && refData.messages && refData.messages.length > 0) {
-            addThinking('Athena', `GENERATING_SUMMARY_FOR_REFERENCE_CHAT: "${referencedSession.title}"`);
+            addThinking('Athena', `GENERATING_SUMMARY_FOR_REFERENCE_CHAT: "${title}"`);
             const refSummaryPrompt = `
-              You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The operator has referenced the session "${referencedSession.title}".
+              You are an AI assistant operating as the orchestration moderator (ATHENA) for a multi-agent reasoning system. The operator has referenced the session "${title}".
               
               FULL_CHAT_HISTORY OF REFERENCED SESSION:
               ${refData.messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
@@ -1489,22 +1503,27 @@ ${JSON.stringify(request)}
             
             // Save the newly generated summary to the reference session in the DB
             await window.sessions.save({
-              id: referencedSession.id,
-              title: refData.title || referencedSession.title,
+              id: refId,
+              title: refData.title || title,
               messages: refData.messages,
               thinking: refData.thinking || [],
               summary: refSummary,
               metadata: refData.metadata
             });
-            addThinking('Athena', `REFERENCE_CHAT_SUMMARY_UPDATED: "${referencedSession.title}"`);
+            addThinking('Athena', `REFERENCE_CHAT_SUMMARY_UPDATED: "${title}"`);
           }
           
           if (refSummary.trim()) {
-            injectedReferencePrompt = `\n\n[INJECTED REFERENCE CONTEXT FROM CHAT "${referencedSession.title}"]: \n${refSummary}\n`;
+            injectedReferencePrompt += `\n\n[REFERENCE CONTEXT FROM CHAT "${title}"]: \n${refSummary}\n`;
+            msgReferences.push({
+              id: refId,
+              title: title,
+              summary: refSummary
+            });
           }
         }
       } catch (err: any) {
-        addThinking('Athena', `REFERENCE_CHAT_LOAD_FAILED: ${err.message}`, 'error');
+        addThinking('Athena', `REFERENCE_CHAT_LOAD_FAILED for ${title}: ${err.message}`, 'error');
       }
     }
 
@@ -1563,7 +1582,7 @@ ${JSON.stringify(request)}
       const targetId = firstWordMatch[1].toLowerCase();
       if (targetId === 'athena') {
         const cleanQuery = firstWordMatch[2].trim();
-        addMessage('user', userQuery);
+        addMessage('user', userQuery, undefined, undefined, undefined, undefined, undefined, msgReferences);
         setIsLoading(true);
         setStatusText('ANALYZING INTENT');
         const pulseIntent = await generatePulseIntent(cleanQuery);
@@ -1657,7 +1676,7 @@ ${JSON.stringify(request)}
 
     if (directAgentMatch) {
       const { agent, cleanQuery } = directAgentMatch;
-        addMessage('user', userQuery);
+        addMessage('user', userQuery, undefined, undefined, undefined, undefined, undefined, msgReferences);
         setIsLoading(true);
         setStatusText('ANALYZING INTENT');
         const pulseIntent = await generatePulseIntent(cleanQuery);
@@ -1758,7 +1777,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
         return;
       }
 
-    addMessage('user', userQuery)
+    addMessage('user', userQuery, undefined, undefined, undefined, undefined, undefined, msgReferences);
     setIsLoading(true); 
     setStatusText('TRIAGING REQUEST')
     addMessage(
@@ -2746,6 +2765,16 @@ ${CITATION_CONTRACT_PROMPT}
               agents={getAgentRoster()}
               onDeleteMessage={handleDeleteMessage}
               isLoading={isLoading && currentSessionId === runningSessionId}
+              sessions={sessions}
+              currentSessionId={currentSessionId}
+              linkedSessionIds={sessionMetadata.linkedSessionIds || []}
+              onLinkSessions={(sessionIds: string[]) => {
+                updateSessionMetadata(prev => {
+                  const nextMeta = { ...prev, linkedSessionIds: sessionIds };
+                  saveCurrentSession(undefined, undefined, undefined, nextMeta);
+                  return nextMeta;
+                });
+              }}
               statusText={statusText}
               thinking={thinking}
               streamingAgents={streamingAgents}
