@@ -705,6 +705,29 @@ export default function App() {
   }
 
   const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string, attachments?: { name: string; content: string }[]) => {
+    let resolvedProvider = provider;
+    let resolvedModel = model;
+    if (!resolvedProvider || !resolvedModel) {
+      const targetAgent = (role === 'athena' || role === 'athena-whisper') 
+        ? 'Athena' 
+        : (from || (typeof role === 'string' ? role.charAt(0).toUpperCase() + role.slice(1) : ''));
+      if (targetAgent) {
+        try {
+          const chain = resolveProviderChain(settings["provider:chain"], settings["agents:list"], targetAgent);
+          const activeIndex = preferredProviderIndexRef.current >= 0 && preferredProviderIndexRef.current < chain.length
+            ? preferredProviderIndexRef.current 
+            : 0;
+          const link = chain[activeIndex] || chain[0];
+          if (link) {
+            resolvedProvider = resolvedProvider || link.provider;
+            resolvedModel = resolvedModel || link.model;
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+    }
+
     const id = Math.random().toString(36).substr(2, 9)
     const newMsg = {
       id,
@@ -712,8 +735,8 @@ export default function App() {
       content,
       from,
       to,
-      provider,
-      model,
+      provider: resolvedProvider,
+      model: resolvedModel,
       attachments,
       timestamp: Date.now()
     }
@@ -1314,6 +1337,29 @@ ${transcript}`,
     };
 
     const addMessage = (role: Message['role'], content: string, from?: string, to?: string, provider?: string, model?: string) => {
+      let resolvedProvider = provider;
+      let resolvedModel = model;
+      if (!resolvedProvider || !resolvedModel) {
+        const targetAgent = (role === 'athena' || role === 'athena-whisper') 
+          ? 'Athena' 
+          : (from || (typeof role === 'string' ? role.charAt(0).toUpperCase() + role.slice(1) : ''));
+        if (targetAgent) {
+          try {
+            const chain = resolveProviderChain(settings["provider:chain"], settings["agents:list"], targetAgent);
+            const activeIndex = preferredProviderIndexRef.current >= 0 && preferredProviderIndexRef.current < chain.length
+              ? preferredProviderIndexRef.current 
+              : 0;
+            const link = chain[activeIndex] || chain[0];
+            if (link) {
+              resolvedProvider = resolvedProvider || link.provider;
+              resolvedModel = resolvedModel || link.model;
+            }
+          } catch (err) {
+            // ignore
+          }
+        }
+      }
+
       const id = Math.random().toString(36).substr(2, 9);
       const newMsg: Message = {
         id,
@@ -1321,8 +1367,8 @@ ${transcript}`,
         content,
         from,
         to,
-        provider,
-        model,
+        provider: resolvedProvider,
+        model: resolvedModel,
         timestamp: Date.now()
       };
       const latestMessages = currentSessionIdRef.current === sessionForThisRun
