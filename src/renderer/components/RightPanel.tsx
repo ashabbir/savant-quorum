@@ -11,6 +11,7 @@ import {
   clusterSemanticTopics,
   type PulseIntent,
 } from "../services/pulseAnalytics";
+import { resolveProviderChain } from "../services/providerChain";
 
 const TABS = [
   { id: "pulse", icon: Activity, label: "pulse" },
@@ -422,12 +423,14 @@ function QualityPulseDashboard({
   statusText,
   sessionMetadata,
   sessionSummary = "",
+  settings,
 }: {
   thinking: Thinking[];
   messages: Message[];
   statusText: string;
   sessionMetadata?: Record<string, any>;
   sessionSummary?: string;
+  settings?: Record<string, any>;
 }) {
   const stopWords = new Set([
     "about", "after", "again", "also", "and", "are", "because", "before", "being", "could",
@@ -856,8 +859,32 @@ function QualityPulseDashboard({
   messages
     .filter(message => !["user", "system", "internal", "error", "whisper"].includes(message.role))
     .forEach(message => {
-      const provider = message.provider || "unattributed";
-      const model = message.model || "unattributed";
+      let provider = message.provider;
+      let model = message.model;
+      
+      if (!provider || !model || provider === "unattributed" || model === "unattributed") {
+        const isStatusWhisper = message.role.endsWith('-whisper') && !message.provider;
+        if (!isStatusWhisper) {
+          const targetAgent = (message.role === 'athena' || message.role === 'moderator') 
+            ? 'Athena' 
+            : (message.from || (typeof message.role === 'string' ? message.role.charAt(0).toUpperCase() + message.role.slice(1) : ''));
+          if (targetAgent && settings) {
+            try {
+              const chain = resolveProviderChain(settings["provider:chain"], settings["agents:list"], targetAgent);
+              const link = chain[0];
+              if (link) {
+                provider = link.provider;
+                model = link.model;
+              }
+            } catch (err) {}
+          }
+        }
+      }
+
+      if (!provider || !model || provider === "unattributed" || model === "unattributed") {
+        return;
+      }
+      
       const key = `${provider}:${model}`;
       const existing = modelUsageMap.get(key) || {
         provider,
@@ -2529,6 +2556,7 @@ export function RightPanel({
                     statusText={statusText}
                     sessionMetadata={sessionMetadata}
                     sessionSummary={sessionSummary}
+                    settings={settings}
                   />
                 )}
 
