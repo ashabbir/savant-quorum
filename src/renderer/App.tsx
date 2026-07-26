@@ -37,6 +37,13 @@ import { extractMeaningfulTopics } from "./services/topicExtraction";
 import { Toaster } from "./components/ui/sonner";
 import { toast } from "sonner";
 import { AgentStallDialog } from "./components/AgentStallDialog";
+import {
+  availableProviderLinks,
+  isProviderExhaustion,
+  providerLinkKey,
+  resolveProviderChain,
+  type ProviderChainLink,
+} from "./services/providerChain";
 
 export interface Thinking {
   id: string
@@ -52,6 +59,7 @@ interface AgentConfig {
   persona: string
   prompt?: string
   tags?: string[]
+  providerChain?: ProviderChainLink[]
 }
 
 const DEFAULT_AGENTS: AgentConfig[] = [
@@ -83,6 +91,7 @@ export default function App() {
   const [streamingAgents, setStreamingAgents] = useState<Record<string, AgentRunDisplayState>>({})
   const agentRunEventsIntervalRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
+  const runningSessionIdRef = useRef<string | null>(null);
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [sessionSummary, setSessionSummary] = useState<string>("");
   const midRunBuffer = useRef<string[]>([]);
@@ -111,6 +120,7 @@ export default function App() {
   const unreadSessionIdsRef = useRef<Set<string>>(new Set());
   const sessionOrderRef = useRef<string[]>([]);
   const classificationRequestsRef = useRef<Set<string>>(new Set());
+  const exhaustedProviderLinksRef = useRef<Record<string, Set<string>>>({});
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
@@ -747,6 +757,7 @@ export default function App() {
           persona,
           prompt: typeof agent.prompt === "string" ? agent.prompt.trim() : "",
           tags: Array.isArray(agent.tags) ? agent.tags.map((tag: any) => String(tag)) : [],
+          providerChain: Array.isArray(agent.providerChain) ? agent.providerChain : [],
         };
       })
       .filter((agent: AgentConfig) => agent.id && agent.name && agent.persona);
@@ -774,15 +785,25 @@ export default function App() {
   }
 
   const runWithFallback = async (prompt: string, agentName: string, timeoutMs: number = REGULAR_AGENT_TIMEOUT_MS, extraPayload?: Record<string, any>) => {
-    const chain = settings["provider:chain"] || [
-      { provider: 'gemini', model: 'gemini-2.0-flash' },
-      { provider: 'claude', model: 'haiku' }
-    ];
-    
-    let startIndex = preferredProviderIndexRef.current;
-    if (startIndex >= chain.length) startIndex = 0;
-    
-    const effectiveChain = [...chain.slice(startIndex), ...chain.slice(0, startIndex)];
+    const chain = resolveProviderChain(settings["provider:chain"], settings["agents:list"], agentName);
+    const sessionId = runningSessionIdRef.current || currentSessionIdRef.current || "no-session";
+    if (!exhaustedProviderLinksRef.current[sessionId]) {
+      exhaustedProviderLinksRef.current[sessionId] = new Set<string>();
+      const storedSettings: Record<string, any> = await window.system.getSettings().catch(() => ({}));
+      const storedLinks = storedSettings[`provider:exhausted:${sessionId}`];
+      if (Array.isArray(storedLinks)) {
+        storedLinks.forEach(value => exhaustedProviderLinksRef.current[sessionId].add(String(value)));
+      }
+    }
+    const exhaustedLinks = exhaustedProviderLinksRef.current[sessionId];
+    const markExhausted = (item: ProviderChainLink) => {
+      exhaustedLinks.add(providerLinkKey(item));
+      void window.system.saveSetting(`provider:exhausted:${sessionId}`, [...exhaustedLinks]);
+    };
+    const effectiveChain = availableProviderLinks(chain, exhaustedLinks);
+    if (effectiveChain.length === 0) {
+      throw new Error(`ALL_PROVIDERS_EXHAUSTED: No provider/model links remain for session ${sessionId}`);
+    }
     
     let lastError = null;
     let attempt = 1;
@@ -804,10 +825,8 @@ export default function App() {
         // Basic quota/error checks (ensure it's actually an error message and not user-facing text containing these words)
         const responseLower = responseRaw.toLowerCase().trim();
         const isLikelyErrorResponse = responseLower.startsWith('error:') || responseLower.startsWith('warning:') || responseRaw.length < 300;
-        if (isLikelyErrorResponse && (
-          /429|quota_exhausted|rate_limit|rate limit/i.test(responseRaw) || 
-          /usage limit|upgrade to pro/i.test(responseRaw)
-        )) {
+        if (isLikelyErrorResponse && isProviderExhaustion(responseRaw)) {
+          markExhausted(item);
           lastError = new Error(`Quota exhausted on ${adapterName}: ${responseRaw}`);
           attempt++;
           continue;
@@ -826,6 +845,13 @@ export default function App() {
         setActiveProviderIndex(nextIdx);
         return { content: responseRaw, provider: adapterName, model };
       } catch (e: any) {
+        if (isProviderExhaustion(e)) {
+          markExhausted(item);
+          lastError = e;
+          addThinking(agentName, `PROVIDER_EXHAUSTED (${adapterName}:${model}): skipping this link for the rest of the session`, 'error');
+          attempt++;
+          continue;
+        }
         const recoverableRunId = getRecoverableAgentRunId(e);
         if (recoverableRunId && typeof window.system?.resumeAgentRun === 'function') {
           const recoveryTimeoutMs = Math.max(timeoutMs, 300_000);
@@ -1261,6 +1287,7 @@ ${transcript}`,
 
     const sessionForThisRun = currentSessionId;
     if (!sessionForThisRun) return;
+    if (!isLoading) runningSessionIdRef.current = sessionForThisRun;
 
     let runMessages = [...messagesRef.current];
     let runThinking = [...thinkingRef.current];
@@ -1567,6 +1594,7 @@ ${JSON.stringify(request)}
           setIsLoading(false);
           setStatusText('IDLE');
           setRunningSessionId(null);
+          runningSessionIdRef.current = null;
         }
         return;
       }
@@ -1679,6 +1707,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
           setIsLoading(false);
           setStatusText('IDLE');
           setRunningSessionId(null);
+          runningSessionIdRef.current = null;
         }
         return;
       }
@@ -2241,6 +2270,7 @@ ${CITATION_CONTRACT_PROMPT}
       agentRunEventsIntervalRef.current = {};
       setStatusText('IDLE');
       setRunningSessionId(null);
+      runningSessionIdRef.current = null;
     }
   }
 

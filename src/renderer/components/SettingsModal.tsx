@@ -25,6 +25,7 @@ interface AgentItem {
   persona: string;
   prompt: string;
   tags: string[];
+  providerChain?: ProviderChainItem[];
 }
 
 type ConnectionStatus = "idle" | "checking" | "connected" | "failed";
@@ -306,6 +307,7 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
         setAgents(settings["agents:list"].map((agent: any) => ({
           ...agent,
           tags: Array.isArray(agent.tags) ? agent.tags : [],
+          providerChain: Array.isArray(agent.providerChain) ? agent.providerChain : [],
         })));
       }
 
@@ -536,6 +538,29 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
   }
   function updateAgent(id: string, patch: Partial<AgentItem>) {
     setAgents(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
+  }
+  function addAgentProvider(agent: AgentItem) {
+    const provider = selectedProviderOptions[0];
+    const existing = agent.providerChain || [];
+    updateAgent(agent.id, {
+      providerChain: [...existing, {
+        id: createId("agent-provider", new Set(existing.map(item => item.id))),
+        provider: provider.id,
+        model: provider.defaultModel || provider.models[0] || MODELS[0],
+      }],
+    });
+  }
+  function updateAgentProvider(agent: AgentItem, linkId: string, field: "provider" | "model", value: string) {
+    updateAgent(agent.id, {
+      providerChain: (agent.providerChain || []).map(link => {
+        if (link.id !== linkId) return link;
+        if (field === "provider") {
+          const provider = selectedProviderOptions.find(option => option.id === value);
+          return { ...link, provider: value, model: provider?.defaultModel || provider?.models[0] || link.model };
+        }
+        return { ...link, model: value };
+      }),
+    });
   }
 
   // Directory
@@ -841,6 +866,49 @@ export function SettingsModal({ open, onClose, onSettingsChanged }: SettingsModa
                             placeholder="Search or add ability tags..."
                           />
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <label style={labelStyle} className="block text-xs opacity-70">Provider Chain Override</label>
+                            <p style={{ color: "var(--muted-foreground)", fontFamily: "'Rajdhani', sans-serif" }} className="text-xs opacity-50">
+                              {(agent.providerChain || []).length === 0 ? "Using the app provider chain." : "This agent uses its own fallback order."}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => addAgentProvider(agent)}
+                            style={{ border: "1px solid var(--border)", color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }}
+                            className="px-2 py-1 text-[10px] hover:opacity-80"
+                          >
+                            <Plus size={10} className="inline mr-1" /> Add Link
+                          </button>
+                        </div>
+                        {(agent.providerChain || []).map((link, linkIndex) => {
+                          const selectedProvider = selectedProviderOptions.find(provider => provider.id === link.provider);
+                          const modelOptions = selectedProvider?.models.length ? selectedProvider.models : MODELS;
+                          return (
+                            <div key={link.id} className="flex items-center gap-2">
+                              <span style={{ color: "var(--primary)", fontFamily: "'Share Tech Mono', monospace" }} className="w-5 text-xs">
+                                {linkIndex + 1}
+                              </span>
+                              <select value={link.provider} onChange={e => updateAgentProvider(agent, link.id, "provider", e.target.value)} style={inputStyle} className="flex-1 px-2 py-1 text-xs">
+                                {selectedProviderOptions.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+                              </select>
+                              <select value={link.model} onChange={e => updateAgentProvider(agent, link.id, "model", e.target.value)} style={inputStyle} className="flex-1 px-2 py-1 text-xs">
+                                {modelOptions.map(model => <option key={model} value={model}>{model}</option>)}
+                              </select>
+                              <button
+                                onClick={() => updateAgent(agent.id, { providerChain: (agent.providerChain || []).filter(item => item.id !== link.id) })}
+                                style={{ color: "var(--chart-5)" }}
+                                className="p-1"
+                                aria-label={`Remove provider link ${linkIndex + 1} from ${agent.name}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

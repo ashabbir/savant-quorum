@@ -31,4 +31,26 @@ describe('SettingsModal server health', () => {
 
     expect(await screen.findByText('SERVER v14.0.0')).toBeInTheDocument()
   })
+
+  it('lets an agent override the app provider chain', async () => {
+    vi.mocked(window.system.getSettings).mockResolvedValue({
+      'agents:list': [{
+        id: 'engineer',
+        name: 'Engineer',
+        persona: 'engineer',
+        prompt: '',
+        tags: [],
+      }],
+    })
+
+    render(<SettingsModal open onClose={() => {}} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'agents' }))
+    expect(screen.getByText('Using the app provider chain.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /add link/i }))
+
+    expect(screen.getByText('This agent uses its own fallback order.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /remove provider link 1 from engineer/i })).toBeInTheDocument()
+  })
 })

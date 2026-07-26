@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Check } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import Mermaid from './Mermaid'
 
 interface ChatMarkdownProps {
@@ -82,8 +82,10 @@ function DiffBlock({ diffText }: { diffText: string }) {
 }
 
 export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: ChatMarkdownProps) {
-  return (
-    <div className={`chat-markdown chat-markdown--${variant}`}>
+  const [citationsExpanded, setCitationsExpanded] = useState(false)
+
+  const renderMarkdown = (markdownContent: string) => {
+    return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -130,8 +132,47 @@ export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: Cha
           },
         }}
       >
-        {content}
+        {markdownContent}
       </ReactMarkdown>
+    )
+  }
+
+  // Look for ## Citations header (case-insensitive, at start of a line)
+  const citationsRegex = /^##\s+Citations\s*$/im
+  const match = content.match(citationsRegex)
+
+  if (match && match.index !== undefined) {
+    const mainContent = content.slice(0, match.index).trim()
+    const citationsContent = content.slice(match.index).trim()
+
+    return (
+      <div className={`chat-markdown chat-markdown--${variant}`}>
+        {mainContent ? renderMarkdown(mainContent) : null}
+        <div className="citations-collapsible border border-[var(--border)] rounded bg-[var(--cp-bg-1,rgba(0,0,0,0.2))] mt-4">
+          <button 
+            type="button"
+            onClick={() => setCitationsExpanded(!citationsExpanded)}
+            className="w-full flex items-center justify-between p-2.5 text-xs font-semibold text-[var(--cp-cyan,var(--primary))] hover:bg-[var(--cp-bg-2,rgba(255,255,255,0.05))] transition-colors border-0 outline-none cursor-pointer font-mono uppercase tracking-wider"
+          >
+            <div className="flex items-center gap-1.5">
+              <span>Citations</span>
+            </div>
+            {citationsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+          
+          {citationsExpanded && (
+            <div className="p-3 border-t border-[var(--border)] overflow-x-auto bg-[var(--cp-bg-0,rgba(0,0,0,0.4))]">
+              {renderMarkdown(citationsContent)}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`chat-markdown chat-markdown--${variant}`}>
+      {renderMarkdown(content)}
     </div>
   )
 }
