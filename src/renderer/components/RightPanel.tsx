@@ -1279,8 +1279,8 @@ function QualityPulseDashboard({
         </p>
         <div className="mt-3 space-y-2">
           {sessionSummary ? (
-            <div className="text-[10px] leading-relaxed bg-[var(--secondary)] border border-[var(--border)] p-2.5 rounded font-sans max-h-48 overflow-y-auto whitespace-pre-wrap">
-              {sessionSummary}
+            <div className="text-[10px] bg-[var(--secondary)] border border-[var(--border)] p-2.5 rounded font-sans max-h-48 overflow-y-auto">
+              <ChatMarkdown content={sessionSummary} />
             </div>
           ) : (
             <div className="text-[10px] opacity-50 italic border border-[var(--border)] p-2.5 bg-[var(--secondary)]">

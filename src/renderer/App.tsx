@@ -2205,7 +2205,7 @@ NOTES: [strongest disconfirming evidence, missing evidence, or material discrepa
           : "";
 
         const intentToUse = rankedIntents.map(i => i.topic).join(', ');
-        const engagedList = Array.from(new Set(accumulatedAgentContext.map(r => r.agentId).filter(id => id !== 'system' && id !== 'athena')));
+        const engagedList = Array.from(new Set(accumulatedAgentContext.map(r => r.agentName || r.agentId).filter(name => name && name.toLowerCase() !== 'system' && name.toLowerCase() !== 'athena')));
         
         addThinking('Athena', 'PERFORMING_POST_RUN_NEURAL_SYNTHESIS: Generating final answer...');
 
