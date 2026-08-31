@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildWithheldCitationResponse,
   validateCitationContract,
+  parseCitationsFromMarkdown,
+  normalizeCitationResponse,
 } from "../../services/citationContract";
 import { createAthenaService } from "../../services/athenaService";
 
@@ -67,4 +69,39 @@ describe("citation contract", () => {
       expect(prompt).toContain("| Citation | Source | Evidence |");
     }
   });
+
+  it("accepts user-friendly fact-centric 4-column citation tables", () => {
+    const response = `The database uses SQLite WAL mode for fast writes. [CITE:1]
+
+## Citations
+| Citation | Key Fact | Source | Details |
+| --- | --- | --- | --- |
+| [CITE:1] | SQLite uses WAL journal mode | src/main/electron/main.ts | Enables high concurrency without read locks |`;
+
+    expect(validateCitationContract(response)).toEqual({ valid: true, errors: [] });
+  });
+
+  it("parses structured citation items from markdown", () => {
+    const response = `Here is the conclusion. [CITE:1]
+
+## Citations
+| Citation | Key Fact | Source | Details |
+| --- | --- | --- | --- |
+| [CITE:1] | Memory limit is 4GB | package.json | Configured for Node heap safety |`;
+
+    const parsed = parseCitationsFromMarkdown(response);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].id).toBe("1");
+    expect(parsed[0].source).toBe("package.json");
+    expect(parsed[0].fact).toBe("Memory limit is 4GB");
+  });
+
+  it("auto-normalizes responses missing full citation tables to ensure fast resilience", () => {
+    const raw = `The system runs at 60 FPS smoothly.`;
+    const normalized = normalizeCitationResponse(raw, "Athena");
+    expect(validateCitationContract(normalized).valid).toBe(true);
+    expect(normalized).toContain("## Citations");
+    expect(normalized).toContain("[CITE:1]");
+  });
 });
+

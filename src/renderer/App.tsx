@@ -19,7 +19,10 @@ import {
   selectValueAddingAgents,
   shouldDecomposeRequest,
 } from "./services/chatExecutionPolicy";
-import { CITATION_CONTRACT_PROMPT } from "./services/citationContract";
+import {
+  CITATION_CONTRACT_PROMPT,
+  normalizeCitationResponse,
+} from "./services/citationContract";
 import type { AgentRunDisplayState } from "./services/agentRunSupervision";
 import mermaid from "mermaid";
 import { sanitizeMermaidCode } from "./utils/mermaidSanitizer";
@@ -1605,7 +1608,7 @@ ${JSON.stringify(request)}
 
           const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
           const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
-          const finalResponse = validationResult.response;
+          const finalResponse = normalizeCitationResponse(validationResult.response, agentLabel);
           const finalAgentProvider = validationResult.provider || agentProvider;
           const finalAgentModel = validationResult.model || agentModel;
 
@@ -1718,7 +1721,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
 
           const { content: responseRaw, provider: agentProvider, model: agentModel } = await runWithFallback(prompt, agentLabel, agentTimeout);
           const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
-          const finalResponse = validationResult.response;
+          const finalResponse = normalizeCitationResponse(validationResult.response, agentLabel);
           const finalAgentProvider = validationResult.provider || agentProvider;
           const finalAgentModel = validationResult.model || agentModel;
 
@@ -2074,7 +2077,7 @@ ANTI-LOOP & PERFORMANCE POLICY:
 
               setStreamingAgents(prev => ({ ...prev, [agentLabel]: { ...(prev[agentLabel] || {}), status: "Validating output..." } }));
               const validationResult = await validateAndCorrectMermaid(responseRaw, agentLabel, prompt, agentTimeout);
-              const response = validationResult.response;
+              const response = normalizeCitationResponse(validationResult.response, agentLabel);
               const finalAgentProvider = validationResult.provider || agentProvider;
               const finalAgentModel = validationResult.model || agentModel;
 
@@ -2291,7 +2294,7 @@ ${CITATION_CONTRACT_PROMPT}
         }
 
         const validationResult = await validateAndCorrectMermaid(finalResponseRaw, 'Athena', finalPrompt, 90000);
-        const finalResponseCombined = validationResult.response;
+        const finalResponseCombined = normalizeCitationResponse(validationResult.response, 'Athena');
         finalProvider = validationResult.provider || finalProvider;
         finalModel = validationResult.model || finalModel;
 

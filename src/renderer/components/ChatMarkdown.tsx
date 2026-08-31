@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ShieldCheck } from 'lucide-react'
 import Mermaid from './Mermaid'
+import { parseCitationsFromMarkdown } from '../services/citationContract'
 
 interface ChatMarkdownProps {
   content: string
@@ -40,7 +41,6 @@ function DiffBlock({ diffText }: { diffText: string }) {
 
   const handleApply = () => {
     setApplied(true)
-    // Dispatch a custom event to notify chat area or toast system if desired
     const event = new CustomEvent('toast', { detail: `Successfully applied diff to ${filename}` })
     window.dispatchEvent(event)
   }
@@ -81,14 +81,68 @@ function DiffBlock({ diffText }: { diffText: string }) {
   )
 }
 
+function renderContentWithCitationPills(
+  nodeChildren: React.ReactNode,
+  onCitationClick: (citeId: string) => void
+): React.ReactNode {
+  if (typeof nodeChildren === 'string') {
+    const parts = nodeChildren.split(/(\[CITE:\d+\])/g)
+    if (parts.length === 1) return nodeChildren
+    return parts.map((part, index) => {
+      const match = /^\[CITE:(\d+)\]$/.exec(part)
+      if (match) {
+        const id = match[1]
+        return (
+          <button
+            key={`cite-${id}-${index}`}
+            type="button"
+            className="citation-pill-badge"
+            title={`View verified fact & source #${id}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onCitationClick(id)
+            }}
+          >
+            [{id}]
+          </button>
+        )
+      }
+      return part
+    })
+  }
+
+  if (Array.isArray(nodeChildren)) {
+    return nodeChildren.map((child, i) => (
+      <React.Fragment key={i}>
+        {renderContentWithCitationPills(child, onCitationClick)}
+      </React.Fragment>
+    ))
+  }
+
+  return nodeChildren
+}
+
 export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: ChatMarkdownProps) {
   const [citationsExpanded, setCitationsExpanded] = useState(false)
+
+  const handleCitationClick = () => {
+    setCitationsExpanded(true)
+  }
 
   const renderMarkdown = (markdownContent: string) => {
     return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          p({ children, ...props }: any) {
+            return <p {...props}>{renderContentWithCitationPills(children, handleCitationClick)}</p>
+          },
+          li({ children, ...props }: any) {
+            return <li {...props}>{renderContentWithCitationPills(children, handleCitationClick)}</li>
+          },
+          td({ children, ...props }: any) {
+            return <td {...props}>{renderContentWithCitationPills(children, handleCitationClick)}</td>
+          },
           code({ inline, className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '')
             const lang = match ? match[1] : ''
@@ -138,12 +192,13 @@ export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: Cha
   }
 
   // Look for ## Citations header (case-insensitive, at start of a line)
-  const citationsRegex = /^##\s+Citations\s*$/im
+  const citationsRegex = /^##\s+(?:Citations|Sources\s*(&|and)?\s*Citations|Verified\s*Facts|Sources)\s*$/im
   const match = content.match(citationsRegex)
 
   if (match && match.index !== undefined) {
     const mainContent = content.slice(0, match.index).trim()
     const citationsContent = content.slice(match.index).trim()
+    const parsedItems = parseCitationsFromMarkdown(content)
 
     return (
       <div className={`chat-markdown chat-markdown--${variant}`}>
@@ -154,15 +209,57 @@ export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: Cha
             onClick={() => setCitationsExpanded(!citationsExpanded)}
             className="w-full flex items-center justify-between p-2.5 text-xs font-semibold text-[var(--cp-cyan,var(--primary))] hover:bg-[var(--cp-bg-2,rgba(255,255,255,0.05))] transition-colors border-0 outline-none cursor-pointer font-mono uppercase tracking-wider"
           >
-            <div className="flex items-center gap-1.5">
-              <span>Citations</span>
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={13} className="text-[var(--good,#00ff88)]" />
+              <span>Sources & Verified Facts</span>
+              {parsedItems.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--cp-cyan)]/15 text-[var(--cp-cyan)] font-mono normal-case">
+                  {parsedItems.length} {parsedItems.length === 1 ? 'Fact' : 'Facts'} Verified
+                </span>
+              )}
             </div>
-            {citationsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <div className="flex items-center gap-1 opacity-70">
+              <span className="text-[10px]">{citationsExpanded ? 'Hide' : 'Show'}</span>
+              {citationsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
           </button>
           
           {citationsExpanded && (
             <div className="p-3 border-t border-[var(--border)] overflow-x-auto bg-[var(--cp-bg-0,rgba(0,0,0,0.4))]">
-              {renderMarkdown(citationsContent)}
+              {parsedItems.length > 0 ? (
+                <div className="fact-centric-table-wrapper">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr>
+                        <th className="w-12 text-center">Ref</th>
+                        <th>Key Fact / Takeaway</th>
+                        <th className="w-36">Source</th>
+                        <th>Evidence / Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="text-center font-mono font-bold text-[var(--cp-cyan)] align-top">
+                            <span className="citation-pill-badge">[{item.id}]</span>
+                          </td>
+                          <td className="font-semibold text-[var(--foreground)] align-top">
+                            {item.fact || item.evidence}
+                          </td>
+                          <td className="font-mono text-[var(--cp-cyan)] opacity-90 truncate max-w-[160px] align-top" title={item.source}>
+                            {item.source}
+                          </td>
+                          <td className="opacity-80 text-[11px] leading-relaxed align-top">
+                            {item.evidence || item.fact}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                renderMarkdown(citationsContent)
+              )}
             </div>
           )}
         </div>
@@ -176,3 +273,4 @@ export function ChatMarkdown({ content, variant = 'default', onUpdateCode }: Cha
     </div>
   )
 }
+

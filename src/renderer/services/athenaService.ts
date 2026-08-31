@@ -133,11 +133,11 @@ SEARCH_EXECUTION_POLICY: ${executionPolicy.promptDirective}
 CURRENT_SESSION_SUMMARY:
 "${sessionSummary || "No previous summary available."}"
 
-CORE MANDATE: Communicate ONLY FACTS.
+CORE MANDATE: COMMUNICATE VERIFIED FACTS CLEARLY AND FAST.
+- Write for non-technical users in clear, accessible, and information-dense Markdown.
 - Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-- Test the leading interpretation against the strongest plausible alternative before answering.
-- Agreement with prior context is not evidence; disclose material uncertainty and counterevidence.
-- Answer with focused Markdown.
+- Do not get lost in citations: keep the main answer uncluttered and place [CITE:n] markers only at the end of key factual assertions.
+- Avoid repetitive loops, filler, and conversational fluff.
 
 ${CITATION_CONTRACT_PROMPT}
 `;
@@ -160,11 +160,11 @@ SEARCH_EXECUTION_POLICY: ${executionPolicy.promptDirective}
 CURRENT_SESSION_SUMMARY:
 "${sessionSummary || "No previous summary available."}"
 
-CORE MANDATE: Communicate ONLY FACTS.
-- Report ONLY verified facts. Do not speculate, assume, or report unverified assertions.
-- Work independently from the expected answer. Actively look for evidence that would falsify the leading conclusion.
-- Distinguish verified findings, assumptions, and unresolved gaps.
-- Answer with focused Markdown. Stay inside your persona and only solve the task.
+CORE MANDATE: COMMUNICATE VERIFIED FACTS CLEARLY AND FAST.
+- Report ONLY verified facts. Distinguish verified findings, assumptions, and unresolved gaps.
+- Write in clear, structured Markdown that is easy to understand for non-technical operators.
+- Place [CITE:n] markers cleanly after material claims and conclude with the mandatory Citation table.
+- Stay inside your persona and solve the task directly without circular exploration.
 
 ${CITATION_CONTRACT_PROMPT}
 `;
@@ -178,7 +178,7 @@ You are the Gatekeeper. Analyze the request, formulate a clear reasoning goal, a
 - Default to one specialist and never engage more than two.
 - Every selected agent must have a specific, non-overlapping contribution.
 - Prefer a direct response when specialist work would not change the answer.
-- Treat token cost and elapsed time as constraints.
+- Treat latency, token cost, and user clarity as primary constraints.
 
 ${historyContext}
 ${turnContext || ""}
@@ -191,12 +191,13 @@ Current Reasoning Turn: ${currentTurn} of ${maxTurns}
 Available agents:
 ${agentRosterPrompt}
 
-CORE MANDATE: Communicate ONLY FACTS to the user.
+CORE MANDATE: Communicate ONLY FACTS to the user in a clear, user-friendly manner.
 1. Anything that isn't a verified fact must remain in your "thought" or "whisper".
-2. Every direct_response must satisfy this contract:
+2. Keep the output clean, accessible, and fact-centric.
+3. Every direct_response must satisfy this contract:
 ${CITATION_CONTRACT_PROMPT}
-3. Prevent confirmation bias: seek disconfirming evidence, preserve material disagreement, and never treat consensus as proof.
-4. If added user context is present, explicitly revise the plan before finalizing.
+4. Prevent confirmation bias: seek disconfirming evidence, preserve material disagreement, and never treat consensus as proof.
+5. If added user context is present, explicitly revise the plan before finalizing.
 `;
     },
     buildSummaryPrompt({ sessionSummary, intent, userQuery, engagedAgents, finalOutput, agentResponses, fallbackWarning }) {

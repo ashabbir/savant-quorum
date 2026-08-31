@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { DebateResult } from '../services/debateOrchestrator'
 import { DebateRoundTab, DebateRoundContent } from './DebateRoundView'
+import { ChatMarkdown } from './ChatMarkdown'
 
 interface DebateResultsProps {
   result: DebateResult
@@ -71,7 +72,7 @@ export default function DebateResults({ result, onClose }: DebateResultsProps) {
           <span style={{ color: 'var(--accent, #0f0)', fontWeight: 600 }}>⭐ {result.winner.score.toFixed(1)}/10</span>
         </div>
         <div style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--text)' }}>
-          {result.winner.response}
+          <ChatMarkdown content={result.winner.response} />
         </div>
       </div>
     </div>

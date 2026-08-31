@@ -1,4 +1,5 @@
 import { DebateRound } from '../services/debateOrchestrator'
+import { ChatMarkdown } from './ChatMarkdown'
 
 interface DebateRoundTabProps {
   roundNumber: 1 | 2 | 3
@@ -59,7 +60,7 @@ export function DebateAgentResponse({ agent, response, isWinner, winnerScore }: 
         )}
       </div>
       <div style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--text)' }}>
-        {response}
+        <ChatMarkdown content={response} />
       </div>
     </div>
   )

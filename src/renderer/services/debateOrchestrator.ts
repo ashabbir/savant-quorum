@@ -7,6 +7,7 @@ import {
   buildCitationCorrectionPrompt,
   buildWithheldCitationResponse,
   CITATION_CONTRACT_PROMPT,
+  normalizeCitationResponse,
   validateCitationContract,
 } from './citationContract'
 

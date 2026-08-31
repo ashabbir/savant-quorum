@@ -111,3 +111,47 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 })
+
+if (!window.PointerEvent) {
+  class PointerEventMock extends MouseEvent {
+    pointerId = 1
+    width = 1
+    height = 1
+    pressure = 0
+    tangentialPressure = 0
+    tiltX = 0
+    tiltY = 0
+    twist = 0
+    pointerType = 'mouse'
+    isPrimary = true
+    constructor(type: string, params: any = {}) {
+      super(type, params)
+      this.pointerId = params.pointerId ?? 1
+      this.pointerType = params.pointerType ?? 'mouse'
+    }
+  }
+  // @ts-ignore
+  window.PointerEvent = PointerEventMock as any
+}
+
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {}
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {}
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+global.ResizeObserver = global.ResizeObserver || ResizeObserverMock
+
+

@@ -1,6 +1,36 @@
+import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LeftSidebar } from '../components/LeftSidebar'
+
+vi.mock('@radix-ui/react-dropdown-menu', () => {
+  return {
+    Root: ({ children }: any) => <div>{children}</div>,
+    Trigger: ({ children, asChild, ...props }: any) => {
+      if (asChild && React.isValidElement(children)) {
+        return React.cloneElement(children, props)
+      }
+      return <button {...props}>{children}</button>
+    },
+    Portal: ({ children }: any) => <div>{children}</div>,
+    Content: ({ children, ...props }: any) => <div role="menu" {...props}>{children}</div>,
+    Item: ({ children, onSelect, ...props }: any) => (
+      <div
+        role="menuitem"
+        onClick={() => onSelect?.()}
+        {...props}
+      >
+        {children}
+      </div>
+    ),
+    Separator: () => <hr />,
+    Group: ({ children }: any) => <div>{children}</div>,
+    Sub: ({ children }: any) => <div>{children}</div>,
+    SubTrigger: ({ children }: any) => <div>{children}</div>,
+    SubContent: ({ children }: any) => <div>{children}</div>,
+  }
+})
+
 
 const defaultProps = {
   chats: [
@@ -82,9 +112,10 @@ describe('LeftSidebar', () => {
     expect(screen.queryByLabelText('Select General notes')).not.toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Enter multi-select mode'))
     fireEvent.click(screen.getByLabelText('Select General notes'))
-    fireEvent.click(screen.getByText('Frontend'))
+    const frontendFolder = screen.getAllByText('Frontend').find(el => el.tagName === 'SPAN')!
+    fireEvent.click(frontendFolder)
     fireEvent.click(screen.getByLabelText('Select React rendering bug'))
-    fireEvent.pointerDown(screen.getByLabelText('Move selected sessions'), { button: 0 })
+    fireEvent.pointerDown(screen.getByLabelText('Move selected sessions'), { button: 0, ctrlKey: false })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Backend' }))
 
     expect(onMoveChatsToFolder).toHaveBeenCalledWith(['root', 'react'], 'backend')
@@ -96,7 +127,7 @@ describe('LeftSidebar', () => {
 
     fireEvent.click(screen.getByLabelText('Enter multi-select mode'))
     fireEvent.click(screen.getByLabelText('Select General notes'))
-    fireEvent.pointerDown(screen.getByLabelText('Move selected sessions'), { button: 0 })
+    fireEvent.pointerDown(screen.getByLabelText('Move selected sessions'), { button: 0, ctrlKey: false })
     fireEvent.click(screen.getByRole('menuitem', { name: '+ New folder...' }))
     fireEvent.change(screen.getByPlaceholderText('folder name...'), {
       target: { value: 'Security' },
