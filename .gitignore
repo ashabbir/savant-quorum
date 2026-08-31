@@ -30,6 +30,8 @@ dist-electron
 .env
 .env.*
 .env.*.local
+.npmrc
+
 
 # Database
 *.db
